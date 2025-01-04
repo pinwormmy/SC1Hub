@@ -51,7 +51,6 @@
     background-position: center;
     height: 80px;
 }
-
 @media (max-width: 768px) {
     .navbar-wrapper {
         height: 90px;
