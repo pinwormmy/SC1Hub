@@ -37,15 +37,10 @@
             <p class="menu-toggle-hint">클릭시 펼치기↑</p>
             <div id="basicMenuContent" class="menu-content" style="display: block;">
                 <ul>
-                    <li><a href="/guidelines" accesskey="g">0. 이용안내(G)</a></li>
-                    <li><a href="/" accesskey="h" style="color:#ea40f7;">1. 초기화면(H)</a></li>
-                    <li><a href="/boards/noticeBoard" accesskey="n">2. 공지사항(N)</a></li>
-                    <li><a href="/boards/supportBoard">3. 문의게시판</a></li>
-                    <li><a href="/boards/videoLinkBoard">4. 영상자료실</a></li>
-                    <li><a href="/boards/promotionBoard">5. 추천 및 홍보</a></li>
-                    <li><a href="/boards/freeBoard">6. 잡담센터</a></li>
-                    <li><a href="/boards/beginnerBoard">7. 초보자마당</a></li>
-                    <li><a href="/boards/funBoard">8. 꿀잼놀이터</a></li>
+                    <li><a href="/boards/noticeBoard" accesskey="n">1. 공지사항(N)</a></li>
+                    <li><a href="/boards/videoLinkBoard">2. 영상자료실</a></li>
+                    <li><a href="/boards/promotionBoard">3. 추천 및 홍보</a></li>
+                    <li><a href="/boards/funBoard">4. 꿀잼놀이터</a></li>
                 </ul>
             </div>
         </fieldset>
@@ -54,18 +49,17 @@
             <p class="menu-toggle-hint">클릭시 펼치기↑</p>
             <div id="strategyMenuContent" class="menu-content">
                 <ul>
-                    <li><a href="/boards/tVsZBoard">9. 테저전 게시판</a></li>
-                    <li><a href="/boards/tVsPBoard">10. 테프전 게시판</a></li>
-                    <li><a href="/boards/tVsTBoard">11. 테테전 게시판</a></li>
-                    <li><a href="/boards/zVsTBoard">12. 저테전 게시판</a></li>
-                    <li><a href="/boards/zVsPBoard">13. 저프전 게시판</a></li>
-                    <li><a href="/boards/zVsZBoard">14. 저저전 게시판</a></li>
-                    <li><a href="/boards/pVsTBoard">15. 프테전 게시판</a></li>
-                    <li><a href="/boards/pVsZBoard">16. 프저전 게시판</a></li>
-                    <li><a href="/boards/pVsPBoard">17. 프프전 게시판</a></li>
-                    <li><a href="/boards/teamPlayGuideBoard">18. 팀플 게시판</a></li>
-                    <li><a href="/boards/tipBoard" accesskey="t" style="color:#ea40f7;">19. 꿀팁보급고(T)</a></li>
-                    <li><a href="/boards/userGuideBoard" accesskey="u">20. 유저 공략(U)</a></li>
+                    <li><a href="/boards/tVsZBoard" style="color:#00FFFF;">10. 테저전 게시판</a></li>
+                    <li><a href="/boards/tVsPBoard" style="color:#00FFFF;">11. 테프전 게시판</a></li>
+                    <li><a href="/boards/tVsTBoard" style="color:#00FFFF;">12. 테테전 게시판</a></li>
+                    <li><a href="/boards/zVsTBoard" style="color:#ea40f7;">13. 저테전 게시판</a></li>
+                    <li><a href="/boards/zVsPBoard" style="color:#ea40f7;">14. 저프전 게시판</a></li>
+                    <li><a href="/boards/zVsZBoard" style="color:#ea40f7;">15. 저저전 게시판</a></li>
+                    <li><a href="/boards/pVsTBoard" style="color:#FFFF00">16. 프테전 게시판</a></li>
+                    <li><a href="/boards/pVsZBoard" style="color:#FFFF00">17. 프저전 게시판</a></li>
+                    <li><a href="/boards/pVsPBoard" style="color:#FFFF00">18. 프프전 게시판</a></li>
+                    <li><a href="/boards/teamPlayGuideBoard">19. 팀플 게시판</a></li>
+                    <li><a href="/boards/tipBoard" accesskey="t">20. 꿀팁보급고(T)</a></li>
                 </ul>
             </div>
         </fieldset>
@@ -76,9 +70,10 @@
 document.addEventListener('DOMContentLoaded', function() {
     // 화면 너비를 기준으로 PC 환경과 모바일 환경을 구분
     if(window.innerWidth > 600) {
-        // PC 환경: 지휘관회의실 메뉴만 열린 상태로 설정
         document.getElementById('basicMenuContent').style.display = "block";
         document.querySelector('#basicMenu .menu-toggle-hint').style.display = "none";
+        document.getElementById('strategyMenuContent').style.display = "block";
+        document.querySelector('#strategyMenu .menu-toggle-hint').style.display = "none";
     } else {
         // 모바일 환경: 모든 메뉴를 닫은 상태로 설정
         var allMenuContents = document.querySelectorAll('.menu-content');

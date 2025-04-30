@@ -6,9 +6,7 @@
 	<div class="container">
         <div class="col-lg-12">
             <p class="copyright-text">Copyright 2024. SC1Hub All rights reserved.</p>
-            <c:if test="${member.grade == 3}">
-                <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
-            </c:if>
+            <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
             <hr>
             <div style="text-align: left; margin-bottom: 50px;">
                 명령어 안내 : ALT+(단축키) 혹은 숫자 입력으로 게시판 이동 <br>
@@ -24,73 +22,73 @@
     function navigateToPage(menuNumber) {
         var pageMap = {
             // 사이드바
-            '0': '/guidelines',
-            '1': '/',
-            '2': '/boards/noticeBoard/',
-            '3': '/boards/supportBoard/',
-            '4': '/boards/videoLinkBoard/',
-            '5': '/boards/promotionBoard/',
-            '6': '/boards/freeBoard/',
-            '7': '/boards/beginnerBoard/',
-            '8': '/boards/funBoard/',
-            '9': '/boards/tVsZBoard/',
-            '10': '/boards/tVsPBoard/',
-            '11': '/boards/tVsTBoard/',
-            '12': '/boards/zVsTBoard/',
-            '13': '/boards/zVsPBoard/',
-            '14': '/boards/zVsZBoard/',
-            '15': '/boards/pVsTBoard/',
-            '16': '/boards/pVsZBoard/',
-            '17': '/boards/pVsPBoard/',
-            '18': '/boards/teamPlayGuideBoard/',
-            '19': '/boards/tipBoard/',
-            '20': '/boards/userGuideBoard/',
+            '1': '/boards/noticeBoard/',
+            '2': '/boards/videoLinkBoard/',
+            '3': '/boards/promotionBoard/',
+            '4': '/boards/funBoard/',
+            '10': '/boards/tVsZBoard/',
+            '11': '/boards/tVsPBoard/',
+            '12': '/boards/tVsTBoard/',
+            '13': '/boards/zVsTBoard/',
+            '14': '/boards/zVsPBoard/',
+            '15': '/boards/zVsZBoard/',
+            '16': '/boards/pVsTBoard/',
+            '17': '/boards/pVsZBoard/',
+            '18': '/boards/pVsPBoard/',
+            '19': '/boards/teamPlayGuideBoard/',
+            '20': '/boards/tipBoard/',
             // 메인페이지
             // 테란
-            '21': '/boards/tVsZBoard/readPost?postNum=3',
-            '22': '/boards/tVsZBoard/readPost?postNum=2',
-            '23': '/boards/tVsZBoard/readPost?postNum=6',
+            '21': '/boards/tVsZBoard',
+            '22': '/boards/tVsZBoard/readPost?postNum=3',
+            '23': '/boards/tVsZBoard/readPost?postNum=2',
             '24': '/boards/tVsZBoard/readPost?postNum=9',
-            '25': '/boards/tVsPBoard/readPost?postNum=11',
-            '26': '/boards/tVsPBoard/readPost?postNum=10',
+            '25': '/boards/tVsZBoard/readPost?postNum=6',
+            '26': '/boards/tVsPBoard',
             '27': '/boards/tVsPBoard/readPost?postNum=7',
-            '28': '/boards/tVsPBoard/readPost?postNum=9',
-            '29': '/boards/tVsTBoard/readPost?postNum=2',
-            '30': '/boards/tVsTBoard/readPost?postNum=4',
-            '31': '/boards/tVsTBoard/readPost?postNum=5',
+            '28': '/boards/tVsPBoard/readPost?postNum=3',
+            '29': '/boards/tVsPBoard/readPost?postNum=11',
+            '30': '/boards/tVsPBoard/readPost?postNum=10',
+            '31': '/boards/tVsTBoard',
             '32': '/boards/tVsTBoard/readPost?postNum=3',
+            '33': '/boards/tVsTBoard/readPost?postNum=2',
+            '34': '/boards/tVsTBoard/readPost?postNum=5',
             // 저그
-            '33': '/boards/zVsTBoard/readPost?postNum=3',
-            '34': '/boards/zVsTBoard/readPost?postNum=6',
-            '35': '/boards/zVsTBoard/readPost?postNum=8',
-            '36': '/boards/zVsTBoard/readPost?postNum=13',
-            '37': '/boards/zVsPBoard/readPost?postNum=3',
-            '38': '/boards/zVsPBoard/readPost?postNum=2',
-            '39': '/boards/zVsPBoard/readPost?postNum=4',
-            '40': '/boards/zVsPBoard/readPost?postNum=9',
-            '41': '/boards/zVsZBoard/readPost?postNum=6',
-            '42': '/boards/zVsZBoard/readPost?postNum=3',
-            '43': '/boards/zVsZBoard/readPost?postNum=4',
-            '44': '/boards/zVsZBoard/readPost?postNum=2',
+            '35': '/boards/zVsTBoard',
+            '36': '/boards/zVsTBoard/readPost?postNum=3',
+            '37': '/boards/zVsTBoard/readPost?postNum=6',
+            '38': '/boards/zVsTBoard/readPost?postNum=8',
+            '39': '/boards/zVsTBoard/readPost?postNum=13',
+            '40': '/boards/zVsPBoard',
+            '41': '/boards/zVsPBoard/readPost?postNum=2',
+            '42': '/boards/zVsPBoard/readPost?postNum=3',
+            '43': '/boards/zVsPBoard/readPost?postNum=9',
+            '44': '/boards/zVsPBoard/readPost?postNum=4',
+            '45': '/boards/zVsZBoard',
+            '46': '/boards/zVsZBoard/readPost?postNum=2',
+            '47': '/boards/zVsZBoard/readPost?postNum=4',
+            '48': '/boards/zVsZBoard/readPost?postNum=3',
             // 프로토스
-            '45': '/boards/pVsTBoard/readPost?postNum=2',
-            '46': '/boards/pVsTBoard/readPost?postNum=3',
-            '47': '/boards/pVsTBoard/readPost?postNum=4',
-            '48': '/boards/pVsTBoard/readPost?postNum=11',
-            '49': '/boards/pVsZBoard/readPost?postNum=5',
-            '50': '/boards/pVsZBoard/readPost?postNum=15',
-            '51': '/boards/pVsZBoard/readPost?postNum=3',
-            '52': '/boards/pVsZBoard/readPost?postNum=14',
-            '53': '/boards/pVsPBoard/readPost?postNum=2',
-            '54': '/boards/pVsPBoard/readPost?postNum=4',
-            '55': '/boards/pVsPBoard/readPost?postNum=5',
-            '56': '/boards/pVsPBoard/readPost?postNum=6',
+            '49': '/boards/pVsTBoard',
+            '50' : '/boards/pVsTBoard/readPost?postNum=2',
+            '51': '/boards/pVsTBoard/readPost?postNum=3',
+            '52': '/boards/pVsTBoard/readPost?postNum=4',
+            '53': '/boards/pVsTBoard/readPost?postNum=5',
+            '54': '/boards/pVsZBoard',
+            '55': '/boards/pVsZBoard/readPost?postNum=4',
+            '56': '/boards/pVsZBoard/readPost?postNum=3',
+            '57': '/boards/pVsZBoard/readPost?postNum=15',
+            '58': '/boards/pVsZBoard/readPost?postNum=8',
+            '59': '/boards/pVsPBoard',
+            '60': '/boards/pVsPBoard/readPost?postNum=4',
+            '61': '/boards/pVsPBoard/readPost?postNum=2',
+            '62': '/boards/pVsPBoard/readPost?postNum=5',
         };
         var pageUrl = pageMap[menuNumber];
         if (pageUrl) {
             window.location.href = pageUrl;
         } else {
-            alert("잘못된 입력입니다.");
+            alert("잘못된 명령어입니다.");
         }
     }
 
