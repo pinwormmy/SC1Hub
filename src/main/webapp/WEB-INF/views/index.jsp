@@ -92,7 +92,7 @@
                         <tr><td><a href="/boards/pVsZBoard" style="color:yellow;">54. 프저전 게시판</a></td></tr>
                         <tr><td><a href="/boards/pVsZBoard/readPost?postNum=4">55. 프저전 정석 운영</a></td></tr>
                         <tr><td><a href="/boards/pVsZBoard/readPost?postNum=3">56. 개같은 973 대처하기</a></td></tr>
-                        <tr><td><a href="/boards/pVsZBoard/readPost?postNum=15">57. 프저전 심시티 모음</a></td></tr>
+                        <tr><td><a href="/boards/pVsZBoard/readPost?postNum=20">57. 프저전 심시티 모음</a></td></tr>
                         <tr><td><a href="/boards/pVsZBoard/readPost?postNum=8">58. 최강! 8겟뽕 빌드</a></td></tr>
                         <tr><td><a href="/boards/pVsPBoard" style="color:yellow;">59. 프프전 게시판</a></td></tr>
                         <tr><td><a href="/boards/pVsPBoard/readPost?postNum=4">60. 프프전 빌드 상성</a></td></tr>
