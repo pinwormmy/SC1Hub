@@ -1,6 +1,6 @@
 @font-face {
     font-family: 'NeoDungGeunMo';
-    src: url('/fonts/neodgm.woff') format('woff');
+    src: url('//cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@1.600/neodgm/style.css') format('woff');
 }
 body {
     min-height: 100vh;
