@@ -13,19 +13,19 @@
             width: 100%;
         }
         .terran-field {
-            background-image: url('/image/marine1.jpg');
+            background-image: url('http://sc1hub.cdn1.cafe24.com/marine1.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
         }
         .zerg-field {
-            background-image: url('/image/hydralisk_center1.jpg');
+            background-image: url('http://sc1hub.cdn1.cafe24.com/hydralisk_center1.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
         }
         .protoss-field {
-            background-image: url('/image/zeratull1.jpg');
+            background-image: url('http://sc1hub.cdn1.cafe24.com/zeratull1.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
