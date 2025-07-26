@@ -11,7 +11,7 @@ body {
     font-family: "NeoDungGeunMo", sans-serif;
     color: white;
     font-size: 20px;
-    background-image: linear-gradient(rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.9)), url("/image/star_full.jpg");
+    background-image: linear-gradient(rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.9)), url("http://sc1hub.cdn1.cafe24.com/star_full.jpg");
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
