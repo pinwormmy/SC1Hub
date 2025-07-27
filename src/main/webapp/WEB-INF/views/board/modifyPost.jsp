@@ -3,7 +3,6 @@
 <html lang="ko">
 <head>
 <title>글수정 - ${koreanTitle}</title>
-<script type="text/javascript" src="/ckeditor/ckeditor.js"></script>
 <%@include file="../include/header.jspf" %>
 </head>
 <body>

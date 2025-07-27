@@ -1,2 +1,0 @@
-License: Mozilla Public License Version 1.1 (MPL-1.1)
-License URL: https://mozilla.org/MPL/MPL-1.1.html
