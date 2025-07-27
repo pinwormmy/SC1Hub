@@ -134,3 +134,7 @@ button.cancel-btn:hover {
 .btn {
     font-size: 20px;
 }
+textarea.cke_source {
+    font-family: "NeoDungGeunMo", sans-serif;
+    color: black;
+}
