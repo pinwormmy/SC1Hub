@@ -1,2 +1,3 @@
 User-agent: *
 Disallow:
+Sitemap: https://sc1hub.com/sitemap.xml
