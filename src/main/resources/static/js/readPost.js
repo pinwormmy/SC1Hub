@@ -160,7 +160,7 @@ async function displayDeleteButton(commentListHtml, commentDTO) {
 // 댓글 삭제
 async function deleteComment(commentNum) {
     try {
-        const response = await fetch(boardPath + "/deleteComment?commentNum=" + commentNum, {method:"DELETE"});
+        const response = await fetch(boardPath + "/deleteComment?commentNum=" + commentNum, {method:"POST"});
         if (response.ok) {
             await updateCommentCount(postNum);
             await showCommentList();
@@ -211,7 +211,7 @@ async function addRecommend(postNum) {
     console.log("Initial isRecommended:", isRecommended);  // 디버깅 로그
 
     let url = isRecommended ? boardPath + "/cancelRecommendation" : boardPath + "/addRecommendation";
-    let method = isRecommended ? "DELETE" : "POST";
+    let method = isRecommended ? "POST" : "POST";
 
     const body = { postNum: postNum };
     await fetchData(url, method, body);  // 추천 상태 변경

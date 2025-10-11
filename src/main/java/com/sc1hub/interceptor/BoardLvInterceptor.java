@@ -17,7 +17,7 @@ public class BoardLvInterceptor implements HandlerInterceptor {
         HttpSession session = request.getSession();
         MemberDTO member = (MemberDTO) session.getAttribute("member");
         if (member == null || member.getGrade() < 1) {
-            String message = "로그인 혹은 글쓰기 권한을 확인해주세요~!";
+            String message = "로그인 혹은 게시글 권한을 확인해주세요~!";
             response.setContentType("text/html;charset=UTF-8");
             response.getWriter().write("<script>alert('" + message + "'); history.go(-1);</script>");
             return false;

@@ -87,12 +87,12 @@ public class BoardController {
         return "board/writePost";
     }
 
-    @RequestMapping("/{boardTitle}/submitPost")
+    @RequestMapping(value="/{boardTitle}/submitPost", method = RequestMethod.POST)
     public String submitPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model) throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
         if(!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")){
             log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getNickName());
-            model.addAttribute("msg", "로그인 정보를 확인해주세요");
+            model.addAttribute("msg", "로그인 상태를 확인해주세요");
             model.addAttribute("url", "/");
             return "alert";
         }
@@ -101,11 +101,12 @@ public class BoardController {
         return "redirect:/boards/" + boardTitle;
     }
 
-    @RequestMapping("/{boardTitle}/deletePost")
+    @RequestMapping(value="/{boardTitle}/deletePost", method = RequestMethod.POST)
     public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model) throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
+        log.debug("삭제기능 작동 및 로그인 내역 확인 - 작성: {}, 로그인회원 : {}", post.getWriter(), member.getId());
         if(!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")){
-            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getId());
+            log.debug("삭제오류 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getId());
             model.addAttribute("msg", "로그인 정보를 확인해주세요");
             model.addAttribute("url", "/");
             return "alert";
@@ -123,7 +124,7 @@ public class BoardController {
         return "board/modifyPost";
     }
 
-    @RequestMapping(value = "/{boardTitle}/submitModifyPost")
+    @RequestMapping(value = "/{boardTitle}/submitModifyPost", method = RequestMethod.POST)
     public String submitModifyPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model) throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
         if(!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")){
@@ -136,10 +137,10 @@ public class BoardController {
         return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + post.getPostNum();
     }
 
-    @RequestMapping(value = "/{boardTitle}/addComment")
+    @RequestMapping(value = "/{boardTitle}/addComment", method = RequestMethod.POST)
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle, @RequestBody CommentDTO comment) throws Exception {
-        log.debug("댓글 인수 확인(댓글내용) : {}", comment.getContent());
+        log.info("댓글 인수 확인(댓글내용) : {}", comment.getContent());
         boardService.addComment(boardTitle, comment);
         Map<String, String> response = new HashMap<>();
         response.put("message", "댓글이 성공적으로 추가되었습니다.");
@@ -158,7 +159,7 @@ public class BoardController {
         return boardService.showCommentList(boardTitle, page);
     }
 
-    @RequestMapping(value = "/{boardTitle}/deleteComment")
+    @RequestMapping(value = "/{boardTitle}/deleteComment", method = RequestMethod.POST)
     @ResponseBody
     public void deleteComment(@PathVariable String boardTitle, int commentNum) throws Exception {
         boardService.deleteComment(boardTitle, commentNum);
@@ -170,7 +171,7 @@ public class BoardController {
         boardService.updateCommentCount(boardTitle, postNum);
     }
 
-    @RequestMapping(value = "/{boardTitle}/addRecommendation")
+    @RequestMapping(value = "/{boardTitle}/addRecommendation", method = RequestMethod.POST)
     @ResponseBody
     public ResponseEntity<RecommendDTO> addRecommendation(@PathVariable String boardTitle, HttpSession session, @RequestBody RecommendDTO recommendDTO) {
         try {
@@ -191,7 +192,7 @@ public class BoardController {
         }
     }
 
-    @RequestMapping(value = "/{boardTitle}/cancelRecommendation")
+    @RequestMapping(value = "/{boardTitle}/cancelRecommendation", method = RequestMethod.POST)
     @ResponseBody
     public ResponseEntity<RecommendDTO> cancelRecommendation(@PathVariable String boardTitle, HttpSession session, @RequestBody RecommendDTO recommendDTO) {
         try {
