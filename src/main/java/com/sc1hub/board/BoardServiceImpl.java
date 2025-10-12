@@ -1,6 +1,7 @@
 package com.sc1hub.board;
 
 import com.sc1hub.mapper.BoardMapper;
+import com.sc1hub.member.MemberDTO;
 import com.sc1hub.util.PageDTO;
 import com.sc1hub.util.PageService;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.AccessDeniedException;
 import java.util.List;
 
 @Slf4j
@@ -43,8 +45,15 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
-    public void deletePost(String boardTitle, int postNum) throws Exception {
+    public void deletePost(String boardTitle, int postNum, MemberDTO requestingMember) throws Exception {
         boardTitle = boardTitle.toLowerCase();
+        BoardDTO postToDelete = boardMapper.readPost(boardTitle, postNum);
+        if (postToDelete == null) {
+            throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
+        }
+        if (!postToDelete.getWriter().equals(requestingMember.getNickName()) && !requestingMember.getId().equals("admin")) {
+            throw new AccessDeniedException("삭제 권한이 없습니다.");
+        }
         boardMapper.deletePost(boardTitle, postNum);
     }
 

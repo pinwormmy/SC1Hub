@@ -1,5 +1,6 @@
 package com.sc1hub.board;
 
+import com.sc1hub.member.MemberDTO;
 import com.sc1hub.util.PageDTO;
 import java.util.List;
 
@@ -13,7 +14,7 @@ public interface BoardService {
 
     void submitModifyPost(String boardTitle, BoardDTO post) throws Exception;
 
-    void deletePost(String boardTitle, int postNum) throws Exception;
+    void deletePost(String boardTitle, int postNum, MemberDTO requestingMember) throws Exception;
 
     PageDTO pageSetting(String boardTitle, PageDTO page) throws Exception;
 

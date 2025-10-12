@@ -10,9 +10,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import java.nio.file.AccessDeniedException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,17 +104,23 @@ public class BoardController {
     }
 
     @RequestMapping(value="/{boardTitle}/deletePost", method = RequestMethod.POST)
-    public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model) throws Exception {
+    public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, RedirectAttributes redirectAttributes) throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        log.debug("삭제기능 작동 및 로그인 내역 확인 - 작성: {}, 로그인회원 : {}", post.getWriter(), member.getId());
-        if(!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")){
-            log.debug("삭제오류 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getId());
-            model.addAttribute("msg", "로그인 정보를 확인해주세요");
-            model.addAttribute("url", "/");
-            return "alert";
+        if (member == null) {
+            redirectAttributes.addFlashAttribute("msg", "로그인 정보가 없습니다.");
+            return "redirect:/";
         }
-        boardService.deletePost(boardTitle, post.getPostNum());
-        return "redirect:/boards/" + boardTitle;
+        try {
+            boardService.deletePost(boardTitle, post.getPostNum(), member);
+            return "redirect:/boards/" + boardTitle;
+        } catch (AccessDeniedException e) {
+            log.warn("삭제 권한 오류 발생 - 유저 ID: {}", member.getId());
+            redirectAttributes.addFlashAttribute("msg", "삭제 권한이 없습니다.");
+            return "redirect:/";
+        } catch (IllegalArgumentException e) {
+            redirectAttributes.addFlashAttribute("msg", e.getMessage());
+            return "redirect:/";
+        }
     }
 
     @RequestMapping(value = "/{boardTitle}/modifyPost")
