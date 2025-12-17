@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# shellcheck disable=SC2034,SC3044
+
 #
 # Copyright © 2015-2021 the original authors.
 #

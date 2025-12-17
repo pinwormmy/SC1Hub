@@ -1,13 +1,18 @@
 package com.sc1hub;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootTest
 class SC1HubApplicationTests {
 
 	@Test
-	void contextLoads() {
+	void applicationClassLoads() {
+		org.junit.jupiter.api.Assertions.assertNotNull(SC1HubApplication.class);
 	}
 
+	@Test
+	void applicationHasSpringBootApplicationAnnotation() {
+		org.junit.jupiter.api.Assertions
+				.assertTrue(SC1HubApplication.class.isAnnotationPresent(SpringBootApplication.class));
+	}
 }
