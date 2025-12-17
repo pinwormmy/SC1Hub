@@ -58,9 +58,6 @@
             <div class="post-navigation">
                 <%@include file="../include/paging.jspf" %>
             </div>
-            <div class="form-group">
-                <%@include file="../include/searchForm.jspf" %>
-            </div>
             <c:if test="${canWrite}">
                 <a href="/boards/${boardTitle}/writePost" class="pull-right btn btn-theme" accesskey="i">글쓰기(I)</a>
             </c:if>

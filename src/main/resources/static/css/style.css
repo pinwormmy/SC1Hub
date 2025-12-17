@@ -201,11 +201,10 @@ textarea.cke_source {
 .sc-terminal {
     position: static;
     width: 100%;
-    background: rgba(0, 0, 0, 0.92);
-    border: 2px solid rgba(255, 255, 255, 0.75);
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-top: 16px;
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    margin-top: 0;
 }
 .sc-terminal__output {
     display: block;
@@ -267,4 +266,124 @@ textarea.cke_source {
 }
 .sc-terminal__cursor {
     animation: sc-terminal-blink 1s step-end infinite;
+}
+
+.sc-feed__list {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 18px 0;
+}
+.sc-feed__item {
+    display: block;
+}
+.sc-feed__title {
+    color: #75f94c;
+    margin-bottom: 6px;
+}
+.sc-feed__meta {
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 12px;
+}
+.sc-feed__content {
+    margin-bottom: 12px;
+}
+.sc-feed__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.sc-feed__actions .is-current {
+    color: #75f94c;
+    border-color: #75f94c;
+}
+.sc-divider {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
+    margin: 12px 0;
+}
+.sc-feed__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.sc-feed__table th,
+.sc-feed__table td {
+    padding: 6px 4px;
+    vertical-align: top;
+}
+.sc-feed__table thead th {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+.sc-feed__table .post-num {
+    text-align: right;
+}
+.sc-feed__table .writer,
+.sc-feed__table .date {
+    text-align: center;
+}
+.sc-feed__table .views,
+.sc-feed__table .recommend {
+    text-align: right;
+}
+@media screen and (max-width: 600px) {
+    .sc-feed__table .hide-on-mobile {
+        display: none;
+    }
+}
+
+.sc-feed__recommend {
+    margin: 10px 0;
+}
+.sc-feed__comments-title {
+    margin: 6px 0;
+}
+.sc-feed__comments-page {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+.sc-feed__comment {
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.sc-feed__comment:last-child {
+    border-bottom: none;
+}
+.sc-feed__comment-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+}
+.sc-feed__comment-content {
+    margin-top: 6px;
+    white-space: pre-wrap;
+}
+.sc-feed__comment-form {
+    margin-top: 14px;
+}
+.sc-feed__comment-author {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.sc-feed__comment-input {
+    flex: 1 1 180px;
+    height: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    padding-left: 10px;
+}
+.sc-feed__comment-textarea {
+    width: 100%;
+    min-height: 70px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    padding: 10px;
+}
+.sc-feed__comment-submit {
+    margin-top: 10px;
+    text-align: right;
 }

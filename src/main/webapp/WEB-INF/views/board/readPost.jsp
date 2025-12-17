@@ -15,7 +15,6 @@
             <div class="col-sm-12">
                 <%@include file="../include/readPostContent.jspf" %>
             </div>
-            <%@include file="../include/coupangAd.jspf" %>
         </div>
     </div>
 </div>

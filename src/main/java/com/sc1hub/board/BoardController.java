@@ -50,6 +50,27 @@ public class BoardController {
         return "board/postList";
     }
 
+    @GetMapping("/{boardTitle}/listData")
+    @ResponseBody
+    public BoardListDataDTO listData(@PathVariable String boardTitle, PageDTO page, HttpSession session)
+            throws Exception {
+        BoardListDataDTO response = new BoardListDataDTO();
+        response.setBoardTitle(boardTitle);
+        response.setKoreanTitle(boardService.getKoreanTitle(boardTitle));
+        response.setPage(boardService.pageSetting(boardTitle, page));
+        response.setSelfNoticeList(boardService.showSelfNoticeList(boardTitle));
+        response.setPostList(boardService.showPostList(boardTitle, page));
+
+        boolean canWrite = false;
+        MemberDTO member = (MemberDTO) session.getAttribute("member");
+        if (member != null) {
+            canWrite = boardService.canWrite(boardTitle, member);
+        }
+        response.setCanWrite(canWrite);
+
+        return response;
+    }
+
     @GetMapping("/{boardTitle}/readPost")
     public String readPost(@PathVariable String boardTitle, Model model, HttpServletRequest request) throws Exception {
         int postNum = Integer.parseInt(request.getParameter("postNum"));

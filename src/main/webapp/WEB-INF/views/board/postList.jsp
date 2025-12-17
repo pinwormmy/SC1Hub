@@ -11,10 +11,10 @@
         <div class="container">
             <div class="row">
                 <%@include file="../include/latestPosts.jspf" %>
-                <div class="col-sm-12">
+                <%@include file="../include/sidebar.jspf" %>
+                <div class="col-sm-9">
                     <%@include file="../include/postListContent.jspf" %>
                 </div>
-                <%@include file="../include/coupangAd.jspf" %>
             </div>
         </div>
     </div>
