@@ -1,7 +1,7 @@
 package com.sc1hub.board;
 
 import com.sc1hub.member.MemberDTO;
-import com.sc1hub.util.PageDTO;
+import com.sc1hub.common.dto.PageDTO;
 import java.util.List;
 
 public interface BoardService {
@@ -55,4 +55,11 @@ public interface BoardService {
     String getKoreanTitle(String boardTitle);
 
     List<LatestPostDTO> showLatestPosts();
+
+    // Refactored methods
+    void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception;
+
+    void increaseViewCount(String boardTitle, int postNum, String ip) throws Exception;
+
+    boolean canWrite(String boardTitle, MemberDTO member);
 }

@@ -1,6 +1,7 @@
-package com.sc1hub.util;
+package com.sc1hub.common.util;
 
 import lombok.extern.slf4j.Slf4j;
+import com.sc1hub.common.dto.PageDTO;
 
 @Slf4j
 public class PageService {
@@ -22,10 +23,10 @@ public class PageService {
         int postEndPoint = page.getRecentPage() * DISPLAY_POST_LIMIT;
         int postBeginPoint = postEndPoint - DISPLAY_POST_LIMIT;
 
-        int totalPage = (int)Math.ceil((double)page.getTotalPostCount() / DISPLAY_POST_LIMIT);
-        int pageBeginPoint = (page.getRecentPage()-1) / PAGESET_LIMIT * PAGESET_LIMIT + 1;
+        int totalPage = (int) Math.ceil((double) page.getTotalPostCount() / DISPLAY_POST_LIMIT);
+        int pageBeginPoint = (page.getRecentPage() - 1) / PAGESET_LIMIT * PAGESET_LIMIT + 1;
         int pageEndPoint = pageBeginPoint + PAGESET_LIMIT - 1;
-        if(pageEndPoint > totalPage)
+        if (pageEndPoint > totalPage)
             pageEndPoint = totalPage;
 
         int prevPageSetPoint = pageBeginPoint - 1;

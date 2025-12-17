@@ -1,8 +1,8 @@
 package com.sc1hub.member;
 
 import com.sc1hub.mapper.MemberMapper;
-import com.sc1hub.util.PageDTO;
-import com.sc1hub.util.PageService;
+import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.util.PageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -72,9 +72,15 @@ public class MemberServiceImpl implements MemberService {
     }
 
     private void checkPageAndKeyword(PageDTO page) {
-        if(page.getRecentPage() < 1) { page.setRecentPage(1); }
-        if(page.getSearchType() == null) { page.setSearchType("id"); }
-        if(page.getKeyword() == null) { page.setKeyword(""); }
+        if (page.getRecentPage() < 1) {
+            page.setRecentPage(1);
+        }
+        if (page.getSearchType() == null) {
+            page.setSearchType("id");
+        }
+        if (page.getKeyword() == null) {
+            page.setKeyword("");
+        }
     }
 
     private PageDTO utilLoadingForPage(PageDTO page) {

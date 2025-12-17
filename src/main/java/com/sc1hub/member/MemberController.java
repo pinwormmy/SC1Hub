@@ -1,6 +1,6 @@
 package com.sc1hub.member;
 
-import com.sc1hub.util.PageDTO;
+import com.sc1hub.common.dto.PageDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -23,6 +23,7 @@ public class MemberController {
     MemberService memberService;
     @Autowired
     EmailService emailService;
+
     @RequestMapping("/login")
     public String login(HttpServletRequest request) {
         // 로그인 이전 페이지 정보 세션에 저장
@@ -85,7 +86,7 @@ public class MemberController {
 
     @RequestMapping(value = "/submitModifyMyInfo", method = RequestMethod.POST)
     public String submitModifyMyInfo(MemberDTO member, HttpSession session) throws Exception {
-        memberService.submitModifyMyInfo(member);       
+        memberService.submitModifyMyInfo(member);
         session.setAttribute("member", memberService.checkLoginData(member)); // 재로그인해서 회원정보갱신
         return "myPage";
     }
@@ -150,7 +151,7 @@ public class MemberController {
         return "modifyMemberByAdmin";
     }
 
-    @RequestMapping(value = "/submitModifyMemberByAdmin",  method = RequestMethod.POST)
+    @RequestMapping(value = "/submitModifyMemberByAdmin", method = RequestMethod.POST)
     public String submitModifyMemberByAdmin(MemberDTO memberDTO) {
         log.info("관리자의 회원수정 제출");
         memberService.submitModifyMemberByAdmin(memberDTO);
@@ -248,6 +249,5 @@ public class MemberController {
         log.info("로그인 시간을 연장합니다.");
         request.getSession().setMaxInactiveInterval(1800);
     }
-
 
 }

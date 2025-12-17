@@ -2,8 +2,8 @@ package com.sc1hub.board;
 
 import com.sc1hub.mapper.BoardMapper;
 import com.sc1hub.member.MemberDTO;
-import com.sc1hub.util.PageDTO;
-import com.sc1hub.util.PageService;
+import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.util.PageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ public class BoardServiceImpl implements BoardService {
 
     @Override
     public List<BoardDTO> showPostList(String boardTitle, PageDTO page) throws Exception {
-        //log.debug("showPostList 작동 테스트");
+        // log.debug("showPostList 작동 테스트");
         boardTitle = boardTitle.toLowerCase();
         return boardMapper.showPostList(boardTitle, page);
     }
@@ -51,7 +51,8 @@ public class BoardServiceImpl implements BoardService {
         if (postToDelete == null) {
             throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
         }
-        if (!postToDelete.getWriter().equals(requestingMember.getNickName()) && !requestingMember.getId().equals("admin")) {
+        if (!postToDelete.getWriter().equals(requestingMember.getNickName())
+                && !requestingMember.getId().equals("admin")) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");
         }
         boardMapper.deletePost(boardTitle, postNum);
@@ -146,7 +147,6 @@ public class BoardServiceImpl implements BoardService {
         }
     }
 
-
     @Override
     @Transactional
     public void deleteRecommendation(String boardTitle, RecommendDTO recommendDTO) {
@@ -213,9 +213,15 @@ public class BoardServiceImpl implements BoardService {
 
     // 나머지 유틸리티 메서드들
     protected void checkPageAndKeyword(PageDTO page) {
-        if(page.getRecentPage() < 1) { page.setRecentPage(1); }
-        if(page.getSearchType() == null) { page.setSearchType("title"); }
-        if(page.getKeyword() == null) { page.setKeyword(""); }
+        if (page.getRecentPage() < 1) {
+            page.setRecentPage(1);
+        }
+        if (page.getSearchType() == null) {
+            page.setSearchType("title");
+        }
+        if (page.getKeyword() == null) {
+            page.setKeyword("");
+        }
     }
 
     protected PageDTO utilLoadingForPage(String boardTitle, PageDTO page) throws Exception {
@@ -235,5 +241,59 @@ public class BoardServiceImpl implements BoardService {
         util.setDISPLAY_POST_LIMIT(15); // 한 페이지 내 게시물 갯수 변경
         util.setPAGESET_LIMIT(10);
         return util;
+    }
+
+    private static final String[] ADMIN_ONLY_BOARDS = {
+            "tVsTBoard", "tVsZBoard", "tVsPBoard",
+            "zVsTBoard", "zVsZBoard", "zVsPBoard",
+            "pVsTBoard", "pVsZBoard", "pVsPBoard",
+            "teamPlayGuideBoard", "noticeBoard", "tipBoard"
+    };
+
+    @Override
+    public boolean canWrite(String boardTitle, MemberDTO member) {
+        if (member == null)
+            return false;
+
+        for (String adminBoard : ADMIN_ONLY_BOARDS) {
+            if (boardTitle.equalsIgnoreCase(adminBoard)) {
+                return member.getGrade() == 3;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception {
+        boardTitle = boardTitle.toLowerCase();
+        BoardDTO originalPost = readPost(boardTitle, postNum);
+        String originalContent = originalPost.getContent();
+
+        // 1. 원본 게시글의 내용을 수정합니다.
+        String newContent = "이 게시글은 " + getKoreanTitle(targetBoardTitle) + "으로 이동되었습니다.";
+        originalPost.setContent(newContent);
+        submitModifyPost(boardTitle, originalPost);
+
+        // 2. 새 게시판(targetBoardTitle)으로 게시글을 복사합니다.
+        BoardDTO newPost = new BoardDTO();
+        newPost.setTitle(originalPost.getTitle());
+        newPost.setContent(originalContent); // 원본 내용을 그대로 사용
+        newPost.setWriter(originalPost.getWriter());
+        newPost.setRegDate(originalPost.getRegDate());
+        newPost.setViews(originalPost.getViews());
+        newPost.setCommentCount(originalPost.getCommentCount());
+        newPost.setNotice(originalPost.getNotice());
+
+        submitPost(targetBoardTitle, newPost);
+    }
+
+    @Override
+    public void increaseViewCount(String boardTitle, int postNum, String ip) throws Exception {
+        boardTitle = boardTitle.toLowerCase();
+        if (checkViewUserIp(boardTitle, postNum, ip) == 0) {
+            saveViewUserIp(boardTitle, postNum, ip);
+            updateViews(boardTitle, postNum);
+        }
     }
 }

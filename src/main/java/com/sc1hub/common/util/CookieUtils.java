@@ -1,4 +1,4 @@
-package com.sc1hub.util;
+package com.sc1hub.common.util;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;

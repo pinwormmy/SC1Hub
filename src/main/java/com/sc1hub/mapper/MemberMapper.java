@@ -1,7 +1,7 @@
 package com.sc1hub.mapper;
 
 import com.sc1hub.member.VisitorsDTO;
-import com.sc1hub.util.PageDTO;
+import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.member.MemberDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -23,8 +23,6 @@ public interface MemberMapper {
 
     void submitModifyMyInfo(MemberDTO member) throws Exception;
 
-
-
     int getTotalMemberCount(PageDTO page);
 
     MemberDTO getMemberInfo(String id);
@@ -42,7 +40,6 @@ public interface MemberMapper {
     MemberDTO findByUserIdAndEmail(@Param("userId") String userId, @Param("email") String email);
 
     void deleteMember(String id);
-
 
     List<VisitorsDTO> getRecentVisitors();
 }

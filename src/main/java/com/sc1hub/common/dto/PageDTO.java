@@ -1,4 +1,4 @@
-package com.sc1hub.util;
+package com.sc1hub.common.dto;
 
 import lombok.Data;
 

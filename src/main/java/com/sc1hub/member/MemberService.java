@@ -1,6 +1,6 @@
 package com.sc1hub.member;
 
-import com.sc1hub.util.PageDTO;
+import com.sc1hub.common.dto.PageDTO;
 
 import java.util.List;
 

@@ -1,7 +1,7 @@
 package com.sc1hub.mapper;
 
 import com.sc1hub.board.*;
-import com.sc1hub.util.PageDTO;
+import com.sc1hub.common.dto.PageDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -24,7 +24,8 @@ public interface BoardMapper {
 
     void addComment(@Param("boardTitle") String boardTitle, @Param("comment") CommentDTO comment) throws Exception;
 
-    List<CommentDTO> showCommentList(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page) throws Exception;
+    List<CommentDTO> showCommentList(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page)
+            throws Exception;
 
     void deleteComment(@Param("boardTitle") String boardTitle, @Param("commentNum") int commentNum) throws Exception;
 
@@ -32,9 +33,11 @@ public interface BoardMapper {
 
     void updateViews(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum) throws Exception;
 
-    int checkViewUserIp(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum, @Param("ip") String ip) throws Exception;
+    int checkViewUserIp(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum, @Param("ip") String ip)
+            throws Exception;
 
-    void saveViewUserIp(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum, @Param("ip") String ip) throws Exception;
+    void saveViewUserIp(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum, @Param("ip") String ip)
+            throws Exception;
 
     List<BoardDTO> showSelfNoticeList(@Param("boardTitle") String boardTitle) throws Exception;
 
@@ -58,4 +61,3 @@ public interface BoardMapper {
 
     List<LatestPostDTO> showLatestPosts();
 }
-
