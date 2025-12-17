@@ -265,7 +265,6 @@ async function addRecommend(postNum) {
     updateRecommendButtonText(isRecommended, recommendCount);
 }
 
-
 async function fetchRecommendCount(postNum) {
     const data = await fetchData(boardPath + "/getRecommendCount?postNum=" + postNum, "GET");
     console.log("fetchRecommendCount 응답:", data);  // 응답 로깅
