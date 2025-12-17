@@ -30,7 +30,7 @@
 }
 </style>
 
-<div class="col-sm-3">
+<div class="sc-col-3">
     <div id="sidebar" class="sidebar">
         <fieldset id="basicMenu" class="basic-menu">
             <legend class="menu-header" onclick="toggleMenu('basicMenuContent')">[ 지휘관회의실 ]</legend>

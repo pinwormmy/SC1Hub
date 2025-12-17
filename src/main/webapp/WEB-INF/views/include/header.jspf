@@ -7,7 +7,7 @@
 <meta name="description" content="스타크래프트1 전문 공략 사이트. 종족별 운영 및 전략 총정리">
 <link rel="canonical" href="${canonical}" />
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/plugins/bootstrap/css/bootstrap.min.css">
+<link rel="stylesheet" href="/css/sc1hub-layout.css">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@latest/neodgm/style.css">
 <link rel="preload" href="http://sc1hub.cdn1.cafe24.com/star_full.jpg" as="image">

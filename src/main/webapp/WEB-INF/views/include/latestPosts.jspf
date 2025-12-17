@@ -10,7 +10,7 @@
 
 </style>
 
-<div class="latest-posts col-sm-12" id="latestPosts"></div>
+<div class="latest-posts sc-col-12" id="latestPosts"></div>
 
 <script>
 //alert("최신글메뉴 test1");

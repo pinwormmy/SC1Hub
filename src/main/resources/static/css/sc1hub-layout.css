@@ -1,0 +1,124 @@
+/* Basic Reset & Box Sizing */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+}
+
+/* SC1Hub Grid System */
+
+/* Container */
+.sc-container {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+/* Responsive Container Widths */
+@media (min-width: 576px) {
+    .sc-container { max-width: 540px; }
+}
+@media (min-width: 768px) {
+    .sc-container { max-width: 720px; }
+}
+@media (min-width: 992px) {
+    .sc-container { max-width: 960px; }
+}
+@media (min-width: 1200px) {
+    .sc-container { max-width: 1140px; }
+}
+
+/* Row */
+.sc-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+/* Columns Base */
+[class^="sc-col-"] {
+    position: relative;
+    width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+/* Mobile First (Default 100%) - 이미 width: 100%가 기본임 */
+
+/* Tablet & Desktop (>= 768px) */
+/* 부트스트랩의 'sm' 브레이크포인트인 576px을 쓸지, 태블릿인 768px을 쓸지 결정.
+   사용자는 모바일/태블릿 지원을 원함. 스마트폰에서는 1열, 태블릿/PC에서는 다열로 가려면
+   768px 이상에서 분기하는 것이 일반적임. */
+
+@media (min-width: 768px) {
+    .sc-col-3 {
+        flex: 0 0 25%;
+        max-width: 25%;
+    }
+    .sc-col-4 {
+        flex: 0 0 33.333333%;
+        max-width: 33.333333%;
+    }
+    .sc-col-6 {
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+    .sc-col-9 {
+        flex: 0 0 75%;
+        max-width: 75%;
+    }
+    .sc-col-12 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+
+/* Common Components (Bootstrap Replacement) */
+.btn {
+    display: inline-block;
+    font-weight: 400;
+    text-align: center;
+    vertical-align: middle;
+    user-select: none;
+    border: 1px solid transparent;
+    padding: 0.375rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn-primary {
+    color: #fff;
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.table {
+    width: 100%;
+    margin-bottom: 1rem;
+    color: #212529;
+    border-collapse: collapse;
+}
+
+.table th,
+.table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Utility */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.d-none { display: none; }
+.d-block { display: block; }
