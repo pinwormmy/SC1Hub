@@ -4,14 +4,16 @@
 
 <footer class="footer text-center">
 	<div class="container">
-        <div class="col-lg-12">
-            <p class="copyright-text">Copyright 2024. SC1Hub All rights reserved.</p>
-            <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
-            <hr>
-            <div style="text-align: left; margin-bottom: 50px;">
-                명령어 안내 : ALT+(단축키) 혹은 숫자 입력으로 게시판 이동 <br>
-                선택>
-                <input id="menuInput" />
+        <div class="row">
+            <div class="col-lg-12">
+                <p class="copyright-text">Copyright 2024. SC1Hub All rights reserved.</p>
+                <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
+                <hr>
+                <div style="text-align: left; margin-bottom: 50px;">
+                    명령어 안내 : ALT+(단축키) 혹은 숫자 입력으로 게시판 이동 <br>
+                    선택>
+                    <input id="menuInput" />
+                </div>
             </div>
         </div>
 	</div>

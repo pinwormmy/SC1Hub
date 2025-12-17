@@ -95,23 +95,25 @@
       crossorigin="anonymous"></script>
 
 <div class="navbar-wrapper">
-    <div class="this-header">
-        <div class="title-container">
-            <span class="full-title"><a href="/">SC1Hub - 스타크래프트1 전문 공략 사이트</a></span>
-            <span class="short-title"><a href="/">SC1Hub</a></span>
-        </div>
-        <div class="super-top-menu">
-            <ul>
-                <c:if test="${member == null}">
-                    <li><a href="/login">[로그인]</a></li>
-                    <li><a href="/signAgreement">[회원가입]</a></li>
-                </c:if>
-                <c:if test="${member != null}">
-                    <li>${member.nickName}님 로그인 중 : </li>
-                    <li><a href="/logout">[로그아웃]</a></li>
-                    <li><a href="javascript:goMyPage()">[회원정보]</a></li>
-                </c:if>
-            </ul>
+    <div class="container">
+        <div class="this-header">
+            <div class="title-container">
+                <span class="full-title"><a href="/">SC1Hub - 스타크래프트1 전문 공략 사이트</a></span>
+                <span class="short-title"><a href="/">SC1Hub</a></span>
+            </div>
+            <div class="super-top-menu">
+                <ul>
+                    <c:if test="${member == null}">
+                        <li><a href="/login">[로그인]</a></li>
+                        <li><a href="/signAgreement">[회원가입]</a></li>
+                    </c:if>
+                    <c:if test="${member != null}">
+                        <li>${member.nickName}님 로그인 중 : </li>
+                        <li><a href="/logout">[로그아웃]</a></li>
+                        <li><a href="javascript:goMyPage()">[회원정보]</a></li>
+                    </c:if>
+                </ul>
+            </div>
         </div>
     </div>
 </div>

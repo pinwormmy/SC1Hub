@@ -9,12 +9,14 @@
 <body>
     <div class="section-inner">
         <div class="container">
-            <%@include file="../include/latestPosts.jspf" %>
-            <%@include file="../include/sidebar.jspf" %>
-            <div class="col-sm-9">
-                <%@include file="../include/postListContent.jspf" %>
+            <div class="row">
+                <%@include file="../include/latestPosts.jspf" %>
+                <%@include file="../include/sidebar.jspf" %>
+                <div class="col-sm-9">
+                    <%@include file="../include/postListContent.jspf" %>
+                </div>
+                <%@include file="../include/coupangAd.jspf" %>
             </div>
-            <%@include file="../include/coupangAd.jspf" %>
         </div>
     </div>
     <%@include file="../include/footer.jspf" %>

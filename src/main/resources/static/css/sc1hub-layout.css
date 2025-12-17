@@ -35,6 +35,68 @@ body {
     .sc-container { max-width: 1140px; }
 }
 
+/* Bootstrap Legacy Compatibility
+   Many JSPs still use Bootstrap class names (container/row/col-*). Keep a
+   minimal grid so the layout stays consistent after removing Bootstrap. */
+
+.container {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+@media (min-width: 576px) {
+    .container { max-width: 540px; }
+}
+@media (min-width: 768px) {
+    .container { max-width: 720px; }
+}
+@media (min-width: 992px) {
+    .container { max-width: 960px; }
+}
+@media (min-width: 1200px) {
+    .container { max-width: 1140px; }
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -15px;
+    margin-left: -15px;
+}
+
+[class^="col-"],
+[class*=" col-"] {
+    position: relative;
+    width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+.row > :not([class^="col-"]):not([class*=" col-"]):not([class^="sc-col-"]):not([class*=" sc-col-"]) {
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+}
+
+.col-xs-12,
+.col-sm-12,
+.col-lg-12 {
+    flex: 0 0 100%;
+    max-width: 100%;
+}
+
+@media (min-width: 768px) {
+    .col-sm-9,
+    .col-lg-9 {
+        flex: 0 0 75%;
+        max-width: 75%;
+    }
+}
+
 /* Row */
 .sc-row {
     display: flex;
@@ -122,3 +184,19 @@ body {
 .text-right { text-align: right; }
 .d-none { display: none; }
 .d-block { display: block; }
+
+.pull-left { float: left; }
+.pull-right { float: right; }
+.pull-center { display: block; text-align: center; }
+
+.btn-theme {
+    color: #fff;
+    background-color: transparent;
+    border-color: #fff;
+}
+
+.btn-theme:hover,
+.btn-theme:focus {
+    color: #ccc;
+    border-color: #ccc;
+}

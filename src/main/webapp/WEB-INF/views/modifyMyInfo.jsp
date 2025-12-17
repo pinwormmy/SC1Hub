@@ -8,41 +8,43 @@
 <body>
 <div class="section-inner">
     <div class="container">
-        <%@include file="./include/latestPosts.jspf" %>
-        <%@include file="./include/sidebar.jspf" %>
-        <div class="col-sm-9">
-            <div class="media">
-                <div class="media-body">
-                    <div class="member-info" style="line-height: 50px;">
-                        <form action="/submitModifyMyInfo" id="modifyMyInfo" method="post">
-                            <table>
-                                <tr>
-                                    <td>ID> </td>
-                                    <td>${member.id}<input type="hidden" name="id" value="${member.id}"></td>
-                                </tr>
-                                <tr>
-                                    <td>별명> </td>
-                                    <td><input type="text" name="nickName" value="${member.nickName}"></td>
-                                </tr>
-                                <tr>
-                                    <td>비밀번호></td>
-                                    <td><input type="password" name="pw" placeholder="비밀번호를 입력하세요" value=""></td>
-                                </tr>
-                                <tr>
-                                    <td>비밀번호확인></td>
-                                    <td><input type="password" name="pw2" placeholder="비밀번호를 다시 입력하세요" value=""></td>
-                                </tr>
-                                <tr>
-                                    <td>이메일> </td>
-                                    <td><input type="email" name="email" value="${member.email}"></td>
-                                </tr>
-                            </table>
-                            <div style="margin-top: 20px;">
-                                <button type="button" onclick="checkSignupForm();">수정하기</button>
-                                <button type="button" onclick="location.href='/myPage'">취소</button>
-                                <button type="button" onclick="confirmDelete();">탈퇴하기</button>
-                           </div>
-                       </form>
+        <div class="row">
+            <%@include file="./include/latestPosts.jspf" %>
+            <%@include file="./include/sidebar.jspf" %>
+            <div class="col-sm-9">
+                <div class="media">
+                    <div class="media-body">
+                        <div class="member-info" style="line-height: 50px;">
+                            <form action="/submitModifyMyInfo" id="modifyMyInfo" method="post">
+                                <table>
+                                    <tr>
+                                        <td>ID> </td>
+                                        <td>${member.id}<input type="hidden" name="id" value="${member.id}"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>별명> </td>
+                                        <td><input type="text" name="nickName" value="${member.nickName}"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>비밀번호></td>
+                                        <td><input type="password" name="pw" placeholder="비밀번호를 입력하세요" value=""></td>
+                                    </tr>
+                                    <tr>
+                                        <td>비밀번호확인></td>
+                                        <td><input type="password" name="pw2" placeholder="비밀번호를 다시 입력하세요" value=""></td>
+                                    </tr>
+                                    <tr>
+                                        <td>이메일> </td>
+                                        <td><input type="email" name="email" value="${member.email}"></td>
+                                    </tr>
+                                </table>
+                                <div style="margin-top: 20px;">
+                                    <button type="button" onclick="checkSignupForm();">수정하기</button>
+                                    <button type="button" onclick="location.href='/myPage'">취소</button>
+                                    <button type="button" onclick="confirmDelete();">탈퇴하기</button>
+                               </div>
+                           </form>
+                        </div>
                     </div>
                 </div>
             </div>

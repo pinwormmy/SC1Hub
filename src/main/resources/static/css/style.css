@@ -118,7 +118,8 @@ button.cancel-btn:hover {
   padding: 20px 0 30px;
 }
 .container {
-    padding: 0;
+    padding-left: 15px;
+    padding-right: 15px;
 }
 .section-inner {
     margin-top: 10px;

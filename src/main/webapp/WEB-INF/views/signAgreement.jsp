@@ -23,41 +23,42 @@
 <body>
     <div class="section-inner">
         <div class="container">
-            <%@include file="./include/latestPosts.jspf" %>
-            <%@include file="./include/sidebar.jspf" %>
-            <div class="col-sm-9">
-                <h1>약관 동의</h1>
+            <div class="row">
+                <%@include file="./include/latestPosts.jspf" %>
+                <%@include file="./include/sidebar.jspf" %>
+                <div class="col-sm-9">
+                    <h1>약관 동의</h1>
 
-                <!-- 서비스 이용 약관 -->
-                <div class="terms-section">
-                    <div class="terms-header">서비스 이용 약관</div>
-                    <div class="terms-content">
-                        <%@include file="./include/terms.jspf" %>
+                    <!-- 서비스 이용 약관 -->
+                    <div class="terms-section">
+                        <div class="terms-header">서비스 이용 약관</div>
+                        <div class="terms-content">
+                            <%@include file="./include/terms.jspf" %>
+                        </div>
+                        <div class="checkbox-section" >
+                            <input type="checkbox" id="terms1" name="terms1" style="vertical-align: middle;">
+                            <label for="terms1">동의</label>
+                        </div>
                     </div>
-                    <div class="checkbox-section" >
-                        <input type="checkbox" id="terms1" name="terms1" style="vertical-align: middle;">
-                        <label for="terms1">동의</label>
+
+                    <!-- 개인정보처리방침 -->
+                    <div class="terms-section">
+                        <div class="terms-header">개인정보처리방침</div>
+                        <div class="terms-content">
+                            <%@include file="./include/privacy.jspf" %>
+                        </div>
+                        <div class="checkbox-section">
+                            <input type="checkbox" id="terms2" name="terms2" style="vertical-align: middle;">
+                            <label for="terms2">동의</label>
+                        </div>
                     </div>
+
+                    <!-- 다음으로 버튼 -->
+                    <button type="button" onclick="goNext()">다음으로</button>
                 </div>
-
-                <!-- 개인정보처리방침 -->
-                <div class="terms-section">
-                    <div class="terms-header">개인정보처리방침</div>
-                    <div class="terms-content">
-                        <%@include file="./include/privacy.jspf" %>
-                    </div>
-                    <div class="checkbox-section">
-                        <input type="checkbox" id="terms2" name="terms2" style="vertical-align: middle;">
-                        <label for="terms2">동의</label>
-                    </div>
-                </div>
-
-                <!-- 다음으로 버튼 -->
-                <button type="button" onclick="goNext()">다음으로</button>
             </div>
         </div>
     </div>
-</section>
 <%@include file="./include/footer.jspf" %>
 
     <script>
