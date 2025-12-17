@@ -1,12 +1,21 @@
+html {
+    font-size: 20px;
+}
+:root {
+    --sc-font-family: "NeoDungGeunMo Pro", "NeoDungGeunMo", sans-serif;
+}
 body {
     min-height: 100vh;
     position: relative;
     width: 100%;
     height: 100%;
     line-height: 1.5;
-    font-family: "NeoDungGeunMo", sans-serif;
+    font-family: var(--sc-font-family);
     color: white;
     font-size: 20px;
+    font-weight: 400;
+    font-style: normal;
+    font-synthesis: none;
     background-image: linear-gradient(rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.9)), url("http://sc1hub.cdn1.cafe24.com/star_full.jpg");
     background-size: cover;
     background-repeat: no-repeat;
@@ -22,15 +31,27 @@ body {
     min-height: 850px;
 }
 p {
-  font-family: "NeoDungGeunMo", sans-serif;
-  font-size: 20px;
+  font-family: inherit;
+  font-size: inherit;
   margin: 10px;
 }
 h1, h2, h3, h4, h5, h6 {
-  font-family: "NeoDungGeunMo", sans-serif;
+  font-family: inherit;
 }
 h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
+}
+h1, h2, h3 {
+    font-size: 32px;
+}
+h4, h5, h6 {
+    font-size: inherit;
+}
+strong, b {
+    font-weight: inherit;
+}
+em, i {
+    font-style: inherit;
 }
 ol, ul {
   margin: 0;
@@ -38,7 +59,7 @@ ol, ul {
   list-style: none;
 }
 legend {
-    font-size: 20px;
+    font-size: inherit;
     color: #75f94c;
     border-bottom: 0;
     width: auto;
@@ -46,7 +67,7 @@ legend {
     margin: 0;
 }
 th {
-    font-weight: 100;
+    font-weight: 400;
     padding: 10px;
 }
 li {
@@ -61,6 +82,11 @@ select {
     background-color: transparent;
     border: none;
     outline: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
 }
 option {
     background-color: #010a47;
@@ -87,9 +113,29 @@ input {
     outline: none;
     padding-left: 10px;
     background-color: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
 }
 input:focus {
     outline: none;
+}
+input::placeholder,
+textarea::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    box-shadow: 0 0 0px 1000px rgba(0, 0, 0, 0.25) inset;
+    transition: background-color 5000s ease-in-out 0s;
 }
 input[type="checkbox"] {
     transform: scale(1.5);
@@ -99,8 +145,19 @@ button {
     border: 2px solid #ffffff;
     margin: 2px;
     color: white;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
     background-color: transparent;
     cursor: pointer;
+}
+textarea {
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
 }
 button.cancel-btn {
     background: none;
@@ -133,9 +190,9 @@ button.cancel-btn:hover {
     margin-top: 20px;
 }
 .btn {
-    font-size: 20px;
+    font-size: 1rem;
 }
 textarea.cke_source {
-    font-family: "NeoDungGeunMo", sans-serif;
+    font-family: var(--sc-font-family);
     color: black;
 }

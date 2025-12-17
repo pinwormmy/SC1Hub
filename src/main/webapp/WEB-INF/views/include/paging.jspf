@@ -1,17 +1,28 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 
-<c:if test="${page.prevPageSetPoint >= 1}">
-    <a class="pull-left btn btn-theme"
-    href="/boards/${boardTitle}/?recentPage=${page.prevPageSetPoint}&searchType=${page.searchType}&keyword=${page.keyword}">
-    이전</a>
-</c:if>
-<c:forEach var="countPage" begin="${page.pageBeginPoint}" end="${page.pageEndPoint}">
-    <a class="pull-center btn btn-theme"
-    href="/boards/${boardTitle}/?recentPage=${countPage}&searchType=${page.searchType}&keyword=${page.keyword}">
-    ${countPage}</a>
-</c:forEach>
-<c:if test="${page.nextPageSetPoint <= page.totalPage}">
-    <a class="pull-right btn btn-theme"
-    href="/boards/${boardTitle}/?recentPage=${page.nextPageSetPoint}&searchType=${page.searchType}&keyword=${page.keyword}">
-    다음</a>
-</c:if>
+<div class="sc-paging">
+    <c:if test="${page.prevPageSetPoint >= 1}">
+        <a class="sc-paging__nav sc-paging__prev btn btn-theme"
+           href="/boards/${boardTitle}/?recentPage=${page.prevPageSetPoint}&searchType=${page.searchType}&keyword=${page.keyword}">[이전]</a>
+    </c:if>
+
+    <div class="sc-paging__pages">
+        <c:forEach var="countPage" begin="${page.pageBeginPoint}" end="${page.pageEndPoint}">
+            <c:choose>
+                <c:when test="${countPage == page.recentPage}">
+                    <a class="sc-paging__page btn btn-theme is-current"
+                       href="/boards/${boardTitle}/?recentPage=${countPage}&searchType=${page.searchType}&keyword=${page.keyword}">[${countPage}]</a>
+                </c:when>
+                <c:otherwise>
+                    <a class="sc-paging__page btn btn-theme"
+                       href="/boards/${boardTitle}/?recentPage=${countPage}&searchType=${page.searchType}&keyword=${page.keyword}">[${countPage}]</a>
+                </c:otherwise>
+            </c:choose>
+        </c:forEach>
+    </div>
+
+    <c:if test="${page.nextPageSetPoint <= page.totalPage}">
+        <a class="sc-paging__nav sc-paging__next btn btn-theme"
+           href="/boards/${boardTitle}/?recentPage=${page.nextPageSetPoint}&searchType=${page.searchType}&keyword=${page.keyword}">[다음]</a>
+    </c:if>
+</div>

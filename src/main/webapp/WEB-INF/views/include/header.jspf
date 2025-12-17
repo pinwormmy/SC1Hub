@@ -9,7 +9,8 @@
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link rel="stylesheet" href="/css/sc1hub-layout.css">
 <link rel="stylesheet" href="/css/style.css">
-<link rel="stylesheet" href="//cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@latest/neodgm/style.css">
+<!-- Neo둥근모 Pro -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
 <link rel="preload" href="http://sc1hub.cdn1.cafe24.com/star_full.jpg" as="image">
 <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
 
@@ -21,9 +22,13 @@
     position: relative;
     padding: 8px;
 }
+.navbar-wrapper .container {
+    max-width: 100%;
+}
 .title-container {
     flex-grow: 3;
     text-align: center;
+    min-width: 0;
 }
 .super-top-menu {
     display: flex;
@@ -41,7 +46,11 @@
     margin-right: 20px;
 }
 .title-container .full-title {
-    display: inline;
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 48px;
 }
 .title-container .short-title {
@@ -86,7 +95,7 @@
     }
     .super-top-menu ul li {
         margin-right: 5px;
-        font-size: 16px;
+        font-size: 20px;
     }
 }
 </style>
