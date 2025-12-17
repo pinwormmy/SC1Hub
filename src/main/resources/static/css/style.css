@@ -190,6 +190,18 @@ button.cancel-btn:hover {
     flex-wrap: wrap;
     margin-top: 20px;
 }
+.ad-banners img {
+    display: block;
+}
+.coupang-banner-text {
+    width: 100%;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.coupang-banner-text p {
+    margin: 0;
+}
 .btn {
     font-size: 1rem;
 }
@@ -218,7 +230,7 @@ textarea.cke_source {
 .sc-terminal__prompt {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0;
 }
 .sc-terminal__label {
     white-space: nowrap;
@@ -230,7 +242,7 @@ textarea.cke_source {
     padding-left: 0;
     border: none;
     background: transparent;
-    caret-color: transparent;
+    caret-color: #75f94c;
 }
 .sc-terminal__cursor {
     width: 12px;
@@ -334,6 +346,9 @@ textarea.cke_source {
 
 .sc-feed__recommend {
     margin: 10px 0;
+}
+.sc-feed__ad .ad-banners {
+    margin-top: 0;
 }
 .sc-feed__comments-title {
     margin: 6px 0;

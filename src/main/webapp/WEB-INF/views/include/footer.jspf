@@ -3,13 +3,13 @@
 <style>
 </style>
 
-<div class="container">
-    <div class="row">
-        <%@include file="./coupangAd.jspf" %>
-    </div>
-</div>
-
-<footer class="footer text-center">
+<div id="scFooterCoupang" class="container">
+	    <div class="row">
+	        <%@include file="./coupangAd.jspf" %>
+	    </div>
+	</div>
+	
+<footer id="scFooterMeta" class="footer text-center">
 	<div class="container">
         <div class="row">
             <div class="col-lg-12">
@@ -30,18 +30,17 @@
 
 <div class="container">
     <div class="row">
-        <div class="col-sm-12">
-            <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
-                <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
-                <div class="sc-terminal__prompt">
-                    <span class="sc-terminal__label">선택&gt;</span>
-                    <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
-                    <span class="sc-terminal__cursor" aria-hidden="true">█</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+	        <div class="col-sm-12">
+	            <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
+	                <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
+	                <div class="sc-terminal__prompt">
+	                    <span class="sc-terminal__label">선택 &gt;&nbsp;</span>
+	                    <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
+	                </div>
+	            </div>
+	        </div>
+	    </div>
+	</div>
 
 <script>
     // 페이지 이동 함수

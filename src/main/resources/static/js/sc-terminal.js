@@ -55,6 +55,25 @@
 
     const COLLAPSED_CLASS = 'is-collapsed';
 
+    let feedModeEnabled = false;
+
+    function enableFeedMode() {
+        if (feedModeEnabled) {
+            return;
+        }
+        feedModeEnabled = true;
+
+        const footerCoupangEl = document.getElementById('scFooterCoupang');
+        if (footerCoupangEl) {
+            footerCoupangEl.hidden = true;
+        }
+
+        const footerMetaEl = document.getElementById('scFooterMeta');
+        if (footerMetaEl) {
+            footerMetaEl.hidden = true;
+        }
+    }
+
     function openTerminal() {
         terminalEl.classList.remove(COLLAPSED_CLASS);
     }
@@ -116,6 +135,24 @@
         const dividerEl = document.createElement('hr');
         dividerEl.className = 'sc-divider';
         return dividerEl;
+    }
+
+    function createCoupangBannerClone() {
+        const bannerEl = document.querySelector('.ad-banners');
+        const textEl = document.querySelector('.coupang-banner-text');
+        if (!bannerEl && !textEl) {
+            return null;
+        }
+
+        const wrapperEl = document.createElement('div');
+        wrapperEl.className = 'sc-feed__ad';
+        if (bannerEl) {
+            wrapperEl.appendChild(bannerEl.cloneNode(true));
+        }
+        if (textEl) {
+            wrapperEl.appendChild(textEl.cloneNode(true));
+        }
+        return wrapperEl;
     }
 
     function formatMmDd(dateText) {
@@ -271,68 +308,19 @@
         contentEl.className = 'sc-feed__content';
         contentEl.innerHTML = sanitizeHtml(post.content ?? '');
 
-        const recommendEl = document.createElement('div');
-        recommendEl.className = 'sc-feed__recommend';
-
         let recommendCount = Number.parseInt(String(post.recommendCount ?? '0'), 10);
         recommendCount = Number.isNaN(recommendCount) ? 0 : recommendCount;
         let isRecommended = false;
 
-        const recommendButtonEl = document.createElement('button');
-        recommendButtonEl.type = 'button';
-        recommendButtonEl.className = 'btn btn-theme';
-
-        function renderRecommendButton() {
-            recommendButtonEl.textContent = isRecommended
-                ? `추천취소(M) : ${recommendCount}`
-                : `추천(M) : ${recommendCount}`;
-        }
-
-        async function refreshRecommend() {
-            if (!memberMeta.isLoggedIn) {
-                isRecommended = false;
-                renderRecommendButton();
-                return;
-            }
-
-            try {
-                const state = await fetchRecommendState(boardTitle, postNum);
-                isRecommended = state.isRecommended;
-            } catch (e) {
-                isRecommended = false;
-            }
-
-            try {
-                recommendCount = await fetchRecommendCount(boardTitle, postNum);
-            } catch (e) {
-                recommendCount = Number.parseInt(String(post.recommendCount ?? '0'), 10);
-                recommendCount = Number.isNaN(recommendCount) ? 0 : recommendCount;
-            }
-
-            renderRecommendButton();
-        }
-
-        recommendButtonEl.addEventListener('click', () => {
-            if (!memberMeta.isLoggedIn) {
-                alert('추천 기능을 사용하려면 로그인이 필요합니다.');
-                return;
-            }
-            void (async () => {
-                try {
-                    await setRecommendation(boardTitle, postNum, isRecommended);
-                    await refreshRecommend();
-                } catch (e) {
-                    appendSystemMessage('추천 처리 중 오류가 발생했습니다.');
-                }
-            })();
-        });
-
-        renderRecommendButton();
-        void refreshRecommend();
-        recommendEl.appendChild(recommendButtonEl);
+        let commentCount = Number.parseInt(String(post.commentCount ?? '0'), 10);
+        commentCount = Number.isNaN(commentCount) ? 0 : commentCount;
 
         const commentsEl = document.createElement('div');
         commentsEl.className = 'sc-feed__comments';
+
+        const commentsViewEl = document.createElement('div');
+        commentsViewEl.className = 'sc-feed__comments-view';
+        commentsViewEl.hidden = true;
 
         const commentsTitleEl = document.createElement('div');
         commentsTitleEl.className = 'sc-feed__comments-title';
@@ -344,8 +332,13 @@
         const commentsPageEl = document.createElement('div');
         commentsPageEl.className = 'sc-feed__comments-page';
 
+        commentsViewEl.appendChild(commentsTitleEl);
+        commentsViewEl.appendChild(commentsListEl);
+        commentsViewEl.appendChild(commentsPageEl);
+
         const commentFormEl = document.createElement('div');
         commentFormEl.className = 'sc-feed__comment-form';
+        commentFormEl.hidden = true;
 
         const authorRowEl = document.createElement('div');
         authorRowEl.className = 'sc-feed__comment-author';
@@ -380,13 +373,23 @@
         const commentSubmitButtonEl = document.createElement('button');
         commentSubmitButtonEl.type = 'button';
         commentSubmitButtonEl.className = 'btn btn-primary';
-        commentSubmitButtonEl.textContent = '댓글작성(C)';
+        commentSubmitButtonEl.textContent = '등록';
 
         commentSubmitWrapEl.appendChild(commentSubmitButtonEl);
+
+        commentFormEl.appendChild(authorRowEl);
+        commentFormEl.appendChild(commentTextareaEl);
+        commentFormEl.appendChild(commentSubmitWrapEl);
+
+        commentsEl.appendChild(commentsViewEl);
+        commentsEl.appendChild(commentFormEl);
 
         async function loadComments(recentPage) {
             try {
                 const pageDto = await fetchCommentPageSetting(boardTitle, postNum, recentPage);
+                const updatedCount = Number.parseInt(String(pageDto?.totalPostCount ?? '0'), 10);
+                commentCount = Number.isNaN(updatedCount) ? 0 : updatedCount;
+                renderCommentViewLink();
                 const comments = await fetchCommentList(boardTitle, pageDto);
 
                 commentsListEl.innerHTML = '';
@@ -474,6 +477,17 @@
             }
         }
 
+        async function refreshCommentCount() {
+            try {
+                const pageDto = await fetchCommentPageSetting(boardTitle, postNum, 1);
+                const updatedCount = Number.parseInt(String(pageDto?.totalPostCount ?? '0'), 10);
+                commentCount = Number.isNaN(updatedCount) ? 0 : updatedCount;
+                renderCommentViewLink();
+            } catch (e) {
+                // ignore
+            }
+        }
+
         commentSubmitButtonEl.addEventListener('click', () => {
             const content = (commentTextareaEl.value || '').trim();
             if (!content) {
@@ -497,7 +511,11 @@
                     try {
                         await addComment(boardTitle, { postNum, id: '', content, nickname: nick, password: pw });
                         await updateCommentCount(boardTitle, postNum);
-                        await loadComments(1);
+                        if (!commentsViewEl.hidden) {
+                            await loadComments(1);
+                        } else {
+                            await refreshCommentCount();
+                        }
                         commentTextareaEl.value = '';
                         nicknameInputEl.value = '';
                         passwordInputEl.value = '';
@@ -512,7 +530,11 @@
                 try {
                     await addComment(boardTitle, { postNum, id: memberMeta.id, content });
                     await updateCommentCount(boardTitle, postNum);
-                    await loadComments(1);
+                    if (!commentsViewEl.hidden) {
+                        await loadComments(1);
+                    } else {
+                        await refreshCommentCount();
+                    }
                     commentTextareaEl.value = '';
                 } catch (e) {
                     appendSystemMessage('댓글 작성 중 오류가 발생했습니다.');
@@ -520,19 +542,18 @@
             })();
         });
 
-        commentFormEl.appendChild(authorRowEl);
-        commentFormEl.appendChild(commentTextareaEl);
-        commentFormEl.appendChild(commentSubmitWrapEl);
-
-        commentsEl.appendChild(commentsTitleEl);
-        commentsEl.appendChild(commentsListEl);
-        commentsEl.appendChild(commentsPageEl);
-        commentsEl.appendChild(commentFormEl);
-
-        void loadComments(1);
-
         const actionsEl = document.createElement('div');
         actionsEl.className = 'sc-feed__actions';
+
+        function createInlineAction(label, accessKey) {
+            const linkEl = createActionLink(label, '#', {
+                className: 'pull btn btn-right cancel-btn',
+                accessKey,
+            });
+            linkEl.setAttribute('role', 'button');
+            linkEl.setAttribute('data-sc-terminal-bypass', '1');
+            return linkEl;
+        }
 
         actionsEl.appendChild(
             createActionLink('목 록(L)', `/boards/${encodeURIComponent(boardTitle)}`, {
@@ -541,11 +562,92 @@
             }),
         );
 
+        const recommendLinkEl = createInlineAction('', 'm');
+
+        function renderRecommendLink() {
+            recommendLinkEl.textContent = isRecommended
+                ? `추천취소(M): ${recommendCount}`
+                : `추천(M): ${recommendCount}`;
+        }
+
+        async function refreshRecommend() {
+            if (!memberMeta.isLoggedIn) {
+                isRecommended = false;
+                renderRecommendLink();
+                return;
+            }
+
+            try {
+                const state = await fetchRecommendState(boardTitle, postNum);
+                isRecommended = state.isRecommended;
+            } catch (e) {
+                isRecommended = false;
+            }
+
+            try {
+                recommendCount = await fetchRecommendCount(boardTitle, postNum);
+            } catch (e) {
+                recommendCount = Number.parseInt(String(post.recommendCount ?? '0'), 10);
+                recommendCount = Number.isNaN(recommendCount) ? 0 : recommendCount;
+            }
+
+            renderRecommendLink();
+        }
+
+        recommendLinkEl.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (!memberMeta.isLoggedIn) {
+                alert('추천 기능을 사용하려면 로그인이 필요합니다.');
+                return;
+            }
+            void (async () => {
+                try {
+                    await setRecommendation(boardTitle, postNum, isRecommended);
+                    await refreshRecommend();
+                } catch (e) {
+                    appendSystemMessage('추천 처리 중 오류가 발생했습니다.');
+                }
+            })();
+        });
+
+        renderRecommendLink();
+        void refreshRecommend();
+        actionsEl.appendChild(recommendLinkEl);
+
+        const commentViewLinkEl = createInlineAction('', 'o');
+
+        function renderCommentViewLink() {
+            commentViewLinkEl.textContent = `댓글보기(O): ${commentCount}`;
+        }
+
+        renderCommentViewLink();
+        commentViewLinkEl.addEventListener('click', (event) => {
+            event.preventDefault();
+            commentsViewEl.hidden = !commentsViewEl.hidden;
+            syncCommentAreaDivider();
+            renderCommentViewLink();
+            if (!commentsViewEl.hidden) {
+                void loadComments(1);
+            }
+        });
+        actionsEl.appendChild(commentViewLinkEl);
+
+        const commentWriteLinkEl = createInlineAction('댓글작성(C)', 'c');
+        commentWriteLinkEl.addEventListener('click', (event) => {
+            event.preventDefault();
+            commentFormEl.hidden = !commentFormEl.hidden;
+            syncCommentAreaDivider();
+            if (!commentFormEl.hidden) {
+                commentTextareaEl.focus();
+            }
+        });
+        actionsEl.appendChild(commentWriteLinkEl);
+
         if (canEdit) {
             actionsEl.appendChild(
-                createActionLink('수 정(O)', `/boards/${encodeURIComponent(boardTitle)}/modifyPost?postNum=${encodeURIComponent(postNum)}`, {
+                createActionLink('수 정(E)', `/boards/${encodeURIComponent(boardTitle)}/modifyPost?postNum=${encodeURIComponent(postNum)}`, {
                     className: 'pull btn btn-right cancel-btn',
-                    accessKey: 'o',
+                    accessKey: 'e',
                 }),
             );
 
@@ -576,16 +678,29 @@
             actionsEl.appendChild(formEl);
         }
 
+        const commentsDividerEl = createDivider();
+        commentsDividerEl.hidden = true;
+
+        function syncCommentAreaDivider() {
+            commentsDividerEl.hidden = commentsViewEl.hidden && commentFormEl.hidden;
+        }
+
+        syncCommentAreaDivider();
+
+        const coupangEl = createCoupangBannerClone();
+        if (coupangEl) {
+            itemEl.appendChild(coupangEl);
+            itemEl.appendChild(createDivider());
+        }
+
         itemEl.appendChild(titleEl);
         itemEl.appendChild(infoEl);
         itemEl.appendChild(createDivider());
         itemEl.appendChild(contentEl);
         itemEl.appendChild(createDivider());
-        itemEl.appendChild(recommendEl);
-        itemEl.appendChild(createDivider());
-        itemEl.appendChild(commentsEl);
-        itemEl.appendChild(createDivider());
         itemEl.appendChild(actionsEl);
+        itemEl.appendChild(commentsDividerEl);
+        itemEl.appendChild(commentsEl);
         itemEl.appendChild(createDivider());
 
         feedListEl.appendChild(itemEl);
@@ -951,6 +1066,7 @@
     }
 
     async function openPost(boardTitle, postNum) {
+        enableFeedMode();
         try {
             const boardDisplayName = await getBoardDisplayName(boardTitle);
             const post = await fetchPostData(boardTitle, postNum);
@@ -962,6 +1078,7 @@
     }
 
     async function openBoardList(boardTitle, recentPage) {
+        enableFeedMode();
         try {
             const data = await fetchBoardListData(boardTitle, recentPage);
             appendBoardListToFeed(
