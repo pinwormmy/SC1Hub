@@ -23,6 +23,26 @@ async function fetchData(url, method = 'GET', body = null) {
 async function addComment() {
     try {
         const commentContent = document.getElementById("commentContent"); // commentContent를 어디서 가져오는지 명시적으로 추가했습니다.
+        const nicknameInput = document.getElementById("commentNickname");
+        const passwordInput = document.getElementById("commentPassword");
+
+        let nickname = "";
+        let password = "";
+
+        // 비로그인 사용자일 경우 닉네임과 비밀번호 필수 체크
+        if (!isLoggedIn) {
+            if (nicknameInput.value === "") {
+                alert("닉네임을 입력해주세요.");
+                return false;
+            }
+            if (passwordInput.value === "") {
+                alert("비밀번호를 입력해주세요.");
+                return false;
+            }
+            nickname = nicknameInput.value;
+            password = passwordInput.value;
+        }
+
         if (commentContent.value === "") {
             alert("댓글 내용을 작성해주세요~");
             return false;
@@ -34,6 +54,8 @@ async function addComment() {
                 postNum: postNum,
                 id: memberId,
                 content: commentContent.value,
+                nickname: nickname,
+                password: password
             })
         });
 
@@ -45,6 +67,10 @@ async function addComment() {
                 await updateCommentCount(postNum);  // 이 함수는 기존에 정의되어 있다고 가정합니다.
                 await showCommentList();  // 이 함수는 기존에 정의되어 있다고 가정합니다.
                 commentContent.value = "";
+                if (!isLoggedIn) {
+                    nicknameInput.value = "";
+                    passwordInput.value = "";
+                }
             } catch (e) {
                 console.error("JSON 파싱 오류:", e);
                 console.log("서버에서 받은 응답:", text);
@@ -67,10 +93,10 @@ async function pageSettingAndLoadComment(commentPage) {
     try {
         const response = await fetch(boardPath + "/commentPageSetting", {
             method: 'POST',
-            headers: {"Content-Type" : "application/json"},
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                recentPage : commentPage,
-                postNum : postNum
+                recentPage: commentPage,
+                postNum: postNum
             })
         });
 
@@ -83,20 +109,20 @@ async function pageSettingAndLoadComment(commentPage) {
             commentPageDivTag.innerHTML = "";
             let commentPageHtml = "";
 
-            if(data.prevPageSetPoint >= 1) {
-                commentPageHtml +="<a href='javascript:pageSettingAndLoadComment(" + data.prevPageSetPoint + ")'>◁</a>";
+            if (data.prevPageSetPoint >= 1) {
+                commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + data.prevPageSetPoint + ")'>◁</a>";
             }
-            if(data.totalPage > 1) {
-                for(let i=data.pageBeginPoint; i<=data.pageEndPoint; i++) {
-                    if(i == data.recentPage) {
+            if (data.totalPage > 1) {
+                for (let i = data.pageBeginPoint; i <= data.pageEndPoint; i++) {
+                    if (i == data.recentPage) {
                         commentPageHtml += " " + i + " ";
                     } else {
                         commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + i + ")'>" + i + " </a>";
                     }
                 }
             }
-            if(data.nextPageSetPoint <= data.totalPage) {
-                commentPageHtml +="<a href='javascript:pageSettingAndLoadComment(" + data.nextPageSetPoint + ")'>▷</a>";
+            if (data.nextPageSetPoint <= data.totalPage) {
+                commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + data.nextPageSetPoint + ")'>▷</a>";
             }
             commentPageDivTag.innerHTML += commentPageHtml;
         } else {
@@ -112,7 +138,7 @@ async function loadCommentFetch(pageDTO) {
     try {
         const response = await fetch(boardPath + "/showCommentList", {
             method: "POST",
-            headers: {"Content-Type" : "application/json"},
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(pageDTO),
         });
 
@@ -139,9 +165,19 @@ async function showCommentWithHtml(CommentDTOList) {
 // 댓글 HTML 문자열 생성
 async function commentHtmlWithString(commentListHtml, CommentDTOList) {
     console.log("댓글 코맨트 소스 반복문 준비 확인");
-    for(let comment of CommentDTOList) {
+    for (let comment of CommentDTOList) {
         commentListHtml += "<div class='media'><div class='media-body'><div style='margin: 0; padding: 10px;'><div class='media-heading'>";
-        commentListHtml += comment.memberDTO.nickName + " &nbsp; <small>";
+
+        let displayNickname = "";
+        if (comment.memberDTO && comment.memberDTO.nickName) {
+            displayNickname = comment.memberDTO.nickName;
+        } else if (comment.nickname) {
+            displayNickname = comment.nickname + " (비회원)";
+        } else {
+            displayNickname = "익명";
+        }
+
+        commentListHtml += displayNickname + " &nbsp; <small>";
         commentListHtml = await displayDeleteButton(commentListHtml, comment);
         commentListHtml += comment.regDate + "</small></div><p style='margin: 0; padding: 0;'>" + comment.content + "</p></div></div></div>";
     }
@@ -150,7 +186,7 @@ async function commentHtmlWithString(commentListHtml, CommentDTOList) {
 
 // 댓글 삭제 버튼 표시
 async function displayDeleteButton(commentListHtml, commentDTO) {
-    if( (memberId == commentDTO.id) || (memberGrade == 3) ) {
+    if ((memberId == commentDTO.id) || (memberGrade == 3)) {
         commentListHtml += "<button class='pull btn btn-right cancel-btn' onclick='deleteComment(";
         commentListHtml += commentDTO.commentNum + ");'>댓글삭제(-) </button>";
     }
@@ -160,7 +196,7 @@ async function displayDeleteButton(commentListHtml, commentDTO) {
 // 댓글 삭제
 async function deleteComment(commentNum) {
     try {
-        const response = await fetch(boardPath + "/deleteComment?commentNum=" + commentNum, {method:"POST"});
+        const response = await fetch(boardPath + "/deleteComment?commentNum=" + commentNum, { method: "POST" });
         if (response.ok) {
             await updateCommentCount(postNum);
             await showCommentList();
@@ -175,7 +211,7 @@ async function deleteComment(commentNum) {
 // 댓글 수 업데이트
 async function updateCommentCount(postNum) {
     try {
-        const response = await fetch(boardPath + "/updateCommentCount?postNum=" + postNum, {method:"PUT"});
+        const response = await fetch(boardPath + "/updateCommentCount?postNum=" + postNum, { method: "PUT" });
         if (response.ok) {
             console.log("댓글 업데이트");
         } else {
@@ -241,7 +277,7 @@ async function fetchRecommendCount(postNum) {
     }
 }
 
-window.onload = async function() {
+window.onload = async function () {
     initLatestPostForOnload(); // onload 씹히는 문제때문에 별도로 최신글 다시 세팅함
 
     if (isLoggedIn) {
@@ -259,17 +295,17 @@ window.onload = async function() {
 
     if (isAdmin) {
         fetch('/boards/boardList')
-        .then(response => response.json())
-        .then(data => {
-            const selectElement = document.getElementById('moveToBoard');
-            data.forEach(board => {
-                const optionElement = document.createElement('option');
-                optionElement.value = board.boardTitle;
-                optionElement.textContent = board.koreanTitle;
-                selectElement.appendChild(optionElement);
-            });
-        })
-        .catch(error => console.error('Error:', error));
+            .then(response => response.json())
+            .then(data => {
+                const selectElement = document.getElementById('moveToBoard');
+                data.forEach(board => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = board.boardTitle;
+                    optionElement.textContent = board.koreanTitle;
+                    selectElement.appendChild(optionElement);
+                });
+            })
+            .catch(error => console.error('Error:', error));
     }
 };
 

@@ -23,23 +23,34 @@
         </div>
         <div id="comments-list" class="gap"></div>
         <div id="comments-page" class="gap"></div>
-        <c:if test="${member != null}">
-            <div id="comment-form" class="gap">
-                <div class="form-group">
-                    <div class="col-sm-6">
-                        작성자 : ${member.nickName}
-                    </div>
+        
+        <div id="comment-form" class="gap">
+            <div class="sc-row" style="margin-bottom: 15px;">
+                <c:choose>
+                    <c:when test="${not empty member}">
+                        <div class="sc-col-6">
+                            작성자 : ${member.nickName}
+                        </div>
+                    </c:when>
+                    <c:otherwise>
+                        <div class="sc-col-3">
+                            <input type="text" class="form-control" id="commentNickname" placeholder="닉네임 (필수)" style="width: 100%;">
+                        </div>
+                        <div class="sc-col-3">
+                            <input type="password" class="form-control" id="commentPassword" placeholder="비밀번호 (필수)" style="width: 100%;">
+                        </div>
+                    </c:otherwise>
+                </c:choose>
+            </div>
+            <div class="sc-row">
+                <div class="sc-col-12">
+                    <textarea rows="2" class="form-control" name="commentContent" id="commentContent" placeholder="댓글을 작성합니다" style="width: 100%;"></textarea>
                 </div>
-                <div class="form-group">
-                    <div class="col-sm-12">
-                        <textarea rows="1" class="form-control" name="commentContent" id="commentContent" placeholder="댓글을 작성합니다"></textarea>
-                    </div>
-                    <div class="col-sm-12">
-                        <button type="button" class="pull btn btn-right cancel-btn" style="margin-left: 15px;" onclick="addComment();" accesskey="c">댓글작성(C)</button>
-                    </div>
+                <div class="sc-col-12 text-right" style="margin-top: 10px;">
+                    <button type="button" class="btn btn-primary" onclick="addComment();" accesskey="c">댓글작성(C)</button>
                 </div>
-            </div><!--/#comment-form-->
-        </c:if>
+            </div>
+        </div><!--/#comment-form-->
     </div><!--/#comments-->
     <div class="post-navigation "">
         <hr>

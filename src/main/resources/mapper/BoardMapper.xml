@@ -16,6 +16,8 @@
         <result column="id" property="id" />
         <result column="reg_date" property="regDate" />
         <result column="content" property="content" />
+        <result column="nickname" property="nickname" />
+        <result column="password" property="password" />
         <collection property="memberDTO" resultMap="MemberDTO" />
     </resultMap>
 
@@ -67,15 +69,15 @@
     </select>
 
     <insert id="addComment">
-        insert into ${boardTitle}_comment(post_num, id, reg_date, content)
-        values(#{comment.postNum}, #{comment.id}, now(), #{comment.content})
+        insert into ${boardTitle}_comment(post_num, id, nickname, password, reg_date, content)
+        values(#{comment.postNum}, #{comment.id}, #{comment.nickname}, #{comment.password}, now(), #{comment.content})
     </insert>
 
     <select id="showCommentList" resultMap="boardCommentDTO">
-        select * from
-        (select a.post_num, a.comment_num, a.id, a.reg_date, a.content, b.nickname
+        select c.* from
+        (select a.post_num, a.comment_num, a.id, a.reg_date, a.content, a.nickname, a.password, b.nickname as member_nickname
         from ${boardTitle}_comment a
-        inner join member b
+        left join member b
         on a.id=b.id
         where a.post_num=#{page.postNum}
         order by a.comment_num desc
@@ -183,5 +185,15 @@
             order by reg_date desc
             limit 5;
     </select>
+
+    <update id="addCommentColumns">
+        ALTER TABLE ${tableName}
+        ADD COLUMN nickname VARCHAR(50) NULL,
+        ADD COLUMN password VARCHAR(100) NULL;
+    </update>
+
+    <update id="modifyIdColumn">
+        ALTER TABLE ${tableName} MODIFY COLUMN id VARCHAR(50) NULL;
+    </update>
 
 </mapper>
