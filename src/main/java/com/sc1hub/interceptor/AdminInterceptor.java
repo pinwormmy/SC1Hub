@@ -22,5 +22,6 @@ public class AdminInterceptor implements HandlerInterceptor {
             return false;
         }
         return true;
+
     }
 }
