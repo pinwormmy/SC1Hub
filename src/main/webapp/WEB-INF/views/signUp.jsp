@@ -15,8 +15,7 @@
     <div class="container">
         <div class="row">
             <%@include file="./include/latestPosts.jspf" %>
-            <%@include file="./include/sidebar.jspf" %>
-            <div class="col-sm-9">
+            <div class="col-sm-12">
                 <div class="loginMenu">
                     <div class="signUpMenu">
                         <form action="/submitSignUp" name="submitSignUp" id="submitSignUp" method="post">

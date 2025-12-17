@@ -11,8 +11,7 @@
         <div class="container">
             <div class="row">
                 <%@include file="./include/latestPosts.jspf" %>
-                <%@include file="./include/sidebar.jspf" %>
-                <div class="col-lg-9">
+                <div class="col-lg-12">
                     <div class="loginMenu">
                         <div class="findIdMenu">
                             <p>비밀번호가 생각나지 않는다면 아래 주소로 메일 보내주세요:</p>

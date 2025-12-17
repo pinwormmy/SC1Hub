@@ -41,8 +41,7 @@
             <div class="sc-container">
                 <div class="sc-row">
                     <%@include file="./include/latestPosts.jspf" %>
-                        <%@include file="./include/sidebar.jspf" %>
-                            <div class="sc-col-3">
+                            <div class="sc-col-4">
                                 <fieldset class="terran-field">
                                     <legend style="color:#75f94c;"> 테란 네트워크 </legend>
                                     <table class="boardList" style="width: 100%;">
@@ -91,7 +90,7 @@
                                     </table>
                                 </fieldset>
                             </div>
-                            <div class="sc-col-3">
+                            <div class="sc-col-4">
                                 <fieldset class="zerg-field">
                                     <legend style="color:#75f94c;">저그 네트워크</legend>
                                     <table class="boardList" style="width: 100%;">
@@ -141,7 +140,7 @@
                                     </table>
                                 </fieldset>
                             </div>
-                            <div class="sc-col-3">
+                            <div class="sc-col-4">
                                 <fieldset class="protoss-field">
                                     <legend style="color:#75f94c;">프로토스 네트워크</legend>
                                     <table class="boardList" style="width: 100%;">

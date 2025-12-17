@@ -9,15 +9,19 @@
                 <p class="copyright-text">Copyright 2024. SC1Hub All rights reserved.</p>
                 <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
                 <hr>
-                <div style="text-align: left; margin-bottom: 50px;">
-                    명령어 안내 : ALT+(단축키) 혹은 숫자 입력으로 게시판 이동 <br>
-                    선택>
-                    <input id="menuInput" />
-                </div>
             </div>
         </div>
 	</div>
 </footer>
+
+<div id="scTerminal" class="sc-terminal" aria-label="SC1Hub Terminal">
+    <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
+    <div class="sc-terminal__prompt">
+        <span class="sc-terminal__label">선택&gt;</span>
+        <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
+        <span class="sc-terminal__cursor" aria-hidden="true">█</span>
+    </div>
+</div>
 
 <script>
     // 페이지 이동 함수
@@ -88,18 +92,35 @@
         };
         var pageUrl = pageMap[menuNumber];
         if (pageUrl) {
+            if (window.scTerminal && window.scTerminal.isPostUrl(pageUrl)) {
+                window.scTerminal.openPostFromUrl(pageUrl);
+                return;
+            }
             window.location.href = pageUrl;
         } else {
             alert("잘못된 명령어입니다.");
         }
     }
 
-    // input 태그에 이벤트 리스너 추가
-    document.getElementById('menuInput').addEventListener('change', function() {
-        navigateToPage(this.value);
+    // 터미널 입력 이벤트
+    document.getElementById('scTerminalInput').addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') {
+            return;
+        }
+        var raw = (this.value || '').trim();
+        if (!raw) {
+            return;
+        }
+        if (window.scTerminal && window.scTerminal.runCommand(raw)) {
+            this.value = '';
+            return;
+        }
+        navigateToPage(raw);
+        this.value = '';
     });
 </script>
 
+<script src="/js/sc-terminal.js"></script>
 
 <script src="https://code.jquery.com/jquery-latest.js"></script>
 <script src="/plugins/bootstrap/js/bootstrap.min.js"></script>

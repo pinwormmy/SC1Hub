@@ -25,8 +25,7 @@
         <div class="container">
             <div class="row">
                 <%@include file="./include/latestPosts.jspf" %>
-                <%@include file="./include/sidebar.jspf" %>
-                <div class="col-sm-9">
+                <div class="col-sm-12">
                     <h1>약관 동의</h1>
 
                     <!-- 서비스 이용 약관 -->

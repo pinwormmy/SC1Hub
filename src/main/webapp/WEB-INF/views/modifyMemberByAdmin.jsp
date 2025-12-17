@@ -10,8 +10,7 @@
     <div class="container">
         <div class="row">
             <%@include file="./include/latestPosts.jspf" %>
-            <%@include file="./include/sidebar.jspf" %>
-            <div class="col-sm-9">
+            <div class="col-sm-12">
                 <form action="/submitModifyMemberByAdmin" method="post">
                     ID> <input type="text" id="id" name="id" value="${member.id}" readonly title="해당 항목은 수정할 수 없습니다"><br>
                     닉네임> <input type="text" id="nickName" name="nickName" value="${member.nickName}"><br>

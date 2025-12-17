@@ -10,8 +10,7 @@
         <div class="container">
             <div class="row">
                 <%@include file="./include/latestPosts.jspf" %>
-                <%@include file="./include/sidebar.jspf" %>
-                <div class="col-lg-9">
+                <div class="col-lg-12">
                     <div class="board-info">
                         <h3>게시판 안내</h3>
                         <p>게시판은 크게 두 가지 형태로 운영됩니다.</p>

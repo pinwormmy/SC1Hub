@@ -4,7 +4,6 @@ import com.sc1hub.member.MemberDTO;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.common.dto.PageDTO;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -24,8 +23,11 @@ import java.util.Map;
 @RequestMapping("/boards")
 public class BoardController {
 
-    @Autowired
-    BoardService boardService;
+    private final BoardService boardService;
+
+    public BoardController(BoardService boardService) {
+        this.boardService = boardService;
+    }
 
     @GetMapping(value = "/{boardTitle}")
     public String list(@PathVariable String boardTitle, PageDTO page, Model model, HttpSession session)
@@ -41,10 +43,7 @@ public class BoardController {
         boolean canWrite = false;
         MemberDTO member = (MemberDTO) session.getAttribute("member");
         if (member != null) {
-            canWrite = true;
-            if (!boardService.canWrite(boardTitle, member)) {
-                canWrite = false;
-            }
+            canWrite = boardService.canWrite(boardTitle, member);
         }
         model.addAttribute("canWrite", canWrite);
 
@@ -61,6 +60,15 @@ public class BoardController {
         model.addAttribute("boardTitle", boardTitle);
         model.addAttribute("post", boardService.readPost(boardTitle, postNum));
         return "board/readPost";
+    }
+
+    @GetMapping("/{boardTitle}/postData")
+    @ResponseBody
+    public BoardDTO postData(@PathVariable String boardTitle, @RequestParam int postNum, HttpServletRequest request)
+            throws Exception {
+        String ip = IpService.getRemoteIP(request);
+        boardService.increaseViewCount(boardTitle, postNum, ip);
+        return boardService.readPost(boardTitle, postNum);
     }
 
     @RequestMapping("/{boardTitle}/writePost")
