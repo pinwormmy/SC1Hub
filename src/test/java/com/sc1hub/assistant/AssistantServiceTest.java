@@ -1,8 +1,11 @@
 package com.sc1hub.assistant;
 
 import com.sc1hub.assistant.config.AssistantProperties;
+import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.rag.AssistantRagChunk;
+import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.board.BoardDTO;
 import com.sc1hub.board.BoardListDTO;
 import com.sc1hub.mapper.BoardMapper;
@@ -32,7 +35,11 @@ class AssistantServiceTest {
     @Mock
     private GeminiClient geminiClient;
 
+    @Mock
+    private AssistantRagSearchService ragSearchService;
+
     private AssistantProperties assistantProperties;
+    private AssistantRagProperties ragProperties;
     private AssistantService assistantService;
 
     @BeforeEach
@@ -43,7 +50,9 @@ class AssistantServiceTest {
         assistantProperties.setMaxRelatedPosts(5);
         assistantProperties.setContextPosts(3);
         assistantProperties.setPerBoardLimit(5);
-        assistantService = new AssistantService(boardMapper, geminiClient, assistantProperties);
+        ragProperties = new AssistantRagProperties();
+        ragProperties.setEnabled(false);
+        assistantService = new AssistantService(boardMapper, geminiClient, assistantProperties, ragSearchService, ragProperties);
     }
 
     @Test
@@ -115,7 +124,7 @@ class AssistantServiceTest {
     }
 
     @Test
-    void chat_skipsUnsafeBoardTitles() throws Exception {
+    void chat_skipsUnsafeBoardTitles() {
         BoardListDTO unsafe = new BoardListDTO();
         unsafe.setBoardTitle("freeboard;drop table member;");
 
@@ -128,5 +137,36 @@ class AssistantServiceTest {
         verify(geminiClient).generateAnswer(anyString());
         assertTrue(response.getRelatedPosts().isEmpty());
     }
-}
 
+    @Test
+    void chat_usesRag_whenEnabledAndIndexReady() {
+        ragProperties.setEnabled(true);
+        when(ragSearchService.isEnabled()).thenReturn(true);
+
+        AssistantRagChunk chunk = new AssistantRagChunk();
+        chunk.setBoardTitle("freeboard");
+        chunk.setPostNum(9);
+        chunk.setTitle("5팩 골리앗 운영");
+        chunk.setChunkIndex(0);
+        chunk.setText("테란 5팩 골리앗 운영 팁");
+        chunk.setUrl("/boards/freeboard/readPost?postNum=9");
+
+        AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
+
+        when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
+        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+
+        AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
+
+        assertEquals("답변입니다.", response.getAnswer());
+        assertEquals(1, response.getRelatedPosts().size());
+        assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
+
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(geminiClient).generateAnswer(promptCaptor.capture());
+        String prompt = promptCaptor.getValue();
+        assertTrue(prompt.contains("Site snippets"));
+        assertTrue(prompt.contains("chunkIndex=0"));
+        assertTrue(prompt.contains("title=5팩 골리앗 운영"));
+    }
+}

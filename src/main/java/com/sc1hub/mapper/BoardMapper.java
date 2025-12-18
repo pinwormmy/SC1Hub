@@ -5,6 +5,7 @@ import com.sc1hub.common.dto.PageDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Date;
 import java.util.List;
 
 @Mapper
@@ -70,6 +71,17 @@ public interface BoardMapper {
 
         List<BoardDTO> searchPostsByKeywords(@Param("boardTitle") String boardTitle,
                         @Param("keywords") List<String> keywords,
+                        @Param("limit") int limit) throws Exception;
+
+        List<BoardDTO> selectPostsForRag(@Param("boardTitle") String boardTitle,
+                        @Param("limit") int limit) throws Exception;
+
+        List<BoardDTO> selectNewPostsForRag(@Param("boardTitle") String boardTitle,
+                        @Param("sincePostNum") int sincePostNum,
+                        @Param("limit") int limit) throws Exception;
+
+        List<BoardDTO> selectUpdatedPostsForRag(@Param("boardTitle") String boardTitle,
+                        @Param("sinceRegDate") Date sinceRegDate,
                         @Param("limit") int limit) throws Exception;
 
         // Migration

@@ -334,6 +334,12 @@ textarea.cke_source {
 .sc-feed__content {
     margin-bottom: 12px;
 }
+.sc-feed__system-item .sc-feed__content {
+    color: rgba(255, 255, 255, 0.85);
+}
+.sc-feed__terminal-notice-text {
+    margin-bottom: 0;
+}
 .sc-feed__chat-item .sc-feed__content {
     margin-bottom: 8px;
 }

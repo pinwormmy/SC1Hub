@@ -43,7 +43,9 @@
             targetRow.appendChild(feedEl);
         }
 
-        return feedEl.querySelector('#scFeedList');
+        const feedListEl = feedEl.querySelector('#scFeedList');
+        ensureTerminalNoticeInFeed(feedListEl);
+        return feedListEl;
     }
 
     const outputEl = document.getElementById('scTerminalOutput');
@@ -775,7 +777,64 @@
     }
 
     function appendSystemMessage(message) {
+        const feedListEl = ensureFeedListEl();
+        if (feedListEl) {
+            enableFeedMode();
+
+            const itemEl = document.createElement('article');
+            itemEl.className = 'sc-feed__item sc-feed__system-item';
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'sc-feed__title';
+            titleEl.textContent = '[SYSTEM]';
+
+            const contentEl = document.createElement('div');
+            contentEl.className = 'sc-feed__content sc-feed__system-message';
+            contentEl.innerHTML = sanitizeHtml(message);
+
+            itemEl.appendChild(titleEl);
+            itemEl.appendChild(contentEl);
+
+            feedListEl.appendChild(itemEl);
+            activateTerminalAccessKeys(itemEl);
+            terminalEl.scrollIntoView({ block: 'end' });
+            return;
+        }
+
         appendEntry(['[SYSTEM]'], sanitizeHtml(message));
+    }
+
+    function ensureTerminalNoticeInFeed(feedListEl) {
+        if (!feedListEl) {
+            return;
+        }
+
+        if (document.getElementById('scTerminalNoticeFeed')) {
+            return;
+        }
+
+        const noticeEl = document.querySelector('.sc-terminal__notice');
+        if (!noticeEl) {
+            return;
+        }
+
+        const itemEl = document.createElement('article');
+        itemEl.id = 'scTerminalNoticeFeed';
+        itemEl.className = 'sc-feed__item sc-feed__system-item sc-feed__terminal-notice';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'sc-feed__title';
+        titleEl.textContent = '[SYSTEM]';
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'sc-feed__content sc-feed__terminal-notice-text';
+        contentEl.textContent = noticeEl.textContent || '';
+
+        itemEl.appendChild(titleEl);
+        itemEl.appendChild(contentEl);
+
+        feedListEl.insertBefore(itemEl, feedListEl.firstChild);
+        noticeEl.remove();
     }
 
     function isBoardUrl(urlOrPath) {

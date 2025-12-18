@@ -8,6 +8,9 @@ build/
 ### logs ###
 *.log
 
+### assistant local data ###
+data/assistant/
+
 ### properties ###
 application-local.properties
 application-online.properties

@@ -9,7 +9,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 
 @Configuration
-@EnableConfigurationProperties({AssistantProperties.class, GeminiProperties.class})
+@EnableConfigurationProperties({AssistantProperties.class, AssistantRagProperties.class, GeminiProperties.class})
 public class AssistantConfig {
 
     @Bean
@@ -20,4 +20,3 @@ public class AssistantConfig {
                 .build();
     }
 }
-
