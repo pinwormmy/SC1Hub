@@ -59,7 +59,7 @@
                 <%@include file="../include/paging.jspf" %>
             </div>
             <c:if test="${canWrite}">
-                <a href="/boards/${boardTitle}/writePost" class="pull-right btn btn-theme" accesskey="i">글쓰기(I)</a>
+                <a href="/boards/${boardTitle}/writePost" class="pull-right btn btn-theme sc-write-button" accesskey="i">글쓰기(I)</a>
             </c:if>
         </div><!--/#comments-list-->
     </div><!--/#comments-->

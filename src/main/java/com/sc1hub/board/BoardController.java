@@ -34,6 +34,7 @@ public class BoardController {
             throws Exception {
         String koreanTitle = boardService.getKoreanTitle(boardTitle);
         model.addAttribute("koreanTitle", koreanTitle);
+        model.addAttribute("metaDescription", buildBoardMetaDescription(koreanTitle));
         model.addAttribute("boardTitle", boardTitle);
         model.addAttribute("page", boardService.pageSetting(boardTitle, page));
         model.addAttribute("selfNoticeList", boardService.showSelfNoticeList(boardTitle));
@@ -77,9 +78,11 @@ public class BoardController {
         String ip = IpService.getRemoteIP(request);
         boardService.increaseViewCount(boardTitle, postNum, ip);
         String koreanTitle = boardService.getKoreanTitle(boardTitle);
+        BoardDTO post = boardService.readPost(boardTitle, postNum);
         model.addAttribute("koreanTitle", koreanTitle);
         model.addAttribute("boardTitle", boardTitle);
-        model.addAttribute("post", boardService.readPost(boardTitle, postNum));
+        model.addAttribute("post", post);
+        model.addAttribute("metaDescription", buildPostMetaDescription(koreanTitle, post));
         return "board/readPost";
     }
 
@@ -297,5 +300,55 @@ public class BoardController {
     @ResponseBody
     public List<LatestPostDTO> showLatestPosts() {
         return boardService.showLatestPosts();
+    }
+
+    private static String buildBoardMetaDescription(String koreanTitle) {
+        String title = koreanTitle == null ? "" : koreanTitle.trim();
+        if (title.isEmpty()) {
+            return "SC1Hub - 스타크래프트1 전문 공략 사이트";
+        }
+        return truncateMeta(title + " 게시판 - SC1Hub");
+    }
+
+    private static String buildPostMetaDescription(String koreanTitle, BoardDTO post) {
+        if (post == null) {
+            return buildBoardMetaDescription(koreanTitle);
+        }
+        String text = stripHtmlToText(post.getContent());
+        if (text.isEmpty()) {
+            text = post.getTitle() == null ? "" : post.getTitle().trim();
+        }
+        String prefix = koreanTitle == null ? "" : koreanTitle.trim();
+        if (!prefix.isEmpty()) {
+            text = prefix + " - " + text;
+        }
+        return truncateMeta(text);
+    }
+
+    private static String stripHtmlToText(String html) {
+        if (html == null) {
+            return "";
+        }
+        String text = html.replaceAll("(?s)<[^>]*>", " ");
+        text = text.replace("&nbsp;", " ");
+        text = text.replace("&amp;", "&");
+        text = text.replace("&lt;", "<");
+        text = text.replace("&gt;", ">");
+        text = text.replace("&quot;", "\"");
+        text = text.replace("&#39;", "'");
+        return text.replaceAll("\\s+", " ").trim();
+    }
+
+    private static final int META_DESCRIPTION_MAX_LENGTH = 160;
+
+    private static String truncateMeta(String text) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = text.trim().replaceAll("\\s+", " ");
+        if (normalized.length() <= META_DESCRIPTION_MAX_LENGTH) {
+            return normalized;
+        }
+        return normalized.substring(0, Math.max(0, META_DESCRIPTION_MAX_LENGTH - 1)).trim() + "…";
     }
 }

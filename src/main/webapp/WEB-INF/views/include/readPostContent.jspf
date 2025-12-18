@@ -47,7 +47,7 @@
                     <textarea rows="2" class="form-control" name="commentContent" id="commentContent" placeholder="댓글을 작성합니다" style="width: 100%;"></textarea>
                 </div>
                 <div class="sc-col-12 text-right" style="margin-top: 10px;">
-                    <button type="button" class="btn btn-primary" onclick="addComment();" accesskey="c">댓글작성(C)</button>
+                    <button type="button" class="sc-comment-submit" onclick="addComment();" accesskey="c">등록(C)</button>
                 </div>
             </div>
         </div><!--/#comment-form-->
@@ -59,9 +59,9 @@
             <form action="/boards/${boardTitle}/deletePost" method="post" onsubmit="return confirm('정말 이 글을 삭제할까요?');">
                 <input type="hidden" name="postNum" value="${post.postNum}">
                 <input type="hidden" name="writer" value="${post.writer}">
-                <button type="submit" class="pull btn btn-right cancel-btn" style="height:auto;">삭 제(-)</button>
+                <button type="submit" class="pull btn btn-right cancel-btn" style="height:auto;">삭제</button>
             </form>
-            <a class="pull btn btn-right cancel-btn" href="/boards/${boardTitle}/modifyPost?postNum=${post.postNum}" accesskey="o">️수 정(O)</a>
+            <a class="pull btn btn-right cancel-btn" href="/boards/${boardTitle}/modifyPost?postNum=${post.postNum}">수정</a>
         </c:if>
         <c:if test="${member.grade == 3}"> <!-- 관리자만 볼 수 있도록 -->
             <select id="moveToBoard" name="moveToBoard" class="pull btn btn-left cancel-btn">
@@ -70,5 +70,6 @@
             </select>
             <a href="javascript:void(0);" class="pull btn btn-right cancel-btn" onclick="movePost(${post.postNum});">이동(-)</a>
         </c:if>
+        <a class="pull btn btn-right cancel-btn" href="/" accesskey="n">초기화면(N)</a>
     </div>
 </div>

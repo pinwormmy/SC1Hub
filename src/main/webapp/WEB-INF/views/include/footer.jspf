@@ -35,7 +35,11 @@
 	                <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
 	                <div class="sc-terminal__prompt">
 	                    <span class="sc-terminal__label">선택 &gt;&nbsp;</span>
-	                    <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
+                        <div class="sc-terminal__input-wrap">
+                            <span id="scTerminalMirror" class="sc-terminal__mirror" aria-hidden="true"></span>
+                            <span class="sc-terminal__cursor" aria-hidden="true"></span>
+                            <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
+                        </div>
 	                </div>
 	            </div>
 	        </div>
@@ -138,10 +142,12 @@
         }
         if (window.scTerminal && window.scTerminal.runCommand(raw)) {
             this.value = '';
+            this.dispatchEvent(new Event('input'));
             return;
         }
         navigateToPage(raw);
         this.value = '';
+        this.dispatchEvent(new Event('input'));
     });
 </script>
 

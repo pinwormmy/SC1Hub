@@ -4,6 +4,9 @@ html {
 :root {
     --sc-font-family: "NeoDungGeunMo Pro", "NeoDungGeunMo", sans-serif;
 }
+*, *::before, *::after {
+    border-radius: 0 !important;
+}
 body {
     min-height: 100vh;
     position: relative;
@@ -235,17 +238,34 @@ textarea.cke_source {
 .sc-terminal__label {
     white-space: nowrap;
 }
-.sc-terminal__input {
+.sc-terminal__input-wrap {
     flex: 1 1 auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
     height: 32px;
+}
+.sc-terminal__mirror {
+    white-space: pre;
+    min-width: 0;
+}
+.sc-terminal__input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     margin: 0;
     padding-left: 0;
     border: none;
     background: transparent;
-    caret-color: #75f94c;
+    caret-color: transparent;
+    opacity: 0;
 }
 .sc-terminal__cursor {
-    width: 12px;
+    width: 0.6em;
+    height: 1.1em;
+    background: #75f94c;
     display: inline-block;
 }
 .sc-terminal__output,
@@ -309,6 +329,9 @@ textarea.cke_source {
 .sc-feed__actions .is-current {
     color: #75f94c;
     border-color: #75f94c;
+}
+.sc-feed__board-layout .sc-feed__actions .btn-theme {
+    border: none;
 }
 .sc-divider {
     border: none;
@@ -395,6 +418,7 @@ textarea.cke_source {
 .sc-feed__comment-textarea {
     width: 100%;
     min-height: 70px;
+    background-color: transparent;
     border: 1px solid rgba(255, 255, 255, 0.35);
     padding: 10px;
 }

@@ -7,7 +7,7 @@
 
     <resultMap id="MemberDTO" type="com.sc1hub.member.MemberDTO">
         <result column="id" property="id" />
-        <result column="nickname" property="nickName" />
+        <result column="member_nickname" property="nickName" />
     </resultMap>
 
     <resultMap id="boardCommentDTO" type="com.sc1hub.board.CommentDTO">

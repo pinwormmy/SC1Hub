@@ -37,7 +37,8 @@
             <p class="menu-toggle-hint">클릭시 펼치기↑</p>
             <div id="basicMenuContent" class="menu-content" style="display: block;">
                 <ul>
-                    <li><a href="/boards/noticeBoard" accesskey="n">1. 공지사항(N)</a></li>
+                    <li><a href="/" accesskey="n">0. 초기화면(N)</a></li>
+                    <li><a href="/boards/noticeBoard">1. 공지사항</a></li>
                     <li><a href="/boards/videoLinkBoard">2. 영상자료실</a></li>
                     <li><a href="/boards/promotionBoard">3. 추천 및 홍보</a></li>
                     <li><a href="/boards/funBoard">4. 꿀잼놀이터</a></li>

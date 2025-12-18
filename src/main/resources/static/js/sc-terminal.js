@@ -48,6 +48,7 @@
 
     const outputEl = document.getElementById('scTerminalOutput');
     const inputEl = document.getElementById('scTerminalInput');
+    const mirrorEl = document.getElementById('scTerminalMirror');
 
     if (!outputEl || !inputEl) {
         return;
@@ -56,6 +57,34 @@
     const COLLAPSED_CLASS = 'is-collapsed';
 
     let feedModeEnabled = false;
+
+    function syncTerminalMirror() {
+        if (!mirrorEl) {
+            return;
+        }
+        mirrorEl.textContent = inputEl.value || '';
+    }
+
+    if (mirrorEl) {
+        syncTerminalMirror();
+        inputEl.addEventListener('input', syncTerminalMirror);
+        inputEl.addEventListener('focus', syncTerminalMirror);
+        inputEl.addEventListener('blur', syncTerminalMirror);
+    }
+
+    function activateTerminalAccessKeys(activeItemEl) {
+        outputEl.querySelectorAll('[accesskey]').forEach((el) => el.removeAttribute('accesskey'));
+        if (!activeItemEl) {
+            return;
+        }
+        activeItemEl.querySelectorAll('[data-sc-accesskey]').forEach((el) => {
+            const key = el.getAttribute('data-sc-accesskey') || '';
+            if (!key) {
+                return;
+            }
+            el.accessKey = key;
+        });
+    }
 
     function enableFeedMode() {
         if (feedModeEnabled) {
@@ -109,7 +138,7 @@
                     const map = new Map();
                     (data || []).forEach((board) => {
                         if (board?.boardTitle && board?.koreanTitle) {
-                            map.set(board.boardTitle, board.koreanTitle);
+                            map.set(String(board.boardTitle).toLowerCase(), board.koreanTitle);
                         }
                     });
                     return map;
@@ -121,7 +150,8 @@
 
     async function getBoardDisplayName(boardTitle) {
         const map = await getBoardTitleMap();
-        return map.get(boardTitle) || boardTitle;
+        const key = String(boardTitle ?? '').toLowerCase();
+        return map.get(key) || boardTitle;
     }
 
     function sanitizeHtml(html) {
@@ -168,7 +198,7 @@
         anchorEl.className = options.className || 'pull btn btn-right cancel-btn';
         anchorEl.href = href;
         if (options.accessKey) {
-            anchorEl.accessKey = options.accessKey;
+            anchorEl.setAttribute('data-sc-accesskey', options.accessKey);
         }
         if (options.target) {
             anchorEl.target = options.target;
@@ -372,7 +402,7 @@
 
         const commentSubmitButtonEl = document.createElement('button');
         commentSubmitButtonEl.type = 'button';
-        commentSubmitButtonEl.className = 'btn btn-primary';
+        commentSubmitButtonEl.className = 'sc-feed__comment-register';
         commentSubmitButtonEl.textContent = '등록';
 
         commentSubmitWrapEl.appendChild(commentSubmitButtonEl);
@@ -645,9 +675,8 @@
 
         if (canEdit) {
             actionsEl.appendChild(
-                createActionLink('수 정(E)', `/boards/${encodeURIComponent(boardTitle)}/modifyPost?postNum=${encodeURIComponent(postNum)}`, {
+                createActionLink('수정', `/boards/${encodeURIComponent(boardTitle)}/modifyPost?postNum=${encodeURIComponent(postNum)}`, {
                     className: 'pull btn btn-right cancel-btn',
-                    accessKey: 'e',
                 }),
             );
 
@@ -672,11 +701,18 @@
             deleteButtonEl.type = 'submit';
             deleteButtonEl.className = 'pull btn btn-right cancel-btn';
             deleteButtonEl.style.height = 'auto';
-            deleteButtonEl.textContent = '삭 제(-)';
+            deleteButtonEl.textContent = '삭제';
             formEl.appendChild(deleteButtonEl);
 
             actionsEl.appendChild(formEl);
         }
+
+        actionsEl.appendChild(
+            createActionLink('초기화면(N)', '/', {
+                className: 'pull btn btn-right cancel-btn',
+                accessKey: 'n',
+            }),
+        );
 
         const commentsDividerEl = createDivider();
         commentsDividerEl.hidden = true;
@@ -704,6 +740,7 @@
         itemEl.appendChild(createDivider());
 
         feedListEl.appendChild(itemEl);
+        activateTerminalAccessKeys(itemEl);
         terminalEl.scrollIntoView({ block: 'end' });
     }
 
@@ -857,7 +894,7 @@
                 anchorEl.href = item.href;
                 anchorEl.textContent = item.label;
                 if (item.accessKey) {
-                    anchorEl.accessKey = item.accessKey;
+                    anchorEl.setAttribute('data-sc-accesskey', item.accessKey);
                 }
                 if (item.style) {
                     anchorEl.setAttribute('style', item.style);
@@ -871,7 +908,8 @@
 
         sidebarEl.appendChild(
             createFieldset('[ 지휘관회의실 ]', [
-                { href: '/boards/noticeBoard', label: '1. 공지사항(N)', accessKey: 'n' },
+                { href: '/', label: '0. 초기화면(N)', accessKey: 'n' },
+                { href: '/boards/noticeBoard', label: '1. 공지사항' },
                 { href: '/boards/videoLinkBoard', label: '2. 영상자료실' },
                 { href: '/boards/promotionBoard', label: '3. 추천 및 홍보' },
                 { href: '/boards/funBoard', label: '4. 꿀잼놀이터' },
@@ -1062,6 +1100,7 @@
         itemEl.appendChild(createDivider());
 
         feedListEl.appendChild(itemEl);
+        activateTerminalAccessKeys(itemEl);
         terminalEl.scrollIntoView({ block: 'end' });
     }
 
@@ -1165,6 +1204,7 @@
     function shouldBypassClick(event) {
         return (
             event.defaultPrevented ||
+            !event.isTrusted ||
             event.button !== 0 ||
             event.metaKey ||
             event.ctrlKey ||

@@ -57,6 +57,12 @@
     color: #75f94c;
     border-color: #75f94c;
 }
+.sc-paging .btn-theme {
+    border: none;
+}
+.sc-write-button {
+    border: none;
+}
 /* 모바일 환경에서 특정 열만 숨김 */
 @media screen and (max-width: 600px) {
     body .col-lg-3, body .col-lg-9, body.col-xs-12 {

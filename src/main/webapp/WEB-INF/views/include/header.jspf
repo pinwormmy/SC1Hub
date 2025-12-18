@@ -4,8 +4,26 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="스타크래프트1 전문 공략 사이트. 종족별 운영 및 전략 총정리">
+<c:set var="scMetaDescription" value="${not empty metaDescription ? metaDescription : '스타크래프트1 전문 공략 사이트. 종족별 운영 및 전략 총정리'}" />
+<meta name="description" content="<c:out value='${scMetaDescription}'/>">
 <link rel="canonical" href="${canonical}" />
+<meta property="og:site_name" content="SC1Hub">
+<meta property="og:url" content="${canonical}">
+<meta property="og:description" content="<c:out value='${scMetaDescription}'/>">
+<c:choose>
+    <c:when test="${not empty post}">
+        <meta property="og:type" content="article">
+        <meta property="og:title" content="<c:out value='${post.title}'/>">
+    </c:when>
+    <c:when test="${not empty koreanTitle}">
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="<c:out value='${koreanTitle}'/>">
+    </c:when>
+    <c:otherwise>
+        <meta property="og:type" content="website">
+        <meta property="og:title" content="SC1Hub - 스타크래프트1 전문 공략 사이트">
+    </c:otherwise>
+</c:choose>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link rel="stylesheet" href="/css/sc1hub-layout.css">
 <link rel="stylesheet" href="/css/style.css">

@@ -203,7 +203,10 @@ public class BoardServiceImpl implements BoardService {
 
     @Override
     public String getKoreanTitle(String boardTitle) {
-        return boardMapper.getKoreanTitle(boardTitle);
+        if (boardTitle == null) {
+            return null;
+        }
+        return boardMapper.getKoreanTitle(boardTitle.toLowerCase());
     }
 
     @Override
