@@ -29,19 +29,22 @@
      hidden></div>
 
 <div class="container">
-    <div class="row">
+	    <div class="row">
 	        <div class="col-sm-12">
-	            <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
-	                <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
-	                <div class="sc-terminal__prompt">
-	                    <span class="sc-terminal__label">선택 &gt;&nbsp;</span>
-                        <div class="sc-terminal__input-wrap">
-                            <span id="scTerminalMirror" class="sc-terminal__mirror" aria-hidden="true"></span>
-                            <span class="sc-terminal__cursor" aria-hidden="true"></span>
-                            <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help)" aria-label="터미널 입력">
+                <div class="sc-terminal-wrap">
+                    <div class="sc-terminal__notice">단축키사용(ALT+단축키) &nbsp  게시물이동(초기화면 숫자입력) &nbsp AI사용(검색어 및 질문입력)</div>
+                    <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
+                        <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>
+                        <div class="sc-terminal__prompt">
+                            <span class="sc-terminal__label">선택 &gt;&nbsp;</span>
+                            <div class="sc-terminal__input-wrap">
+                                <span id="scTerminalMirror" class="sc-terminal__mirror" aria-hidden="true"></span>
+                                <span class="sc-terminal__cursor" aria-hidden="true"></span>
+                                <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="text" placeholder="명령어 입력 (help / ask)" aria-label="터미널 입력">
+                            </div>
                         </div>
-	                </div>
-	            </div>
+                    </div>
+                </div>
 	        </div>
 	    </div>
 	</div>
@@ -118,16 +121,17 @@
             if (window.scTerminal) {
                 if (window.scTerminal.isPostUrl && window.scTerminal.isPostUrl(pageUrl)) {
                     window.scTerminal.openPostFromUrl(pageUrl);
-                    return;
+                    return true;
                 }
                 if (window.scTerminal.isBoardUrl && window.scTerminal.isBoardUrl(pageUrl)) {
                     window.scTerminal.openBoardFromUrl(pageUrl);
-                    return;
+                    return true;
                 }
             }
             window.location.href = pageUrl;
+            return true;
         } else {
-            alert("잘못된 명령어입니다.");
+            return false;
         }
     }
 
@@ -145,7 +149,20 @@
             this.dispatchEvent(new Event('input'));
             return;
         }
-        navigateToPage(raw);
+        if (navigateToPage(raw)) {
+            this.value = '';
+            this.dispatchEvent(new Event('input'));
+            return;
+        }
+
+        if (window.scTerminal && typeof window.scTerminal.ask === 'function') {
+            window.scTerminal.ask(raw);
+            this.value = '';
+            this.dispatchEvent(new Event('input'));
+            return;
+        }
+
+        alert("잘못된 명령어입니다.");
         this.value = '';
         this.dispatchEvent(new Event('input'));
     });

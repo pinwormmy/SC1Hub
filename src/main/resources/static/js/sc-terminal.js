@@ -161,6 +161,12 @@
         return doc.body.firstElementChild ? doc.body.firstElementChild.innerHTML : '';
     }
 
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text ?? '';
+        return div.innerHTML;
+    }
+
     function createDivider() {
         const dividerEl = document.createElement('hr');
         dividerEl.className = 'sc-divider';
@@ -765,6 +771,7 @@
         outputEl.appendChild(entryEl);
         openTerminal();
         scrollOutputToBottom();
+        return entryEl;
     }
 
     function appendSystemMessage(message) {
@@ -1162,7 +1169,7 @@
         const command = tokens[0].toLowerCase();
 
         if (command === 'help') {
-            appendSystemMessage('명령어: help, clear, close, open <url>, read <boardTitle> <postNum>');
+            appendSystemMessage('명령어: help, clear, close, open <url>, read <boardTitle> <postNum>, ask <question>');
             return true;
         }
 
@@ -1198,7 +1205,172 @@
             return true;
         }
 
+        if (command === 'ask' || command === 'ai') {
+            const question = value.slice(tokens[0].length).trim();
+            if (!question) {
+                appendSystemMessage('사용법: ask <question>');
+                return true;
+            }
+            void askAssistant(question);
+            return true;
+        }
+
         return false;
+    }
+
+    async function askAssistant(question) {
+        const trimmed = String(question ?? '').trim();
+        if (!trimmed) {
+            appendSystemMessage('질문을 입력해주세요.');
+            return;
+        }
+        if (trimmed.length > 800) {
+            appendSystemMessage('질문이 너무 깁니다. 조금만 짧게 입력해주세요.');
+            return;
+        }
+
+        const feedListEl = ensureFeedListEl();
+
+        let metaEl = null;
+        let answerEl = null;
+        let relatedEl = null;
+        let pendingContentEl = null;
+
+        if (feedListEl) {
+            enableFeedMode();
+            const itemEl = document.createElement('article');
+            itemEl.className = 'sc-feed__item sc-feed__chat-item';
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'sc-feed__title';
+            titleEl.textContent = '[AI]';
+
+            metaEl = document.createElement('div');
+            metaEl.className = 'sc-feed__meta';
+            metaEl.textContent = '';
+
+            const questionEl = document.createElement('div');
+            questionEl.className = 'sc-feed__content sc-feed__chat-question';
+            questionEl.innerHTML = `<div><strong>Q.</strong> ${escapeHtml(trimmed)}</div>`;
+
+            answerEl = document.createElement('div');
+            answerEl.className = 'sc-feed__content sc-feed__chat-answer';
+            answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml('답변 생성 중...')}</div>`;
+
+            relatedEl = document.createElement('div');
+            relatedEl.className = 'sc-feed__content sc-feed__chat-related';
+            relatedEl.hidden = true;
+
+            itemEl.appendChild(titleEl);
+            itemEl.appendChild(metaEl);
+            itemEl.appendChild(questionEl);
+            itemEl.appendChild(answerEl);
+            itemEl.appendChild(relatedEl);
+
+            feedListEl.appendChild(itemEl);
+            activateTerminalAccessKeys(itemEl);
+            terminalEl.scrollIntoView({ block: 'end' });
+        } else {
+            appendEntry(['[YOU]'], escapeHtml(trimmed));
+            const pendingEntryEl = appendEntry(['[AI]'], escapeHtml('답변 생성 중...'));
+            pendingContentEl = pendingEntryEl.querySelector('.sc-terminal__content');
+        }
+
+        try {
+            const response = await fetch('/api/assistant/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ message: trimmed }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const errorMessage = data?.error ? String(data.error) : `AI 요청에 실패했습니다. (${response.status})`;
+                const usageText = data?.usageText ? String(data.usageText) : '';
+                if (metaEl && data?.usageText) {
+                    metaEl.textContent = String(data.usageText);
+                }
+                if (answerEl) {
+                    answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml(errorMessage)}</div>`;
+                } else if (pendingContentEl) {
+                    const usageHtml = usageText ? `<div>${escapeHtml(usageText)}</div>` : '';
+                    pendingContentEl.innerHTML = usageHtml + escapeHtml(errorMessage);
+                } else {
+                    appendSystemMessage(errorMessage);
+                }
+                return;
+            }
+
+            const answer = data?.answer ? String(data.answer) : '';
+            const related = Array.isArray(data?.relatedPosts) ? data.relatedPosts : [];
+            const usageText = data?.usageText ? String(data.usageText) : '';
+
+            if (metaEl && usageText) {
+                metaEl.textContent = usageText;
+            }
+
+            if (answerEl) {
+                const answerText = answer || '답변을 생성하지 못했습니다.';
+                answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml(answerText).replace(/\\n/g, '<br>')}</div>`;
+            } else if (pendingContentEl) {
+                const usageHtml = usageText ? `<div>${escapeHtml(usageText)}</div>` : '';
+                const answerHtml = escapeHtml(answer || '답변을 생성하지 못했습니다.').replace(/\\n/g, '<br>');
+                pendingContentEl.innerHTML = usageHtml + answerHtml;
+            }
+
+            if (relatedEl) {
+                if (!related.length) {
+                    relatedEl.hidden = true;
+                } else {
+                    const boardNameCache = new Map();
+                    const itemsHtml = await Promise.all(
+                        related.map(async (post) => {
+                            const boardTitle = String(post?.boardTitle ?? '');
+                            const postNum = Number.parseInt(String(post?.postNum ?? ''), 10);
+                            const title = String(post?.title ?? '');
+                            const url = String(post?.url ?? '');
+
+                            if (!boardTitle || Number.isNaN(postNum)) {
+                                return '';
+                            }
+
+                            let boardDisplayName = boardTitle;
+                            if (boardNameCache.has(boardTitle)) {
+                                boardDisplayName = boardNameCache.get(boardTitle);
+                            } else {
+                                boardDisplayName = await getBoardDisplayName(boardTitle);
+                                boardNameCache.set(boardTitle, boardDisplayName);
+                            }
+
+                            const href = url || `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(
+                                postNum,
+                            )}`;
+                            const label = `[${boardDisplayName}] ${postNum}번 | ${title || '제목 없음'}`;
+                            return `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></li>`;
+                        }),
+                    );
+
+                    const filteredItems = itemsHtml.filter(Boolean);
+                    if (!filteredItems.length) {
+                        relatedEl.hidden = true;
+                    } else {
+                        relatedEl.hidden = false;
+                        relatedEl.innerHTML = `<div>${escapeHtml('[관련 게시물]')}</div><ol>${filteredItems.join('')}</ol>`;
+                    }
+                }
+            }
+        } catch (e) {
+            const errorMessage = 'AI 응답을 불러오지 못했습니다.';
+            if (answerEl) {
+                answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml(errorMessage)}</div>`;
+                return;
+            }
+            if (pendingContentEl) {
+                pendingContentEl.innerHTML = escapeHtml(errorMessage);
+                return;
+            }
+            appendSystemMessage(errorMessage);
+        }
     }
 
     function shouldBypassClick(event) {
@@ -1255,5 +1427,6 @@
         openPostFromUrl,
         openBoardFromUrl,
         runCommand,
+        ask: (question) => askAssistant(question),
     };
 })();

@@ -186,6 +186,22 @@
             limit 5;
     </select>
 
+    <select id="searchPostsByKeywords" resultType="com.sc1hub.board.BoardDTO">
+        select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice
+        from ${boardTitle}
+        where
+        <foreach item="keyword" collection="keywords" open="(" separator=" or " close=")">
+            (title like concat('%', #{keyword}, '%') or content like concat('%', #{keyword}, '%'))
+        </foreach>
+        order by (
+            <foreach item="keyword" collection="keywords" separator=" + ">
+                (case when title like concat('%', #{keyword}, '%') then 3 else 0 end
+                 + case when content like concat('%', #{keyword}, '%') then 1 else 0 end)
+            </foreach>
+        ) desc, reg_date desc
+        limit #{limit}
+    </select>
+
     <update id="addCommentColumns">
         ALTER TABLE ${tableName}
         ADD COLUMN nickname VARCHAR(50) NULL,

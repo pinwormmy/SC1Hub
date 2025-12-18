@@ -218,8 +218,22 @@ textarea.cke_source {
     width: 100%;
     background: transparent;
     border: none;
-    padding: 8px 12px;
+    padding: 6px 12px;
     margin-top: 0;
+}
+.sc-terminal-wrap {
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
+    padding-top: 6px;
+    margin-top: 0;
+}
+.sc-terminal__notice {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+#scFooterMeta hr {
+    display: none;
 }
 .sc-terminal__output {
     display: block;
@@ -280,7 +294,7 @@ textarea.cke_source {
 }
 .sc-terminal__entry {
     padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: none;
 }
 .sc-terminal__entry:last-child {
     border-bottom: none;
@@ -303,8 +317,8 @@ textarea.cke_source {
 .sc-feed__list {
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding: 18px 0;
+    gap: 18px;
+    padding: 10px 0 6px;
 }
 .sc-feed__item {
     display: block;
@@ -319,6 +333,14 @@ textarea.cke_source {
 }
 .sc-feed__content {
     margin-bottom: 12px;
+}
+.sc-feed__chat-item .sc-feed__content {
+    margin-bottom: 8px;
+}
+.sc-feed__chat-related ol {
+    margin-top: 6px;
+    margin-bottom: 0;
+    padding-left: 22px;
 }
 .sc-feed__actions {
     display: flex;
@@ -337,6 +359,9 @@ textarea.cke_source {
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.5);
     margin: 12px 0;
+}
+.sc-feed__item > .sc-divider:last-child {
+    display: none;
 }
 .sc-feed__table {
     width: 100%;

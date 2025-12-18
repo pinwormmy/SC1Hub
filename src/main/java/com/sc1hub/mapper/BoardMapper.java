@@ -68,6 +68,10 @@ public interface BoardMapper {
 
         List<LatestPostDTO> showLatestPosts();
 
+        List<BoardDTO> searchPostsByKeywords(@Param("boardTitle") String boardTitle,
+                        @Param("keywords") List<String> keywords,
+                        @Param("limit") int limit) throws Exception;
+
         // Migration
         void addCommentColumns(String tableName);
 
