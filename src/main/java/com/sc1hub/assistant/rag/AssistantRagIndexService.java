@@ -9,6 +9,8 @@ import com.sc1hub.board.BoardListDTO;
 import com.sc1hub.mapper.BoardMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -19,11 +21,14 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 @Service
@@ -37,17 +42,64 @@ public class AssistantRagIndexService {
     private final GeminiProperties geminiProperties;
     private final AssistantRagProperties ragProperties;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor ragIndexExecutor;
+
+    private final AtomicBoolean reindexRunning = new AtomicBoolean(false);
+    private volatile Date lastReindexStartedAt;
+    private volatile Date lastReindexFinishedAt;
+    private volatile String lastReindexError;
+    private volatile ReindexResult lastReindexResult;
 
     public AssistantRagIndexService(BoardMapper boardMapper,
                                    GeminiEmbeddingClient embeddingClient,
                                    GeminiProperties geminiProperties,
                                    AssistantRagProperties ragProperties,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   @Qualifier("ragIndexExecutor") TaskExecutor ragIndexExecutor) {
         this.boardMapper = boardMapper;
         this.embeddingClient = embeddingClient;
         this.geminiProperties = geminiProperties;
         this.ragProperties = ragProperties;
         this.objectMapper = objectMapper;
+        this.ragIndexExecutor = ragIndexExecutor;
+    }
+
+    public ReindexJobStatus requestReindex() {
+        if (!ragProperties.isEnabled()) {
+            return ReindexJobStatus.disabled();
+        }
+        if (!reindexRunning.compareAndSet(false, true)) {
+            return ReindexJobStatus.running(lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
+        }
+
+        lastReindexStartedAt = new Date();
+        lastReindexFinishedAt = null;
+        lastReindexError = null;
+
+        ragIndexExecutor.execute(() -> {
+            try {
+                ReindexResult result = reindex();
+                lastReindexResult = result;
+            } catch (Exception e) {
+                log.error("RAG 인덱스 비동기 생성 실패", e);
+                lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
+            } finally {
+                lastReindexFinishedAt = new Date();
+                reindexRunning.set(false);
+            }
+        });
+
+        return ReindexJobStatus.accepted(lastReindexStartedAt, lastReindexResult);
+    }
+
+    public ReindexJobStatus getReindexJobStatus() {
+        if (!ragProperties.isEnabled()) {
+            return ReindexJobStatus.disabled();
+        }
+        if (reindexRunning.get()) {
+            return ReindexJobStatus.running(lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
+        }
+        return ReindexJobStatus.idle(lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
     }
 
     public synchronized ReindexResult reindex() throws Exception {
@@ -69,8 +121,9 @@ public class AssistantRagIndexService {
         int indexedChunks = 0;
         int dimension = 0;
 
-        List<BoardListDTO> boards = boardMapper.getBoardList();
+        List<BoardListDTO> boards = filterIndexableBoards(boardMapper.getBoardList());
         if (boards == null || boards.isEmpty()) {
+            index.setBoardSnapshots(buildBoardSnapshots(boards));
             index.setUpdatedAt(new Date());
             saveIndex(index);
             return new ReindexResult(true, 0, 0, 0, ragProperties.getIndexPath());
@@ -78,7 +131,7 @@ public class AssistantRagIndexService {
 
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+            if (!isIndexableBoardTitle(boardTitle)) {
                 continue;
             }
 
@@ -141,6 +194,7 @@ public class AssistantRagIndexService {
             }
         }
 
+        index.setBoardSnapshots(buildBoardSnapshots(boards));
         index.setUpdatedAt(new Date());
         saveIndex(index);
         return new ReindexResult(true, indexedPosts, indexedChunks, dimension, ragProperties.getIndexPath());
@@ -192,8 +246,12 @@ public class AssistantRagIndexService {
         int updatedChunks = 0;
         int dimension = index.getDimension();
 
-        List<BoardListDTO> boards = boardMapper.getBoardList();
+        List<BoardListDTO> boards = filterIndexableBoards(boardMapper.getBoardList());
+        Set<String> allowedBoards = buildIndexableBoardSet(boards);
+        removeChunksForMissingBoards(index, allowedBoards);
+
         if (boards == null || boards.isEmpty()) {
+            index.setBoardSnapshots(buildBoardSnapshots(boards));
             index.setUpdatedAt(new Date());
             saveIndex(index);
             return new UpdateResult(true, true, 0, 0, dimension, ragProperties.getIndexPath());
@@ -201,7 +259,7 @@ public class AssistantRagIndexService {
 
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+            if (!isIndexableBoardTitle(boardTitle)) {
                 continue;
             }
 
@@ -300,6 +358,7 @@ public class AssistantRagIndexService {
             }
         }
 
+        index.setBoardSnapshots(buildBoardSnapshots(boards));
         index.setUpdatedAt(new Date());
         saveIndex(index);
         return new UpdateResult(true, true, updatedPosts, updatedChunks, dimension, ragProperties.getIndexPath());
@@ -388,6 +447,128 @@ public class AssistantRagIndexService {
         }
         return chunks;
     }
+
+    private static boolean isIndexableBoardTitle(String boardTitle) {
+        if (!StringUtils.hasText(boardTitle)) {
+            return false;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        if (!StringUtils.hasText(normalized) || !SAFE_BOARD_TITLE.matcher(normalized).matches()) {
+            return false;
+        }
+        return normalized.endsWith("board");
+    }
+
+    private static List<BoardListDTO> filterIndexableBoards(List<BoardListDTO> boards) {
+        if (boards == null || boards.isEmpty()) {
+            return boards;
+        }
+        List<BoardListDTO> filtered = new ArrayList<>();
+        for (BoardListDTO board : boards) {
+            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+            if (!isIndexableBoardTitle(boardTitle)) {
+                continue;
+            }
+            filtered.add(board);
+        }
+        return filtered;
+    }
+
+    private static Set<String> buildIndexableBoardSet(List<BoardListDTO> boards) {
+        Set<String> allowed = new HashSet<>();
+        if (boards == null || boards.isEmpty()) {
+            return allowed;
+        }
+        for (BoardListDTO board : boards) {
+            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+            if (isIndexableBoardTitle(boardTitle)) {
+                allowed.add(boardTitle);
+            }
+        }
+        return allowed;
+    }
+
+    private List<AssistantRagBoardSnapshot> buildBoardSnapshots(List<BoardListDTO> boards) {
+        List<AssistantRagBoardSnapshot> snapshots = new ArrayList<>();
+        if (boards == null || boards.isEmpty()) {
+            return snapshots;
+        }
+
+        for (BoardListDTO board : boards) {
+            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+            if (!isIndexableBoardTitle(boardTitle)) {
+                continue;
+            }
+            try {
+                AssistantRagBoardSnapshot snapshot = boardMapper.selectBoardRagStats(boardTitle);
+                if (snapshot == null) {
+                    snapshot = new AssistantRagBoardSnapshot();
+                }
+                snapshot.setBoardTitle(boardTitle);
+                snapshots.add(snapshot);
+            } catch (Exception e) {
+                log.warn("RAG 스냅샷 로드 실패. boardTitle={}", boardTitle, e);
+            }
+        }
+
+        return snapshots;
+    }
+
+    private static void removeChunksForMissingBoards(AssistantRagIndex index, Set<String> allowedBoards) {
+        if (index == null || index.getChunks() == null || index.getChunks().isEmpty()) {
+            return;
+        }
+        if (allowedBoards == null || allowedBoards.isEmpty()) {
+            index.getChunks().clear();
+            return;
+        }
+        index.getChunks().removeIf(chunk -> {
+            if (chunk == null) {
+                return false;
+            }
+            String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
+            return !allowedBoards.contains(boardTitle);
+        });
+    }
+
+    @Getter
+    public static final class ReindexJobStatus {
+        private final boolean enabled;
+        private final boolean accepted;
+        private final boolean running;
+        private final Date startedAt;
+        private final Date finishedAt;
+        private final ReindexResult lastResult;
+        private final String lastError;
+
+        private ReindexJobStatus(boolean enabled, boolean accepted, boolean running, Date startedAt, Date finishedAt,
+                                 ReindexResult lastResult, String lastError) {
+            this.enabled = enabled;
+            this.accepted = accepted;
+            this.running = running;
+            this.startedAt = startedAt;
+            this.finishedAt = finishedAt;
+            this.lastResult = lastResult;
+            this.lastError = lastError;
+        }
+
+        public static ReindexJobStatus disabled() {
+            return new ReindexJobStatus(false, false, false, null, null, null, null);
+        }
+
+        public static ReindexJobStatus accepted(Date startedAt, ReindexResult lastResult) {
+            return new ReindexJobStatus(true, true, true, startedAt, null, lastResult, null);
+        }
+
+        public static ReindexJobStatus running(Date startedAt, Date finishedAt, ReindexResult lastResult, String lastError) {
+            return new ReindexJobStatus(true, false, true, startedAt, finishedAt, lastResult, lastError);
+        }
+
+        public static ReindexJobStatus idle(Date startedAt, Date finishedAt, ReindexResult lastResult, String lastError) {
+            return new ReindexJobStatus(true, false, false, startedAt, finishedAt, lastResult, lastError);
+        }
+    }
+
 
     private static Map<String, Integer> buildMaxPostNumByBoard(List<AssistantRagChunk> chunks) {
         Map<String, Integer> maxByBoard = new HashMap<>();

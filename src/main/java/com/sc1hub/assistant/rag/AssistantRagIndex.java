@@ -17,4 +17,5 @@ public class AssistantRagIndex {
     private Date updatedAt;
     private int dimension;
     private List<AssistantRagChunk> chunks = new ArrayList<>();
+    private List<AssistantRagBoardSnapshot> boardSnapshots = new ArrayList<>();
 }

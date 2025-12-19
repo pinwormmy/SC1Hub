@@ -1,10 +1,10 @@
 # SC1Hub
 
-스타크래프트1 전문 커뮤니티 개발중...
+스타크래프트1 전문 공략사이트.
 
 ## Terminal AI Assistant (Gemini)
 
-터미널에서 `ask <질문>` 또는 `ai <질문>` 명령으로, 사이트 게시물 기반의 간단한 답변과 관련 게시물 링크를 제공합니다.
+터미널에서 게시판 바로가기용 숫자 명령을 제외한 검색어 및 질문 프롬프트로, 사이트 게시물 기반의 간단한 답변과 관련 게시물 링크를 제공합니다.
 
 ### 설정
 
@@ -38,14 +38,22 @@ sc1hub.assistant.rag.autoUpdate.cron=0 0 5 * * *
 sc1hub.assistant.rag.autoUpdate.zone=
 ```
 
-### RAG 로컬 테스트 흐름
+### RAG 적용 흐름
 
 1) `sc1hub.assistant.rag.enabled=true`로 켠 뒤 서버 실행
 2) 관리자 계정으로 로그인
-3) 브라우저 콘솔에서 인덱스 생성
+3) 브라우저 콘솔에서 인덱스 생성 (기본: 비동기)
 
 ```js
 fetch('/api/assistant/rag/reindex', { method: 'POST' })
+  .then(r => r.json())
+  .then(console.log)
+```
+
+동기 실행이 필요할 때:
+
+```js
+fetch('/api/assistant/rag/reindex?async=false', { method: 'POST' })
   .then(r => r.json())
   .then(console.log)
 ```
@@ -66,6 +74,8 @@ fetch('/api/assistant/rag/status').then(r => r.json()).then(console.log)
 
 - 인덱스는 기본적으로 `data/assistant/rag-index.json`에 저장되며 gitignore 처리되어 있습니다.
 - 대상은 “일반 게시물(notice=0)”이며 댓글은 제외됩니다.
+- 인덱싱 대상 보드는 `*board`로 끝나는 보드만 포함됩니다.
 - 게시글 수정 시 `reg_date`가 갱신되므로, `update`는 수정된 글도 자동으로 재인덱싱합니다.
+- `update`는 현재 보드 목록에 없는 보드의 기존 chunks를 자동으로 제거합니다.
 - `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 자동 `update`를 수행합니다.
-
+- `/api/assistant/rag/status` 응답의 `signatureAvailable`/`signatureMismatch`로 인덱스와 DB 불일치 여부를 확인할 수 있습니다.

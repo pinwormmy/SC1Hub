@@ -223,6 +223,15 @@
         limit #{limit}
     </select>
 
+    <select id="selectBoardRagStats" resultType="com.sc1hub.assistant.rag.AssistantRagBoardSnapshot">
+        select #{boardTitle} as boardTitle,
+               ifnull(max(post_num), 0) as maxPostNum,
+               max(reg_date) as maxRegDate,
+               count(*) as postCount
+        from ${boardTitle}
+        where notice=0
+    </select>
+
     <update id="addCommentColumns">
         ALTER TABLE ${tableName}
         ADD COLUMN nickname VARCHAR(50) NULL,

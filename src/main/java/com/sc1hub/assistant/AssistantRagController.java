@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpSession;
@@ -39,14 +40,44 @@ public class AssistantRagController {
     }
 
     @PostMapping("/reindex")
-    public ResponseEntity<AssistantRagReindexResponseDTO> reindex(HttpSession session) {
+    public ResponseEntity<AssistantRagReindexResponseDTO> reindex(HttpSession session,
+                                                                  @RequestParam(name = "async", defaultValue = "true") boolean async) {
         AssistantRagReindexResponseDTO response = new AssistantRagReindexResponseDTO();
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
         if (isAdmin(member)) {
+            if (async) {
+                AssistantRagIndexService.ReindexJobStatus status = ragIndexService.requestReindex();
+                response.setEnabled(status.isEnabled());
+                response.setAccepted(status.isAccepted());
+                response.setRunning(status.isRunning());
+                response.setStartedAt(status.getStartedAt());
+                response.setFinishedAt(status.getFinishedAt());
+                response.setLastError(status.getLastError());
+
+                AssistantRagIndexService.ReindexResult lastResult = status.getLastResult();
+                if (lastResult != null) {
+                    response.setIndexedPosts(lastResult.getIndexedPosts());
+                    response.setIndexedChunks(lastResult.getIndexedChunks());
+                    response.setDimension(lastResult.getDimension());
+                    response.setIndexPath(lastResult.getIndexPath());
+                }
+
+                if (!status.isEnabled()) {
+                    response.setError("RAG 기능이 비활성화되어 있습니다.");
+                    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+                }
+                if (!status.isAccepted() && status.isRunning()) {
+                    response.setError("RAG 인덱스 생성이 이미 진행 중입니다.");
+                }
+                return ResponseEntity.status(status.isAccepted() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(response);
+            }
+
             try {
                 AssistantRagIndexService.ReindexResult result = ragIndexService.reindex();
                 response.setEnabled(result.isEnabled());
+                response.setAccepted(true);
+                response.setRunning(false);
                 response.setIndexedPosts(result.getIndexedPosts());
                 response.setIndexedChunks(result.getIndexedChunks());
                 response.setDimension(result.getDimension());

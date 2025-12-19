@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
+import com.sc1hub.board.BoardListDTO;
+import com.sc1hub.mapper.BoardMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,28 +18,40 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 public class AssistantRagSearchService {
 
+    private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
+    private static final int SIGNATURE_SAMPLE_LIMIT = 5;
+
     private final AssistantRagProperties ragProperties;
     private final GeminiProperties geminiProperties;
     private final GeminiEmbeddingClient embeddingClient;
     private final ObjectMapper objectMapper;
+    private final BoardMapper boardMapper;
 
     private volatile LoadedIndex loadedIndex;
 
     public AssistantRagSearchService(AssistantRagProperties ragProperties,
                                     GeminiProperties geminiProperties,
                                     GeminiEmbeddingClient embeddingClient,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    BoardMapper boardMapper) {
         this.ragProperties = ragProperties;
         this.geminiProperties = geminiProperties;
         this.embeddingClient = embeddingClient;
         this.objectMapper = objectMapper;
+        this.boardMapper = boardMapper;
     }
 
     public boolean isEnabled() {
@@ -49,11 +63,19 @@ public class AssistantRagSearchService {
             return Status.disabled(ragProperties.getIndexPath());
         }
 
-        LoadedIndex index = getOrLoadIndex(false);
+        LoadedIndex index = getOrLoadIndex(true);
         if (index == null) {
             return Status.notReady(ragProperties.getIndexPath());
         }
-        return Status.ready(ragProperties.getIndexPath(), index.index.getEmbeddingModel(), index.index.getCreatedAt(), index.index.getUpdatedAt(), index.index.getChunks().size(), index.index.getDimension());
+        return Status.ready(
+                ragProperties.getIndexPath(),
+                index.index.getEmbeddingModel(),
+                index.index.getCreatedAt(),
+                index.index.getUpdatedAt(),
+                index.index.getChunks().size(),
+                index.index.getDimension(),
+                index.signatureCheck
+        );
     }
 
     public List<Match> search(String query, int topK) {
@@ -161,7 +183,13 @@ public class AssistantRagSearchService {
                     norms[i] = chunk == null || chunk.getVector() == null ? 0.0 : norm(chunk.getVector());
                 }
 
-                LoadedIndex loaded = new LoadedIndex(index, norms, lastModified);
+                SignatureCheck signatureCheck = validateSignature(index);
+                if (signatureCheck.available && signatureCheck.mismatch) {
+                    log.warn("RAG 인덱스와 DB 스냅샷 불일치. mismatchCount={}, sampleBoards={}",
+                            signatureCheck.mismatchCount, signatureCheck.mismatchBoards);
+                }
+
+                LoadedIndex loaded = new LoadedIndex(index, norms, lastModified, signatureCheck);
                 loadedIndex = loaded;
                 return loaded;
             } catch (Exception e) {
@@ -191,15 +219,180 @@ public class AssistantRagSearchService {
         return Math.sqrt(sum);
     }
 
+    private SignatureCheck validateSignature(AssistantRagIndex index) {
+        if (index == null) {
+            return SignatureCheck.unavailable();
+        }
+
+        List<AssistantRagBoardSnapshot> snapshots = index.getBoardSnapshots();
+        if (snapshots == null || snapshots.isEmpty()) {
+            log.info("RAG 인덱스 스냅샷이 없습니다. reindex를 권장합니다.");
+            return SignatureCheck.unavailable();
+        }
+
+        Map<String, AssistantRagBoardSnapshot> expectedByBoard = new HashMap<>();
+        for (AssistantRagBoardSnapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                continue;
+            }
+            String boardTitle = normalizeBoardTitle(snapshot.getBoardTitle());
+            if (!isIndexableBoardTitle(boardTitle)) {
+                continue;
+            }
+            expectedByBoard.put(boardTitle, snapshot);
+        }
+
+        if (expectedByBoard.isEmpty()) {
+            log.info("RAG 인덱스 스냅샷에 유효한 보드 정보가 없습니다. reindex를 권장합니다.");
+            return SignatureCheck.unavailable();
+        }
+
+        List<BoardListDTO> boards;
+        try {
+            boards = boardMapper.getBoardList();
+        } catch (Exception e) {
+            log.warn("RAG 스냅샷 검증 실패: board_list 로드 오류", e);
+            return SignatureCheck.unavailable();
+        }
+
+        if (boards == null || boards.isEmpty()) {
+            List<String> sample = new ArrayList<>();
+            int mismatchCount = 0;
+            for (String boardTitle : expectedByBoard.keySet()) {
+                mismatchCount = appendMismatch(sample, mismatchCount, boardTitle);
+            }
+            if (mismatchCount > 0) {
+                return SignatureCheck.mismatch(mismatchCount, sample);
+            }
+            return SignatureCheck.ok();
+        }
+
+        Set<String> remainingExpected = new HashSet<>(expectedByBoard.keySet());
+        List<String> sample = new ArrayList<>();
+        int mismatchCount = 0;
+
+        for (BoardListDTO board : boards) {
+            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+            if (!isIndexableBoardTitle(boardTitle)) {
+                continue;
+            }
+            remainingExpected.remove(boardTitle);
+
+            AssistantRagBoardSnapshot expected = expectedByBoard.get(boardTitle);
+            AssistantRagBoardSnapshot current;
+            try {
+                current = boardMapper.selectBoardRagStats(boardTitle);
+            } catch (Exception e) {
+                log.warn("RAG 스냅샷 검증 실패. boardTitle={}", boardTitle, e);
+                mismatchCount = appendMismatch(sample, mismatchCount, boardTitle);
+                continue;
+            }
+
+            if (!snapshotEquals(expected, current)) {
+                mismatchCount = appendMismatch(sample, mismatchCount, boardTitle);
+            }
+        }
+
+        if (!remainingExpected.isEmpty()) {
+            for (String boardTitle : remainingExpected) {
+                mismatchCount = appendMismatch(sample, mismatchCount, boardTitle);
+            }
+        }
+
+        if (mismatchCount > 0) {
+            return SignatureCheck.mismatch(mismatchCount, sample);
+        }
+        return SignatureCheck.ok();
+    }
+
+    private static int appendMismatch(List<String> sample, int mismatchCount, String boardTitle) {
+        int nextCount = mismatchCount + 1;
+        if (sample.size() < SIGNATURE_SAMPLE_LIMIT) {
+            sample.add(boardTitle);
+        }
+        return nextCount;
+    }
+
+    private static boolean snapshotEquals(AssistantRagBoardSnapshot expected, AssistantRagBoardSnapshot current) {
+        if (expected == null || current == null) {
+            return false;
+        }
+        if (expected.getPostCount() != current.getPostCount()) {
+            return false;
+        }
+        if (expected.getMaxPostNum() != current.getMaxPostNum()) {
+            return false;
+        }
+        return sameDate(expected.getMaxRegDate(), current.getMaxRegDate());
+    }
+
+    private static boolean sameDate(Date a, Date b) {
+        if (a == null && b == null) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.getTime() == b.getTime();
+    }
+
+    private static String normalizeBoardTitle(String boardTitle) {
+        if (boardTitle == null) {
+            return "";
+        }
+        return boardTitle.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isIndexableBoardTitle(String boardTitle) {
+        if (!StringUtils.hasText(boardTitle)) {
+            return false;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        if (!StringUtils.hasText(normalized) || !SAFE_BOARD_TITLE.matcher(normalized).matches()) {
+            return false;
+        }
+        return normalized.endsWith("board");
+    }
+
     private static final class LoadedIndex {
         private final AssistantRagIndex index;
         private final double[] norms;
         private final long lastModifiedMillis;
+        private final SignatureCheck signatureCheck;
 
-        private LoadedIndex(AssistantRagIndex index, double[] norms, long lastModifiedMillis) {
+        private LoadedIndex(AssistantRagIndex index, double[] norms, long lastModifiedMillis, SignatureCheck signatureCheck) {
             this.index = index;
             this.norms = norms;
             this.lastModifiedMillis = lastModifiedMillis;
+            this.signatureCheck = signatureCheck;
+        }
+    }
+
+    private static final class SignatureCheck {
+        private final boolean available;
+        private final boolean mismatch;
+        private final int mismatchCount;
+        private final List<String> mismatchBoards;
+        private final Date checkedAt;
+
+        private SignatureCheck(boolean available, boolean mismatch, int mismatchCount, List<String> mismatchBoards, Date checkedAt) {
+            this.available = available;
+            this.mismatch = mismatch;
+            this.mismatchCount = mismatchCount;
+            this.mismatchBoards = mismatchBoards == null ? new ArrayList<>() : new ArrayList<>(mismatchBoards);
+            this.checkedAt = checkedAt;
+        }
+
+        private static SignatureCheck unavailable() {
+            return new SignatureCheck(false, false, 0, new ArrayList<>(), null);
+        }
+
+        private static SignatureCheck ok() {
+            return new SignatureCheck(true, false, 0, new ArrayList<>(), new Date());
+        }
+
+        private static SignatureCheck mismatch(int mismatchCount, List<String> mismatchBoards) {
+            return new SignatureCheck(true, true, mismatchCount, mismatchBoards, new Date());
         }
     }
 
@@ -228,8 +421,15 @@ public class AssistantRagSearchService {
         private final Date updatedAt;
         private final int chunkCount;
         private final int dimension;
+        private final boolean signatureAvailable;
+        private final boolean signatureMismatch;
+        private final int signatureMismatchCount;
+        private final List<String> signatureMismatchBoards;
+        private final Date signatureCheckedAt;
 
-        private Status(boolean enabled, boolean ready, String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount, int dimension) {
+        private Status(boolean enabled, boolean ready, String indexPath, String embeddingModel, Date createdAt, Date updatedAt,
+                       int chunkCount, int dimension, boolean signatureAvailable, boolean signatureMismatch,
+                       int signatureMismatchCount, List<String> signatureMismatchBoards, Date signatureCheckedAt) {
             this.enabled = enabled;
             this.ready = ready;
             this.indexPath = indexPath;
@@ -238,18 +438,30 @@ public class AssistantRagSearchService {
             this.updatedAt = updatedAt;
             this.chunkCount = chunkCount;
             this.dimension = dimension;
+            this.signatureAvailable = signatureAvailable;
+            this.signatureMismatch = signatureMismatch;
+            this.signatureMismatchCount = signatureMismatchCount;
+            this.signatureMismatchBoards = signatureMismatchBoards == null ? new ArrayList<>() : new ArrayList<>(signatureMismatchBoards);
+            this.signatureCheckedAt = signatureCheckedAt;
         }
 
         public static Status disabled(String indexPath) {
-            return new Status(false, false, indexPath, null, null, null, 0, 0);
+            return new Status(false, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
         }
 
         public static Status notReady(String indexPath) {
-            return new Status(true, false, indexPath, null, null, null, 0, 0);
+            return new Status(true, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
         }
 
-        public static Status ready(String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount, int dimension) {
-            return new Status(true, true, indexPath, embeddingModel, createdAt, updatedAt, chunkCount, dimension);
+        public static Status ready(String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount,
+                                   int dimension, SignatureCheck signatureCheck) {
+            boolean signatureAvailable = signatureCheck != null && signatureCheck.available;
+            boolean signatureMismatch = signatureCheck != null && signatureCheck.mismatch;
+            int signatureMismatchCount = signatureCheck == null ? 0 : signatureCheck.mismatchCount;
+            List<String> signatureMismatchBoards = signatureCheck == null ? new ArrayList<>() : signatureCheck.mismatchBoards;
+            Date signatureCheckedAt = signatureCheck == null ? null : signatureCheck.checkedAt;
+            return new Status(true, true, indexPath, embeddingModel, createdAt, updatedAt, chunkCount, dimension,
+                    signatureAvailable, signatureMismatch, signatureMismatchCount, signatureMismatchBoards, signatureCheckedAt);
         }
     }
 }

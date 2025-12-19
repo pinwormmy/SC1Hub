@@ -1,5 +1,6 @@
 package com.sc1hub.mapper;
 
+import com.sc1hub.assistant.rag.AssistantRagBoardSnapshot;
 import com.sc1hub.board.*;
 import com.sc1hub.common.dto.PageDTO;
 import org.apache.ibatis.annotations.Mapper;
@@ -83,6 +84,8 @@ public interface BoardMapper {
         List<BoardDTO> selectUpdatedPostsForRag(@Param("boardTitle") String boardTitle,
                         @Param("sinceRegDate") Date sinceRegDate,
                         @Param("limit") int limit) throws Exception;
+
+        AssistantRagBoardSnapshot selectBoardRagStats(@Param("boardTitle") String boardTitle) throws Exception;
 
         // Migration
         void addCommentColumns(String tableName);
