@@ -14,6 +14,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.nio.file.AccessDeniedException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -299,7 +300,13 @@ public class BoardController {
     @GetMapping("/showLatestPosts")
     @ResponseBody
     public List<LatestPostDTO> showLatestPosts() {
-        return boardService.showLatestPosts();
+        try {
+            List<LatestPostDTO> latestPosts = boardService.showLatestPosts();
+            return latestPosts == null ? Collections.emptyList() : latestPosts;
+        } catch (Exception e) {
+            log.error("최신글 조회 중 오류 발생", e);
+            return Collections.emptyList();
+        }
     }
 
     private static String buildBoardMetaDescription(String koreanTitle) {

@@ -13,62 +13,120 @@
 <div class="latest-posts sc-col-12" id="latestPosts"></div>
 
 <script>
-//alert("최신글메뉴 test1");
-
-let latestPosts =  document.getElementById("latestPosts");
-let postIndex = 1;
-
-fetch("/boards/showLatestPosts")
-    .then((response) => response.json())
-    .then((data) => {
-        data.forEach(latestPost => {
-            //console.log(latestPost); // 최신글 로딩 확인 테스트
-            // 글목록을 반복문으로 불러오되, 하나만 표시되게 하기
-            let setDisplayPost = (postIndex == 1)? 'block' : 'none';
-            let postListHtml = "<div id='latest" + postIndex + "' style='display:"+ setDisplayPost +"'><a href='/boards/"
-            + latestPost.boardTitle + "/readPost?postNum="+ latestPost.postNum +"'>[최신글] "
-            + latestPost.title + "</a></div>";
-            latestPosts.innerHTML += postListHtml;
-            postIndex++;
-            //console.log(postIndex); // 반복문과 인덱스 확인
-        });
-    })
-    .catch(error => console.error('최신글 로딩 에러: ', error));
-
-window.onload = async function() {
-    initLatestPostForOnload();
-}
-
-function initLatestPostForOnload() {
-    //console.log("js에서 게시물 변수 생성");
-    let latest1 = document.getElementById("latest1");
-    let latest2 = document.getElementById("latest2");
-    let latest3 = document.getElementById("latest3");
-    let latest4 = document.getElementById("latest4");
-    let latest5 = document.getElementById("latest5");
-
-    setInterval(displayPostOnetime, 3000);
-}
-
-function displayPostOnetime() {
-    if(latest1.style.display == 'block') {
-        latest1.style.display = 'none';
-        latest2.style.display = 'block';
-    }else if(latest2.style.display == 'block') {
-        latest2.style.display = 'none';
-        latest3.style.display = 'block';
-    }else if(latest3.style.display == 'block') {
-        latest3.style.display = 'none';
-        latest4.style.display = 'block';
-    }else if(latest4.style.display == 'block') {
-        latest4.style.display = 'none';
-        latest5.style.display = 'block';
-    }else if(latest5.style.display == 'block') {
-        latest5.style.display = 'none';
-        latest1.style.display = 'block';
-    }else {
-        latest1.style.display = 'block';
+(() => {
+    const containerEl = document.getElementById('latestPosts');
+    if (!containerEl) {
+        return;
     }
-}
+
+    const stateKey = '__scLatestPostsState';
+    const state = window[stateKey] ?? { posts: [], index: 0, timerId: null, loaded: false };
+    window[stateKey] = state;
+
+    function getPostUrl(post) {
+        const boardTitle = String(post?.boardTitle ?? '');
+        const postNum = Number.parseInt(String(post?.postNum ?? ''), 10);
+        if (!boardTitle || Number.isNaN(postNum)) {
+            return null;
+        }
+        return (
+            '/boards/'
+            + encodeURIComponent(boardTitle)
+            + '/readPost?postNum='
+            + encodeURIComponent(String(postNum))
+        );
+    }
+
+    function render() {
+        if (!Array.isArray(state.posts) || state.posts.length === 0) {
+            containerEl.innerHTML = '';
+            containerEl.hidden = true;
+            return;
+        }
+
+        containerEl.hidden = false;
+        const current = state.posts[state.index % state.posts.length];
+        const url = getPostUrl(current);
+        const title = String(current?.title ?? '');
+        if (!url) {
+            containerEl.innerHTML = '';
+            return;
+        }
+        containerEl.innerHTML = '';
+        const anchorEl = document.createElement('a');
+        anchorEl.href = url;
+        anchorEl.textContent = '[최신글] ' + title;
+        containerEl.appendChild(anchorEl);
+    }
+
+    function stopRotation() {
+        if (state.timerId) {
+            window.clearInterval(state.timerId);
+        }
+        state.timerId = null;
+    }
+
+    function startRotation() {
+        stopRotation();
+        if (!Array.isArray(state.posts) || state.posts.length <= 1) {
+            return;
+        }
+        state.timerId = window.setInterval(() => {
+            state.index = (state.index + 1) % state.posts.length;
+            render();
+        }, 3000);
+    }
+
+    async function load() {
+        stopRotation();
+        try {
+            const response = await fetch('/boards/showLatestPosts', {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+            });
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok) {
+                throw new Error('Failed to load latest posts: ' + response.status);
+            }
+            if (!contentType.includes('application/json')) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    'Latest posts response is not JSON (' + contentType + '): ' + bodyText.slice(0, 80),
+                );
+            }
+
+            const data = await response.json();
+            state.posts = Array.isArray(data) ? data : [];
+            state.index = 0;
+            render();
+            startRotation();
+        } catch (error) {
+            containerEl.innerHTML = '';
+            containerEl.hidden = true;
+            console.error('최신글 로딩 에러: ', error);
+        }
+    }
+
+    window.scLatestPosts = window.scLatestPosts ?? {};
+    window.scLatestPosts.load = load;
+    window.scLatestPosts.render = render;
+    window.scLatestPosts.startRotation = startRotation;
+    window.scLatestPosts.stopRotation = stopRotation;
+    window.scLatestPosts.el = containerEl;
+
+    if (!state.loaded) {
+        state.loaded = true;
+        const start = () => void load();
+        if (document.readyState === 'complete') {
+            start();
+        } else {
+            window.addEventListener('load', start, { once: true });
+        }
+    } else {
+        render();
+        startRotation();
+    }
+})();
 
 </script>

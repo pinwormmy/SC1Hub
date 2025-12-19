@@ -29,6 +29,7 @@ body {
 @media (max-width: 768px) {
     body {
         font-size: 20px;
+        background-attachment: scroll;
     }
 }
 .section-wrapper {
@@ -333,6 +334,15 @@ textarea.cke_source {
 }
 .sc-feed__content {
     margin-bottom: 12px;
+}
+.sc-feed__content,
+.sc-feed__content * {
+    max-width: 100%;
+}
+.sc-feed__content img {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block;
 }
 .sc-feed__system-item .sc-feed__content {
     color: rgba(255, 255, 255, 0.85);

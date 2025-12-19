@@ -28,10 +28,12 @@
     font-family: inherit !important;
     font-weight: inherit !important;
     font-style: inherit !important;
+    max-width: 100%;
 }
 .post-content img {
-    max-width: 100%;
+    max-width: 100% !important;
     height: auto !important;
+    display: block;
 }
 #commentContent {
     background-color: transparent;

@@ -60,6 +60,26 @@
 
     let feedModeEnabled = false;
 
+    const focusSuppressionMql = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)') : null;
+
+    function shouldSuppressProgrammaticFocus() {
+        return Boolean(focusSuppressionMql && focusSuppressionMql.matches);
+    }
+
+    function focusIfAllowed(targetEl) {
+        if (!targetEl || shouldSuppressProgrammaticFocus()) {
+            return;
+        }
+        targetEl.focus();
+    }
+
+    function scrollIntoViewIfNeeded(targetEl) {
+        if (!targetEl) {
+            return;
+        }
+        targetEl.scrollIntoView({ block: 'end', behavior: shouldSuppressProgrammaticFocus() ? 'smooth' : 'auto' });
+    }
+
     function syncTerminalMirror() {
         if (!mirrorEl) {
             return;
@@ -191,6 +211,27 @@
             wrapperEl.appendChild(textEl.cloneNode(true));
         }
         return wrapperEl;
+    }
+
+    function appendLatestPostsInFeed(itemEl) {
+        const latestPostsEl = document.getElementById('latestPosts');
+        if (!latestPostsEl) {
+            return;
+        }
+        itemEl.appendChild(latestPostsEl);
+        itemEl.appendChild(createDivider());
+        if (window.scLatestPosts && typeof window.scLatestPosts.render === 'function') {
+            window.scLatestPosts.render();
+        }
+    }
+
+    function appendFeedAdAndLatestPosts(itemEl) {
+        const coupangEl = createCoupangBannerClone();
+        if (coupangEl) {
+            itemEl.appendChild(coupangEl);
+            itemEl.appendChild(createDivider());
+        }
+        appendLatestPostsInFeed(itemEl);
     }
 
     function formatMmDd(dateText) {
@@ -665,6 +706,7 @@
             syncCommentAreaDivider();
             renderCommentViewLink();
             if (!commentsViewEl.hidden) {
+                scrollIntoViewIfNeeded(commentsViewEl);
                 void loadComments(1);
             }
         });
@@ -676,7 +718,8 @@
             commentFormEl.hidden = !commentFormEl.hidden;
             syncCommentAreaDivider();
             if (!commentFormEl.hidden) {
-                commentTextareaEl.focus();
+                scrollIntoViewIfNeeded(commentFormEl);
+                focusIfAllowed(commentTextareaEl);
             }
         });
         actionsEl.appendChild(commentWriteLinkEl);
@@ -731,11 +774,7 @@
 
         syncCommentAreaDivider();
 
-        const coupangEl = createCoupangBannerClone();
-        if (coupangEl) {
-            itemEl.appendChild(coupangEl);
-            itemEl.appendChild(createDivider());
-        }
+        appendFeedAdAndLatestPosts(itemEl);
 
         itemEl.appendChild(titleEl);
         itemEl.appendChild(infoEl);
@@ -1159,6 +1198,7 @@
         layoutEl.appendChild(sidebarColEl);
         layoutEl.appendChild(contentColEl);
 
+        appendFeedAdAndLatestPosts(itemEl);
         itemEl.appendChild(titleEl);
         itemEl.appendChild(metaEl);
         itemEl.appendChild(createDivider());
@@ -1176,7 +1216,7 @@
             const boardDisplayName = await getBoardDisplayName(boardTitle);
             const post = await fetchPostData(boardTitle, postNum);
             appendPostToFeed(boardTitle, boardDisplayName, postNum, post);
-            inputEl.focus();
+            focusIfAllowed(inputEl);
         } catch (e) {
             appendSystemMessage(`게시물을 불러오지 못했습니다. (${boardTitle} / ${postNum})`);
         }
@@ -1194,7 +1234,7 @@
                 data.postList,
                 data.canWrite,
             );
-            inputEl.focus();
+            focusIfAllowed(inputEl);
         } catch (e) {
             appendSystemMessage(`게시판 목록을 불러오지 못했습니다. (${boardTitle})`);
         }
@@ -1320,6 +1360,7 @@
             relatedEl.className = 'sc-feed__content sc-feed__chat-related';
             relatedEl.hidden = true;
 
+            appendFeedAdAndLatestPosts(itemEl);
             itemEl.appendChild(titleEl);
             itemEl.appendChild(metaEl);
             itemEl.appendChild(questionEl);
@@ -1476,7 +1517,14 @@
         openPostFromUrl(anchor.href);
     });
 
-    terminalEl.addEventListener('mousedown', () => {
+    terminalEl.addEventListener('mousedown', (event) => {
+        if (shouldSuppressProgrammaticFocus()) {
+            return;
+        }
+        const interactiveEl = event.target?.closest?.('input, textarea, select, button, a');
+        if (interactiveEl) {
+            return;
+        }
         inputEl.focus();
     });
 
