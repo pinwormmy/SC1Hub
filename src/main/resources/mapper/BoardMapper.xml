@@ -163,9 +163,7 @@
     </select>
 
 		    <select id="showLatestPosts" resultType="com.sc1hub.board.LatestPostDTO">
-		        select post_num, title, reg_date, 'beginnerBoard' as board_title from beginnerboard
-		        union all select post_num, title, reg_date, 'freeBoard' as board_title from freeboard
-		        union all select post_num, title, reg_date, 'funBoard' as board_title from funboard
+		        select post_num, title, reg_date, 'funBoard' as board_title from funboard
 		        union all select post_num, title, reg_date, 'noticeBoard' as board_title from noticeboard
 		        union all select post_num, title, reg_date, 'promotionBoard' as board_title from promotionboard
 		        union all select post_num, title, reg_date, 'pVsPBoard' as board_title from pvspboard
@@ -177,7 +175,6 @@
 		        union all select post_num, title, reg_date, 'tVsPBoard' as board_title from tvspboard
 		        union all select post_num, title, reg_date, 'tVsTBoard' as board_title from tvstboard
 		        union all select post_num, title, reg_date, 'tVsZBoard' as board_title from tvszboard
-		        union all select post_num, title, reg_date, 'userGuideBoard' as board_title from userguideboard
 		        union all select post_num, title, reg_date, 'videoLinkBoard' as board_title from videolinkboard
 		        union all select post_num, title, reg_date, 'zVsPBoard' as board_title from zvspboard
 		        union all select post_num, title, reg_date, 'zVsTBoard' as board_title from zvstboard

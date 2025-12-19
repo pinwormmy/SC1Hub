@@ -80,7 +80,7 @@
     async function load() {
         stopRotation();
         try {
-            const response = await fetch('/boards/showLatestPosts', {
+            const response = await fetch('/api/latest-posts', {
                 method: 'GET',
                 headers: { Accept: 'application/json' },
             });

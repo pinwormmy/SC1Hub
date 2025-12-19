@@ -60,10 +60,32 @@
 
     let feedModeEnabled = false;
 
-    const focusSuppressionMql = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)') : null;
+    const coarsePointerMql = window.matchMedia ? window.matchMedia('(hover: none) and (pointer: coarse)') : null;
+    const narrowViewportMql = window.matchMedia ? window.matchMedia('(max-width: 768px)') : null;
+
+    function isTouchDevice() {
+        return Boolean(
+            (typeof navigator !== 'undefined' && navigator.maxTouchPoints && navigator.maxTouchPoints > 0)
+                || (typeof window !== 'undefined' && 'ontouchstart' in window)
+        );
+    }
+
+    function isNarrowViewport() {
+        if (narrowViewportMql) {
+            return Boolean(narrowViewportMql.matches);
+        }
+        return typeof window !== 'undefined' && typeof window.innerWidth === 'number' && window.innerWidth <= 768;
+    }
+
+    function isCoarsePointer() {
+        if (coarsePointerMql) {
+            return Boolean(coarsePointerMql.matches);
+        }
+        return isTouchDevice();
+    }
 
     function shouldSuppressProgrammaticFocus() {
-        return Boolean(focusSuppressionMql && focusSuppressionMql.matches);
+        return isCoarsePointer() || isNarrowViewport();
     }
 
     function focusIfAllowed(targetEl) {
@@ -92,6 +114,67 @@
         inputEl.addEventListener('input', syncTerminalMirror);
         inputEl.addEventListener('focus', syncTerminalMirror);
         inputEl.addEventListener('blur', syncTerminalMirror);
+    }
+
+    let mobileTerminalInputEnabled = false;
+
+    function disableMobileTerminalInput() {
+        mobileTerminalInputEnabled = false;
+        inputEl.setAttribute('inputmode', 'none');
+        inputEl.setAttribute('readonly', 'readonly');
+        inputEl.setAttribute('disabled', 'disabled');
+        inputEl.style.pointerEvents = 'none';
+        if (document.activeElement === inputEl) {
+            inputEl.blur();
+        }
+    }
+
+    function enableMobileTerminalInput() {
+        mobileTerminalInputEnabled = true;
+        inputEl.removeAttribute('disabled');
+        inputEl.removeAttribute('readonly');
+        inputEl.setAttribute('inputmode', 'text');
+        inputEl.style.pointerEvents = '';
+        inputEl.focus();
+    }
+
+    if (shouldSuppressProgrammaticFocus()) {
+        disableMobileTerminalInput();
+    } else {
+        inputEl.removeAttribute('disabled');
+        inputEl.removeAttribute('readonly');
+        inputEl.setAttribute('inputmode', 'text');
+    }
+
+    window.addEventListener('pageshow', () => {
+        if (shouldSuppressProgrammaticFocus()) {
+            disableMobileTerminalInput();
+        }
+    });
+
+    inputEl.addEventListener('focus', () => {
+        if (shouldSuppressProgrammaticFocus() && !mobileTerminalInputEnabled) {
+            inputEl.blur();
+        }
+    });
+
+    inputEl.addEventListener('blur', () => {
+        if (shouldSuppressProgrammaticFocus()) {
+            disableMobileTerminalInput();
+        }
+    });
+
+    const promptEl = terminalEl.querySelector('.sc-terminal__prompt');
+    if (promptEl) {
+        promptEl.addEventListener('click', () => {
+            if (!shouldSuppressProgrammaticFocus()) {
+                return;
+            }
+            if (mobileTerminalInputEnabled) {
+                return;
+            }
+            enableMobileTerminalInput();
+        });
     }
 
     function activateTerminalAccessKeys(activeItemEl) {
@@ -622,7 +705,7 @@
         });
 
         const actionsEl = document.createElement('div');
-        actionsEl.className = 'sc-feed__actions';
+        actionsEl.className = 'sc-feed__actions sc-feed__post-actions';
 
         function createInlineAction(label, accessKey) {
             const linkEl = createActionLink(label, '#', {
@@ -634,16 +717,62 @@
             return linkEl;
         }
 
-        actionsEl.appendChild(
-            createActionLink('목 록(L)', `/boards/${encodeURIComponent(boardTitle)}`, {
-                className: 'pull btn btn-right cancel-btn',
-                accessKey: 'l',
-            }),
-        );
+        const useCompactPostMenu = isNarrowViewport();
+
+        const listLinkEl = createActionLink(useCompactPostMenu ? '목록' : '목 록(L)', `/boards/${encodeURIComponent(boardTitle)}`, {
+            className: 'pull btn btn-right cancel-btn',
+            accessKey: 'l',
+        });
+        actionsEl.appendChild(listLinkEl);
+
+        let extraActionsEl = actionsEl;
+        if (useCompactPostMenu) {
+            const compactMenuToggleEl = createInlineAction('게시글 메뉴');
+            compactMenuToggleEl.classList.add('sc-feed__post-menu-toggle');
+            compactMenuToggleEl.setAttribute('aria-expanded', 'false');
+
+            const safeBoardId = String(boardTitle ?? '').replace(/[^a-zA-Z0-9_-]/g, '_') || 'board';
+            const menuItemsId = `scFeedPostMenuItems_${safeBoardId}_${postNum}`;
+
+            const menuItemsEl = document.createElement('div');
+            menuItemsEl.className = 'sc-feed__post-menu-items';
+            menuItemsEl.id = menuItemsId;
+            menuItemsEl.hidden = true;
+
+            compactMenuToggleEl.setAttribute('aria-controls', menuItemsId);
+
+            function setCompactMenuOpen(open) {
+                menuItemsEl.hidden = !open;
+                compactMenuToggleEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+
+            compactMenuToggleEl.addEventListener('click', (event) => {
+                event.preventDefault();
+                setCompactMenuOpen(menuItemsEl.hidden);
+            });
+
+            menuItemsEl.addEventListener('click', (event) => {
+                const targetEl = event.target;
+                if (!targetEl || !(targetEl.closest && targetEl.closest('a, button'))) {
+                    return;
+                }
+                setCompactMenuOpen(false);
+            });
+
+            actionsEl.appendChild(compactMenuToggleEl);
+            actionsEl.appendChild(menuItemsEl);
+            extraActionsEl = menuItemsEl;
+        }
 
         const recommendLinkEl = createInlineAction('', 'm');
 
         function renderRecommendLink() {
+            if (useCompactPostMenu) {
+                recommendLinkEl.textContent = isRecommended
+                    ? `취소(${recommendCount})`
+                    : `추천(${recommendCount})`;
+                return;
+            }
             recommendLinkEl.textContent = isRecommended
                 ? `추천취소(M): ${recommendCount}`
                 : `추천(M): ${recommendCount}`;
@@ -691,11 +820,15 @@
 
         renderRecommendLink();
         void refreshRecommend();
-        actionsEl.appendChild(recommendLinkEl);
+        extraActionsEl.appendChild(recommendLinkEl);
 
         const commentViewLinkEl = createInlineAction('', 'o');
 
         function renderCommentViewLink() {
+            if (useCompactPostMenu) {
+                commentViewLinkEl.textContent = `댓글(${commentCount})`;
+                return;
+            }
             commentViewLinkEl.textContent = `댓글보기(O): ${commentCount}`;
         }
 
@@ -710,9 +843,9 @@
                 void loadComments(1);
             }
         });
-        actionsEl.appendChild(commentViewLinkEl);
+        extraActionsEl.appendChild(commentViewLinkEl);
 
-        const commentWriteLinkEl = createInlineAction('댓글작성(C)', 'c');
+        const commentWriteLinkEl = createInlineAction(useCompactPostMenu ? '댓글작성' : '댓글작성(C)', 'c');
         commentWriteLinkEl.addEventListener('click', (event) => {
             event.preventDefault();
             commentFormEl.hidden = !commentFormEl.hidden;
@@ -722,10 +855,10 @@
                 focusIfAllowed(commentTextareaEl);
             }
         });
-        actionsEl.appendChild(commentWriteLinkEl);
+        extraActionsEl.appendChild(commentWriteLinkEl);
 
         if (canEdit) {
-            actionsEl.appendChild(
+            extraActionsEl.appendChild(
                 createActionLink('수정', `/boards/${encodeURIComponent(boardTitle)}/modifyPost?postNum=${encodeURIComponent(postNum)}`, {
                     className: 'pull btn btn-right cancel-btn',
                 }),
@@ -755,11 +888,11 @@
             deleteButtonEl.textContent = '삭제';
             formEl.appendChild(deleteButtonEl);
 
-            actionsEl.appendChild(formEl);
+            extraActionsEl.appendChild(formEl);
         }
 
-        actionsEl.appendChild(
-            createActionLink('초기화면(N)', '/', {
+        extraActionsEl.appendChild(
+            createActionLink(useCompactPostMenu ? '홈' : '초기화면(N)', '/', {
                 className: 'pull btn btn-right cancel-btn',
                 accessKey: 'n',
             }),
@@ -1518,14 +1651,11 @@
     });
 
     terminalEl.addEventListener('mousedown', (event) => {
-        if (shouldSuppressProgrammaticFocus()) {
-            return;
-        }
         const interactiveEl = event.target?.closest?.('input, textarea, select, button, a');
         if (interactiveEl) {
             return;
         }
-        inputEl.focus();
+        focusIfAllowed(inputEl);
     });
 
     window.scTerminal = {
