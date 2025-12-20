@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
-import com.sc1hub.board.BoardListDTO;
-import com.sc1hub.mapper.BoardMapper;
+import com.sc1hub.board.dto.BoardListDTO;
+import com.sc1hub.board.mapper.BoardMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -63,7 +63,7 @@ public class AssistantRagSearchService {
             return Status.disabled(ragProperties.getIndexPath());
         }
 
-        LoadedIndex index = getOrLoadIndex(true);
+        LoadedIndex index = getOrLoadIndex();
         if (index == null) {
             return Status.notReady(ragProperties.getIndexPath());
         }
@@ -86,7 +86,7 @@ public class AssistantRagSearchService {
             return new ArrayList<>();
         }
 
-        LoadedIndex index = getOrLoadIndex(true);
+        LoadedIndex index = getOrLoadIndex();
         if (index == null || index.index.getChunks() == null || index.index.getChunks().isEmpty()) {
             return new ArrayList<>();
         }
@@ -138,7 +138,7 @@ public class AssistantRagSearchService {
         return results;
     }
 
-    private LoadedIndex getOrLoadIndex(boolean reloadIfModified) {
+    private LoadedIndex getOrLoadIndex() {
         LoadedIndex current = loadedIndex;
         Path indexPath = Paths.get(ragProperties.getIndexPath());
 
@@ -153,13 +153,13 @@ public class AssistantRagSearchService {
             return null;
         }
 
-        if (current != null && (!reloadIfModified || current.lastModifiedMillis == lastModified)) {
+        if (current != null && current.lastModifiedMillis == lastModified) {
             return current;
         }
 
         synchronized (this) {
             current = loadedIndex;
-            if (current != null && (!reloadIfModified || current.lastModifiedMillis == lastModified)) {
+            if (current != null && current.lastModifiedMillis == lastModified) {
                 return current;
             }
             try {
@@ -236,10 +236,9 @@ public class AssistantRagSearchService {
                 continue;
             }
             String boardTitle = normalizeBoardTitle(snapshot.getBoardTitle());
-            if (!isIndexableBoardTitle(boardTitle)) {
-                continue;
+            if (isIndexableBoardTitle(boardTitle)) {
+                expectedByBoard.put(boardTitle, snapshot);
             }
-            expectedByBoard.put(boardTitle, snapshot);
         }
 
         if (expectedByBoard.isEmpty()) {
@@ -453,8 +452,8 @@ public class AssistantRagSearchService {
             return new Status(true, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
         }
 
-        public static Status ready(String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount,
-                                   int dimension, SignatureCheck signatureCheck) {
+        private static Status ready(String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount,
+                                    int dimension, SignatureCheck signatureCheck) {
             boolean signatureAvailable = signatureCheck != null && signatureCheck.available;
             boolean signatureMismatch = signatureCheck != null && signatureCheck.mismatch;
             int signatureMismatchCount = signatureCheck == null ? 0 : signatureCheck.mismatchCount;

@@ -3,7 +3,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.sc1hub.mapper.MemberMapper">
+<mapper namespace="com.sc1hub.member.mapper.MemberMapper">
 
     <select id="isUniqueId" resultType="String">
         select count(*) from member
@@ -25,7 +25,7 @@
         values(#{id}, #{pw}, #{nickName}, #{realName}, #{email}, #{phone}, 1, now())
     </insert>
 
-    <select id="checkLoginData" resultType="com.sc1hub.member.MemberDTO">
+    <select id="checkLoginData" resultType="com.sc1hub.member.dto.MemberDTO">
         select * from member
         where id=#{id} and pw=#{pw}
     </select>
@@ -36,13 +36,13 @@
         where id=#{id}
     </update>
 
-    <select id="getMemberInfo" resultType="com.sc1hub.member.MemberDTO">
+    <select id="getMemberInfo" resultType="com.sc1hub.member.dto.MemberDTO">
         select *
         from member
         where id=#{id}
     </select>
 
-    <select id="getMemberList" resultType="com.sc1hub.member.MemberDTO">
+    <select id="getMemberList" resultType="com.sc1hub.member.dto.MemberDTO">
         select *
         from member
         where <include refid="searchKeyword" />
@@ -68,7 +68,7 @@
         where id=#{id}
     </update>
 
-    <select id="findByEmail" resultType="com.sc1hub.member.MemberDTO">
+    <select id="findByEmail" resultType="com.sc1hub.member.dto.MemberDTO">
         select * from member
         where email=#{email}
     </select>
@@ -84,7 +84,7 @@
         where realname=#{userName} and email=#{email}
     </select>
 
-    <select id="findByUserIdAndEmail" resultType="com.sc1hub.member.MemberDTO">
+    <select id="findByUserIdAndEmail" resultType="com.sc1hub.member.dto.MemberDTO">
         select * from member
         where id=#{userId} and email=#{email}
     </select>
@@ -94,7 +94,7 @@
         where id=#{id}
     </delete>
 
-    <select id="getRecentVisitors" resultType="com.sc1hub.member.VisitorsDTO">
+    <select id="getRecentVisitors" resultType="com.sc1hub.member.dto.VisitorsDTO">
         select *
             from (select * from visitor_count
                 order by date desc

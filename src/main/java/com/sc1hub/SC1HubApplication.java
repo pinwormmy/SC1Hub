@@ -1,5 +1,6 @@
 package com.sc1hub;
 
+import org.apache.ibatis.annotations.Mapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -7,7 +8,8 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@MapperScan(value = {"com.sc1hub.mapper"})
+@MapperScan(basePackages = {"com.sc1hub.board.mapper", "com.sc1hub.member.mapper", "com.sc1hub.visitor.mapper"},
+        annotationClass = Mapper.class)
 @SpringBootApplication
 @EnableScheduling
 public class SC1HubApplication extends SpringBootServletInitializer {

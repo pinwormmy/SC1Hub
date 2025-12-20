@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
-import com.sc1hub.board.BoardDTO;
-import com.sc1hub.board.BoardListDTO;
-import com.sc1hub.mapper.BoardMapper;
+import com.sc1hub.board.dto.BoardDTO;
+import com.sc1hub.board.dto.BoardListDTO;
+import com.sc1hub.board.mapper.BoardMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -78,8 +78,7 @@ public class AssistantRagIndexService {
 
         ragIndexExecutor.execute(() -> {
             try {
-                ReindexResult result = reindex();
-                lastReindexResult = result;
+                lastReindexResult = reindex();
             } catch (Exception e) {
                 log.error("RAG 인덱스 비동기 생성 실패", e);
                 lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
@@ -92,6 +91,7 @@ public class AssistantRagIndexService {
         return ReindexJobStatus.accepted(lastReindexStartedAt, lastReindexResult);
     }
 
+    @SuppressWarnings("unused")
     public ReindexJobStatus getReindexJobStatus() {
         if (!ragProperties.isEnabled()) {
             return ReindexJobStatus.disabled();
@@ -102,7 +102,7 @@ public class AssistantRagIndexService {
         return ReindexJobStatus.idle(lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
     }
 
-    public synchronized ReindexResult reindex() throws Exception {
+    public synchronized ReindexResult reindex() throws IOException {
         if (!ragProperties.isEnabled()) {
             return ReindexResult.disabled();
         }
@@ -200,7 +200,7 @@ public class AssistantRagIndexService {
         return new ReindexResult(true, indexedPosts, indexedChunks, dimension, ragProperties.getIndexPath());
     }
 
-    public synchronized UpdateResult update() throws Exception {
+    public synchronized UpdateResult update() throws IOException {
         if (!ragProperties.isEnabled()) {
             return UpdateResult.disabled(ragProperties.getIndexPath());
         }
@@ -218,7 +218,7 @@ public class AssistantRagIndexService {
         AssistantRagIndex index;
         try {
             index = objectMapper.readValue(indexPath.toFile(), AssistantRagIndex.class);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("RAG 인덱스 로드 실패. path={}", indexPath, e);
             throw e;
         }
