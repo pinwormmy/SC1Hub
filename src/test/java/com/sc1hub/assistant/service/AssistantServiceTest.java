@@ -169,4 +169,55 @@ class AssistantServiceTest {
         assertTrue(prompt.contains("chunkIndex=0"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
     }
+
+    @Test
+    void chat_mergesRagAndKeywordResults_whenAvailable() throws Exception {
+        ragProperties.setEnabled(true);
+        when(ragSearchService.isEnabled()).thenReturn(true);
+
+        BoardListDTO free = new BoardListDTO();
+        free.setBoardTitle("FreeBoard");
+
+        BoardListDTO tip = new BoardListDTO();
+        tip.setBoardTitle("TipBoard");
+
+        when(boardMapper.getBoardList()).thenReturn(Arrays.asList(free, tip));
+
+        BoardDTO keywordMatch = new BoardDTO();
+        keywordMatch.setPostNum(3);
+        keywordMatch.setTitle("운영 팁 모음");
+        keywordMatch.setContent("5팩 운영 관련 내용");
+        keywordMatch.setRegDate(new Date());
+
+        when(boardMapper.searchPostsByKeywords(eq("freeboard"), anyList(), anyInt()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.searchPostsByKeywords(eq("tipboard"), anyList(), anyInt()))
+                .thenReturn(Collections.singletonList(keywordMatch));
+
+        AssistantRagChunk chunk = new AssistantRagChunk();
+        chunk.setBoardTitle("freeboard");
+        chunk.setPostNum(9);
+        chunk.setTitle("5팩 골리앗 운영");
+        chunk.setChunkIndex(0);
+        chunk.setText("테란 5팩 골리앗 운영 팁");
+        chunk.setUrl("/boards/freeboard/readPost?postNum=9");
+
+        AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
+
+        when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
+        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+
+        AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
+
+        assertEquals(2, response.getRelatedPosts().size());
+        assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
+        assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
+
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(geminiClient).generateAnswer(promptCaptor.capture());
+        String prompt = promptCaptor.getValue();
+        assertTrue(prompt.contains("Site snippets"));
+        assertTrue(prompt.contains("Site posts"));
+        assertTrue(prompt.contains("excerpt="));
+    }
 }

@@ -63,16 +63,23 @@ public class AssistantService {
 
         String normalizedMessage = message.trim();
 
+        List<String> keywords = extractKeywords(normalizedMessage);
+        List<CandidatePost> candidates = keywords.isEmpty() ? Collections.emptyList() : findCandidates(keywords);
+        if (!candidates.isEmpty()) {
+            candidates.sort(candidateComparator(keywords));
+        }
+
         String prompt;
         RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage);
         if (ragRetrieval != null) {
-            response.setRelatedPosts(ragRetrieval.relatedPosts);
-            prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches);
+            if (candidates.isEmpty()) {
+                response.setRelatedPosts(ragRetrieval.relatedPosts);
+                prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches);
+            } else {
+                response.setRelatedPosts(mergeRelatedPosts(ragRetrieval.relatedPosts, candidates, assistantProperties.getMaxRelatedPosts()));
+                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates);
+            }
         } else {
-            List<String> keywords = extractKeywords(normalizedMessage);
-            List<CandidatePost> candidates = keywords.isEmpty() ? Collections.emptyList() : findCandidates(keywords);
-            candidates.sort(candidateComparator(keywords));
-
             List<CandidatePost> topRelated = candidates.subList(0, Math.min(assistantProperties.getMaxRelatedPosts(), candidates.size()));
             response.setRelatedPosts(toRelatedPostDtos(topRelated));
 
@@ -234,6 +241,190 @@ public class AssistantService {
         return prompt.substring(0, assistantProperties.getMaxPromptChars());
     }
 
+    private String buildHybridPrompt(String message, List<AssistantRagSearchService.Match> matches, List<CandidatePost> candidates) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are the SC1Hub assistant.\n");
+        sb.append("Answer in Korean.\n");
+        sb.append("Use only the information provided in 'Site snippets' and 'Site posts' as factual ground.\n");
+        sb.append("If the snippets are insufficient, say you cannot find enough information and suggest checking related posts.\n");
+        sb.append("Keep the answer concise (max 5 sentences).\n");
+        sb.append("Do not output raw HTML.\n\n");
+
+        sb.append("User question: ").append(message).append("\n\n");
+        sb.append("Site snippets:\n");
+
+        int maxPromptChars = assistantProperties.getMaxPromptChars();
+        int maxSnippetChars = assistantProperties.getMaxPostSnippetChars();
+        int ragLimit = Math.max(1, assistantProperties.getContextPosts() * 2);
+
+        List<RagEvidence> ragEvidence = buildRagEvidence(matches);
+        Set<String> includedKeys = new HashSet<>();
+        if (ragEvidence.isEmpty()) {
+            sb.append("- (no related snippets found)\n");
+        } else {
+            int index = 1;
+            for (RagEvidence evidence : ragEvidence) {
+                if (evidence == null) {
+                    continue;
+                }
+                if (index > ragLimit) {
+                    break;
+                }
+                String excerpt = truncate(safeText(evidence.text), maxSnippetChars);
+                String snippet = "[" + index + "] "
+                        + "board=" + evidence.boardTitle + ", "
+                        + "postNum=" + evidence.postNum + ", "
+                        + "score=" + String.format(Locale.ROOT, "%.4f", evidence.score) + "\n"
+                        + "title=" + safeText(evidence.title) + "\n"
+                        + "text=" + excerpt + "\n"
+                        + "url=" + evidence.url
+                        + "\n\n";
+                if (sb.length() + snippet.length() > maxPromptChars) {
+                    break;
+                }
+                sb.append(snippet);
+                includedKeys.add(postKey(evidence.boardTitle, evidence.postNum));
+                index += 1;
+            }
+        }
+
+        sb.append("Site posts:\n");
+
+        if (candidates == null || candidates.isEmpty()) {
+            sb.append("- (no related posts found)\n");
+        } else {
+            int index = 1;
+            int keywordLimit = Math.max(0, assistantProperties.getContextPosts());
+            for (CandidatePost post : candidates) {
+                if (post == null || post.post == null) {
+                    continue;
+                }
+                if (index > keywordLimit) {
+                    break;
+                }
+                String key = postKey(post.boardTitle, post.post.getPostNum());
+                if (includedKeys.contains(key)) {
+                    continue;
+                }
+                String title = safeText(post.post.getTitle());
+                String excerpt = safeText(stripHtmlToText(post.post.getContent()));
+                excerpt = truncate(excerpt, maxSnippetChars);
+                String snippet = "[" + index + "] "
+                        + "board=" + post.boardTitle + ", "
+                        + "postNum=" + post.post.getPostNum() + "\n"
+                        + "title=" + title + "\n"
+                        + "excerpt=" + excerpt + "\n"
+                        + "url=" + buildPostUrl(post.boardTitle, post.post.getPostNum())
+                        + "\n\n";
+                if (sb.length() + snippet.length() > maxPromptChars) {
+                    break;
+                }
+                sb.append(snippet);
+                includedKeys.add(key);
+                index += 1;
+            }
+        }
+
+        String prompt = sb.toString();
+        if (prompt.length() <= maxPromptChars) {
+            return prompt;
+        }
+        return prompt.substring(0, maxPromptChars);
+    }
+
+    private List<RagEvidence> buildRagEvidence(List<AssistantRagSearchService.Match> matches) {
+        if (matches == null || matches.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, RagEvidence> bestByPost = new HashMap<>();
+        for (AssistantRagSearchService.Match match : matches) {
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            AssistantRagChunk chunk = match.getChunk();
+            String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
+            if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                continue;
+            }
+            int postNum = chunk.getPostNum();
+            String key = postKey(boardTitle, postNum);
+            RagEvidence existing = bestByPost.get(key);
+            if (existing == null || match.getScore() > existing.score) {
+                String url = StringUtils.hasText(chunk.getUrl()) ? chunk.getUrl() : buildPostUrl(boardTitle, postNum);
+                RagEvidence evidence = new RagEvidence(boardTitle, postNum, chunk.getTitle(), chunk.getRegDate(), url, chunk.getText(), match.getScore());
+                bestByPost.put(key, evidence);
+            }
+        }
+        List<RagEvidence> results = new ArrayList<>(bestByPost.values());
+        results.sort((a, b) -> {
+            int scoreCompare = Double.compare(b.score, a.score);
+            if (scoreCompare != 0) {
+                return scoreCompare;
+            }
+            if (a.regDate != null && b.regDate != null) {
+                int dateCompare = b.regDate.compareTo(a.regDate);
+                if (dateCompare != 0) {
+                    return dateCompare;
+                }
+            } else if (a.regDate != null) {
+                return -1;
+            } else if (b.regDate != null) {
+                return 1;
+            }
+            return Integer.compare(b.postNum, a.postNum);
+        });
+        return results;
+    }
+
+    private List<AssistantRelatedPostDTO> mergeRelatedPosts(List<AssistantRelatedPostDTO> ragPosts, List<CandidatePost> candidates, int limit) {
+        Map<String, AssistantRelatedPostDTO> merged = new LinkedHashMap<>();
+        if (ragPosts != null) {
+            for (AssistantRelatedPostDTO dto : ragPosts) {
+                if (dto == null) {
+                    continue;
+                }
+                String boardTitle = normalizeBoardTitle(dto.getBoardTitle());
+                if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                    continue;
+                }
+                merged.putIfAbsent(postKey(boardTitle, dto.getPostNum()), dto);
+            }
+        }
+
+        if (candidates != null) {
+            for (CandidatePost post : candidates) {
+                if (post == null || post.post == null) {
+                    continue;
+                }
+                String boardTitle = normalizeBoardTitle(post.boardTitle);
+                if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                    continue;
+                }
+                String key = postKey(boardTitle, post.post.getPostNum());
+                if (merged.containsKey(key)) {
+                    continue;
+                }
+                AssistantRelatedPostDTO dto = new AssistantRelatedPostDTO();
+                dto.setBoardTitle(boardTitle);
+                dto.setPostNum(post.post.getPostNum());
+                dto.setTitle(post.post.getTitle());
+                dto.setRegDate(post.post.getRegDate());
+                dto.setUrl(buildPostUrl(boardTitle, post.post.getPostNum()));
+                merged.put(key, dto);
+            }
+        }
+
+        int max = Math.max(0, limit);
+        List<AssistantRelatedPostDTO> result = new ArrayList<>();
+        for (AssistantRelatedPostDTO dto : merged.values()) {
+            if (result.size() >= max) {
+                break;
+            }
+            result.add(dto);
+        }
+        return result;
+    }
+
     private List<CandidatePost> findCandidates(List<String> keywords) {
         List<BoardListDTO> boards = boardMapper.getBoardList();
         if (boards == null || boards.isEmpty()) {
@@ -372,6 +563,10 @@ public class AssistantService {
         return "/boards/" + boardTitle + "/readPost?postNum=" + postNum;
     }
 
+    private static String postKey(String boardTitle, int postNum) {
+        return normalizeBoardTitle(boardTitle) + ":" + postNum;
+    }
+
     private static String normalizeBoardTitle(String boardTitle) {
         if (boardTitle == null) {
             return "";
@@ -481,6 +676,26 @@ public class AssistantService {
         private RagPostAggregate(String boardTitle, int postNum) {
             this.boardTitle = boardTitle;
             this.postNum = postNum;
+        }
+    }
+
+    private static final class RagEvidence {
+        private final String boardTitle;
+        private final int postNum;
+        private final String title;
+        private final Date regDate;
+        private final String url;
+        private final String text;
+        private final double score;
+
+        private RagEvidence(String boardTitle, int postNum, String title, Date regDate, String url, String text, double score) {
+            this.boardTitle = boardTitle;
+            this.postNum = postNum;
+            this.title = title;
+            this.regDate = regDate;
+            this.url = url;
+            this.text = text;
+            this.score = score;
         }
     }
 }
