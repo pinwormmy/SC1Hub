@@ -1006,7 +1006,6 @@
         itemEl.appendChild(contentEl);
 
         feedListEl.insertBefore(itemEl, feedListEl.firstChild);
-        noticeEl.remove();
     }
 
     function isBoardUrl(urlOrPath) {

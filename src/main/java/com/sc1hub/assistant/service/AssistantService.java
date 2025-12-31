@@ -24,6 +24,21 @@ import java.util.regex.Pattern;
 public class AssistantService {
 
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
+    private static final Set<String> STOPWORDS = new HashSet<>(Arrays.asList(
+            "추천", "질문", "방법", "어떻게", "알려줘", "알려주세요", "알려", "해줘", "해주세요", "좀",
+            "빌드", "빌드오더", "운영", "공략", "강의",
+            "recommend", "recommendation", "how", "why", "what", "where", "please", "help"
+    ));
+    private static final String BOARD_PVP = "pvspboard";
+    private static final String BOARD_PVT = "pvstboard";
+    private static final String BOARD_PVZ = "pvszboard";
+    private static final String BOARD_TVP = "tvspboard";
+    private static final String BOARD_TVT = "tvstboard";
+    private static final String BOARD_TVZ = "tvszboard";
+    private static final String BOARD_ZVP = "zvspboard";
+    private static final String BOARD_ZVT = "zvstboard";
+    private static final String BOARD_ZVZ = "zvszboard";
+    private static final String BOARD_TEAMPLAY = "teamplayguideboard";
 
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
@@ -63,22 +78,20 @@ public class AssistantService {
 
         String normalizedMessage = message.trim();
 
+        Set<String> boardScope = resolveBoardScope(normalizedMessage);
         List<String> keywords = extractKeywords(normalizedMessage);
-        List<CandidatePost> candidates = keywords.isEmpty() ? Collections.emptyList() : findCandidates(keywords);
+        List<CandidatePost> candidates = keywords.isEmpty() ? Collections.emptyList() : findCandidates(keywords, boardScope);
         if (!candidates.isEmpty()) {
             candidates.sort(candidateComparator(keywords));
         }
 
         String prompt;
-        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage);
+        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope);
         if (ragRetrieval != null) {
-            if (candidates.isEmpty()) {
-                response.setRelatedPosts(ragRetrieval.relatedPosts);
-                prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches);
-            } else {
-                response.setRelatedPosts(mergeRelatedPosts(ragRetrieval.relatedPosts, candidates, assistantProperties.getMaxRelatedPosts()));
-                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates);
-            }
+            response.setRelatedPosts(ragRetrieval.relatedPosts);
+            prompt = candidates.isEmpty()
+                    ? buildRagPrompt(normalizedMessage, ragRetrieval.matches)
+                    : buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates);
         } else {
             List<CandidatePost> topRelated = candidates.subList(0, Math.min(assistantProperties.getMaxRelatedPosts(), candidates.size()));
             response.setRelatedPosts(toRelatedPostDtos(topRelated));
@@ -103,7 +116,7 @@ public class AssistantService {
         return response;
     }
 
-    private RagRetrieval tryRetrieveWithRag(String normalizedMessage) {
+    private RagRetrieval tryRetrieveWithRag(String normalizedMessage, List<String> keywords, Set<String> boardScope) {
         if (ragSearchService == null || ragProperties == null || !ragSearchService.isEnabled()) {
             return null;
         }
@@ -112,12 +125,124 @@ public class AssistantService {
             if (matches == null || matches.isEmpty()) {
                 return null;
             }
-            List<AssistantRelatedPostDTO> relatedPosts = buildRelatedPostsFromMatches(matches, assistantProperties.getMaxRelatedPosts());
-            return new RagRetrieval(matches, relatedPosts);
+            List<AssistantRagSearchService.Match> filtered = filterRagMatches(matches, keywords, boardScope);
+            if (filtered.isEmpty()) {
+                return null;
+            }
+            List<AssistantRelatedPostDTO> relatedPosts = buildRelatedPostsFromMatches(filtered, assistantProperties.getMaxRelatedPosts());
+            return new RagRetrieval(filtered, relatedPosts);
         } catch (Exception e) {
             log.warn("RAG 검색 실패. 키워드 검색으로 fallback 합니다.", e);
             return null;
         }
+    }
+
+    private List<AssistantRagSearchService.Match> filterRagMatches(List<AssistantRagSearchService.Match> matches,
+                                                                   List<String> keywords,
+                                                                   Set<String> boardScope) {
+        if (matches == null || matches.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<AssistantRagSearchService.Match> candidates = new ArrayList<>();
+        double bestScore = 0.0;
+        for (AssistantRagSearchService.Match match : matches) {
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            AssistantRagChunk chunk = match.getChunk();
+            String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
+            if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                continue;
+            }
+            if (!isAllowedBoard(boardTitle, boardScope)) {
+                continue;
+            }
+            if (isExcludedBoard(boardTitle)) {
+                continue;
+            }
+            candidates.add(match);
+            if (match.getScore() > bestScore) {
+                bestScore = match.getScore();
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        double minScore = clampScore(ragProperties == null ? 0.0 : ragProperties.getMinScore());
+        double minScoreRatio = clampScore(ragProperties == null ? 0.0 : ragProperties.getMinScoreRatio());
+        if (bestScore < minScore) {
+            return Collections.emptyList();
+        }
+
+        double threshold = Math.max(minScore, bestScore * minScoreRatio);
+        List<AssistantRagSearchService.Match> filtered = new ArrayList<>();
+        for (AssistantRagSearchService.Match match : candidates) {
+            if (match == null) {
+                continue;
+            }
+            if (match.getScore() >= threshold) {
+                filtered.add(match);
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return filterMatchesByKeywords(filtered, keywords);
+    }
+
+    private List<AssistantRagSearchService.Match> filterMatchesByKeywords(List<AssistantRagSearchService.Match> matches, List<String> keywords) {
+        if (matches == null || matches.isEmpty() || keywords == null || keywords.isEmpty()) {
+            return matches == null ? Collections.emptyList() : matches;
+        }
+
+        List<String> normalizedKeywords = new ArrayList<>();
+        for (String keyword : keywords) {
+            if (!StringUtils.hasText(keyword)) {
+                continue;
+            }
+            normalizedKeywords.add(keyword.toLowerCase(Locale.ROOT));
+        }
+        if (normalizedKeywords.isEmpty()) {
+            return matches;
+        }
+
+        List<AssistantRagSearchService.Match> keywordMatches = new ArrayList<>();
+        for (AssistantRagSearchService.Match match : matches) {
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            AssistantRagChunk chunk = match.getChunk();
+            String haystack = safeLower(chunk.getTitle()) + " " + safeLower(chunk.getText());
+            boolean hit = false;
+            for (String keyword : normalizedKeywords) {
+                if (haystack.contains(keyword)) {
+                    hit = true;
+                    break;
+                }
+            }
+            if (hit) {
+                keywordMatches.add(match);
+            }
+        }
+
+        return keywordMatches.isEmpty() ? matches : keywordMatches;
+    }
+
+    private static double clampScore(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0;
+        }
+        if (value < 0.0) {
+            return 0.0;
+        }
+        if (value > 1.0) {
+            return 1.0;
+        }
+        return value;
     }
 
     private List<AssistantRelatedPostDTO> buildRelatedPostsFromMatches(List<AssistantRagSearchService.Match> matches, int limit) {
@@ -426,6 +551,10 @@ public class AssistantService {
     }
 
     private List<CandidatePost> findCandidates(List<String> keywords) {
+        return findCandidates(keywords, Collections.emptySet());
+    }
+
+    private List<CandidatePost> findCandidates(List<String> keywords, Set<String> boardScope) {
         List<BoardListDTO> boards = boardMapper.getBoardList();
         if (boards == null || boards.isEmpty()) {
             return Collections.emptyList();
@@ -435,6 +564,12 @@ public class AssistantService {
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
             if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                continue;
+            }
+            if (!isAllowedBoard(boardTitle, boardScope)) {
+                continue;
+            }
+            if (isExcludedBoard(boardTitle)) {
                 continue;
             }
             try {
@@ -559,6 +694,25 @@ public class AssistantService {
         return prompt.substring(0, assistantProperties.getMaxPromptChars());
     }
 
+    private boolean isExcludedBoard(String boardTitle) {
+        if (!StringUtils.hasText(boardTitle)) {
+            return false;
+        }
+        if (assistantProperties == null || assistantProperties.getExcludedBoards() == null || assistantProperties.getExcludedBoards().isEmpty()) {
+            return false;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        for (String excluded : assistantProperties.getExcludedBoards()) {
+            if (!StringUtils.hasText(excluded)) {
+                continue;
+            }
+            if (normalizeBoardTitle(excluded).equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static String buildPostUrl(String boardTitle, int postNum) {
         return "/boards/" + boardTitle + "/readPost?postNum=" + postNum;
     }
@@ -583,6 +737,79 @@ public class AssistantService {
             return "";
         }
         return value.trim().replaceAll("\\s+", " ");
+    }
+
+    private static boolean isAllowedBoard(String boardTitle, Set<String> boardScope) {
+        if (boardScope == null || boardScope.isEmpty()) {
+            return true;
+        }
+        return boardScope.contains(normalizeBoardTitle(boardTitle));
+    }
+
+    private static Set<String> resolveBoardScope(String message) {
+        if (!StringUtils.hasText(message)) {
+            return Collections.emptySet();
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        String compact = normalized.replaceAll("\\s+", "");
+
+        Set<String> explicit = new LinkedHashSet<>();
+        addBoardIfContains(explicit, compact, BOARD_PVP, "프프전", "pvp");
+        addBoardIfContains(explicit, compact, BOARD_PVT, "프테전", "pvt");
+        addBoardIfContains(explicit, compact, BOARD_PVZ, "프저전", "pvz");
+        addBoardIfContains(explicit, compact, BOARD_TVP, "테프전", "tvp");
+        addBoardIfContains(explicit, compact, BOARD_TVT, "테테전", "tvt");
+        addBoardIfContains(explicit, compact, BOARD_TVZ, "테저전", "tvz");
+        addBoardIfContains(explicit, compact, BOARD_ZVP, "저프전", "zvp");
+        addBoardIfContains(explicit, compact, BOARD_ZVT, "저테전", "zvt");
+        addBoardIfContains(explicit, compact, BOARD_ZVZ, "저저전", "zvz");
+        addBoardIfContains(explicit, compact, BOARD_TEAMPLAY, "팀플", "teamplay");
+        if (!explicit.isEmpty()) {
+            return explicit;
+        }
+
+        Set<String> inferred = new LinkedHashSet<>();
+        if (containsAny(compact, "기어리버") || containsAny(normalized, "gear reaver", "gearreaver")) {
+            inferred.add(BOARD_PVP);
+        }
+
+        if (inferred.isEmpty() && (containsAny(compact, "미러전", "거울전", "동족전") || containsAny(normalized, "mirror"))) {
+            if (containsAny(compact, "프로토스", "프토", "플토") || containsAny(normalized, "protoss")) {
+                inferred.add(BOARD_PVP);
+            }
+            if (containsAny(compact, "테란") || containsAny(normalized, "terran")) {
+                inferred.add(BOARD_TVT);
+            }
+            if (containsAny(compact, "저그") || containsAny(normalized, "zerg")) {
+                inferred.add(BOARD_ZVZ);
+            }
+        }
+
+        return inferred;
+    }
+
+    private static void addBoardIfContains(Set<String> boards, String text, String boardTitle, String... tokens) {
+        if (boards == null || !StringUtils.hasText(text)) {
+            return;
+        }
+        if (containsAny(text, tokens)) {
+            boards.add(boardTitle);
+        }
+    }
+
+    private static boolean containsAny(String text, String... tokens) {
+        if (!StringUtils.hasText(text) || tokens == null || tokens.length == 0) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (!StringUtils.hasText(token)) {
+                continue;
+            }
+            if (text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String truncate(String value, int maxChars) {
@@ -618,6 +845,9 @@ public class AssistantService {
                 continue;
             }
             if (token.length() < 2) {
+                continue;
+            }
+            if (STOPWORDS.contains(token)) {
                 continue;
             }
             unique.add(token);

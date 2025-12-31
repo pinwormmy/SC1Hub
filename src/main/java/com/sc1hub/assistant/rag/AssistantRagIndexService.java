@@ -1,6 +1,7 @@
 package com.sc1hub.assistant.rag;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
@@ -41,6 +42,7 @@ public class AssistantRagIndexService {
     private final GeminiEmbeddingClient embeddingClient;
     private final GeminiProperties geminiProperties;
     private final AssistantRagProperties ragProperties;
+    private final AssistantProperties assistantProperties;
     private final ObjectMapper objectMapper;
     private final TaskExecutor ragIndexExecutor;
 
@@ -54,12 +56,14 @@ public class AssistantRagIndexService {
                                    GeminiEmbeddingClient embeddingClient,
                                    GeminiProperties geminiProperties,
                                    AssistantRagProperties ragProperties,
+                                   AssistantProperties assistantProperties,
                                    ObjectMapper objectMapper,
                                    @Qualifier("ragIndexExecutor") TaskExecutor ragIndexExecutor) {
         this.boardMapper = boardMapper;
         this.embeddingClient = embeddingClient;
         this.geminiProperties = geminiProperties;
         this.ragProperties = ragProperties;
+        this.assistantProperties = assistantProperties;
         this.objectMapper = objectMapper;
         this.ragIndexExecutor = ragIndexExecutor;
     }
@@ -459,7 +463,7 @@ public class AssistantRagIndexService {
         return normalized.endsWith("board");
     }
 
-    private static List<BoardListDTO> filterIndexableBoards(List<BoardListDTO> boards) {
+    private List<BoardListDTO> filterIndexableBoards(List<BoardListDTO> boards) {
         if (boards == null || boards.isEmpty()) {
             return boards;
         }
@@ -469,19 +473,22 @@ public class AssistantRagIndexService {
             if (!isIndexableBoardTitle(boardTitle)) {
                 continue;
             }
+            if (isExcludedBoardTitle(boardTitle)) {
+                continue;
+            }
             filtered.add(board);
         }
         return filtered;
     }
 
-    private static Set<String> buildIndexableBoardSet(List<BoardListDTO> boards) {
+    private Set<String> buildIndexableBoardSet(List<BoardListDTO> boards) {
         Set<String> allowed = new HashSet<>();
         if (boards == null || boards.isEmpty()) {
             return allowed;
         }
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (isIndexableBoardTitle(boardTitle)) {
+            if (isIndexableBoardTitle(boardTitle) && !isExcludedBoardTitle(boardTitle)) {
                 allowed.add(boardTitle);
             }
         }
@@ -499,6 +506,9 @@ public class AssistantRagIndexService {
             if (!isIndexableBoardTitle(boardTitle)) {
                 continue;
             }
+            if (isExcludedBoardTitle(boardTitle)) {
+                continue;
+            }
             try {
                 AssistantRagBoardSnapshot snapshot = boardMapper.selectBoardRagStats(boardTitle);
                 if (snapshot == null) {
@@ -512,6 +522,25 @@ public class AssistantRagIndexService {
         }
 
         return snapshots;
+    }
+
+    private boolean isExcludedBoardTitle(String boardTitle) {
+        if (!StringUtils.hasText(boardTitle)) {
+            return false;
+        }
+        if (assistantProperties == null || assistantProperties.getExcludedBoards() == null || assistantProperties.getExcludedBoards().isEmpty()) {
+            return false;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        for (String excluded : assistantProperties.getExcludedBoards()) {
+            if (!StringUtils.hasText(excluded)) {
+                continue;
+            }
+            if (normalizeBoardTitle(excluded).equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void removeChunksForMissingBoards(AssistantRagIndex index, Set<String> allowedBoards) {

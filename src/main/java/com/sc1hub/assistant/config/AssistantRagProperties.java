@@ -15,6 +15,8 @@ public class AssistantRagProperties {
     private int chunkOverlapChars = 150;
 
     private int searchTopChunks = 12;
+    private double minScore = 0.3;
+    private double minScoreRatio = 0.7;
 
     private AutoUpdateProperties autoUpdate = new AutoUpdateProperties();
 

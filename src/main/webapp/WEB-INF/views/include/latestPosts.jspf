@@ -118,10 +118,10 @@
     if (!state.loaded) {
         state.loaded = true;
         const start = () => void load();
-        if (document.readyState === 'complete') {
-            start();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start, { once: true });
         } else {
-            window.addEventListener('load', start, { once: true });
+            start();
         }
     } else {
         render();

@@ -46,7 +46,7 @@
         select *
         from member
         where <include refid="searchKeyword" />
-        order by id
+        order by reg_date desc, id desc
         limit #{postBeginPoint}, #{displayPostLimit}
     </select>
 

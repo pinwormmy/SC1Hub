@@ -1,6 +1,7 @@
 package com.sc1hub.assistant.rag;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
@@ -39,6 +40,7 @@ public class AssistantRagSearchService {
     private final GeminiEmbeddingClient embeddingClient;
     private final ObjectMapper objectMapper;
     private final BoardMapper boardMapper;
+    private final AssistantProperties assistantProperties;
 
     private volatile LoadedIndex loadedIndex;
 
@@ -46,12 +48,14 @@ public class AssistantRagSearchService {
                                     GeminiProperties geminiProperties,
                                     GeminiEmbeddingClient embeddingClient,
                                     ObjectMapper objectMapper,
-                                    BoardMapper boardMapper) {
+                                    BoardMapper boardMapper,
+                                    AssistantProperties assistantProperties) {
         this.ragProperties = ragProperties;
         this.geminiProperties = geminiProperties;
         this.embeddingClient = embeddingClient;
         this.objectMapper = objectMapper;
         this.boardMapper = boardMapper;
+        this.assistantProperties = assistantProperties;
     }
 
     public boolean isEnabled() {
@@ -236,7 +240,7 @@ public class AssistantRagSearchService {
                 continue;
             }
             String boardTitle = normalizeBoardTitle(snapshot.getBoardTitle());
-            if (isIndexableBoardTitle(boardTitle)) {
+            if (isIndexableBoardTitle(boardTitle) && !isExcludedBoardTitle(boardTitle)) {
                 expectedByBoard.put(boardTitle, snapshot);
             }
         }
@@ -275,6 +279,9 @@ public class AssistantRagSearchService {
             if (!isIndexableBoardTitle(boardTitle)) {
                 continue;
             }
+            if (isExcludedBoardTitle(boardTitle)) {
+                continue;
+            }
             remainingExpected.remove(boardTitle);
 
             AssistantRagBoardSnapshot expected = expectedByBoard.get(boardTitle);
@@ -302,6 +309,25 @@ public class AssistantRagSearchService {
             return SignatureCheck.mismatch(mismatchCount, sample);
         }
         return SignatureCheck.ok();
+    }
+
+    private boolean isExcludedBoardTitle(String boardTitle) {
+        if (!StringUtils.hasText(boardTitle)) {
+            return false;
+        }
+        if (assistantProperties == null || assistantProperties.getExcludedBoards() == null || assistantProperties.getExcludedBoards().isEmpty()) {
+            return false;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        for (String excluded : assistantProperties.getExcludedBoards()) {
+            if (!StringUtils.hasText(excluded)) {
+                continue;
+            }
+            if (normalizeBoardTitle(excluded).equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int appendMismatch(List<String> sample, int mismatchCount, String boardTitle) {

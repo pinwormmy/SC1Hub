@@ -3,6 +3,9 @@ package com.sc1hub.assistant.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @ConfigurationProperties(prefix = "sc1hub.assistant")
 public class AssistantProperties {
@@ -13,6 +16,7 @@ public class AssistantProperties {
     private int perBoardLimit = 5;
     private int maxPostSnippetChars = 800;
     private int maxPromptChars = 12000;
+    private List<String> excludedBoards = new ArrayList<>();
 
     private int anonymousDailyLimit = 3;
     private int memberDailyLimit = 10;
