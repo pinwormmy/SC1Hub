@@ -45,6 +45,8 @@ public class AssistantService {
     private final AssistantProperties assistantProperties;
     private final AssistantRagSearchService ragSearchService;
     private final AssistantRagProperties ragProperties;
+    private volatile List<BoardListDTO> cachedBoards = Collections.emptyList();
+    private volatile long cachedBoardsAtMillis = 0L;
 
     public AssistantService(BoardMapper boardMapper,
                             GeminiClient geminiClient,
@@ -80,18 +82,25 @@ public class AssistantService {
 
         Set<String> boardScope = resolveBoardScope(normalizedMessage);
         List<String> keywords = extractKeywords(normalizedMessage);
-        List<CandidatePost> candidates = keywords.isEmpty() ? Collections.emptyList() : findCandidates(keywords, boardScope);
-        if (!candidates.isEmpty()) {
-            candidates.sort(candidateComparator(keywords));
+        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope);
+
+        List<CandidatePost> candidates = Collections.emptyList();
+        if (shouldLoadKeywordCandidates(keywords, ragRetrieval)) {
+            candidates = findCandidates(keywords, boardScope, resolveCandidateLimit());
         }
 
         String prompt;
-        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope);
         if (ragRetrieval != null) {
             response.setRelatedPosts(ragRetrieval.relatedPosts);
-            prompt = candidates.isEmpty()
-                    ? buildRagPrompt(normalizedMessage, ragRetrieval.matches)
-                    : buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates);
+            if (!candidates.isEmpty()) {
+                List<AssistantRelatedPostDTO> merged = mergeRelatedPosts(ragRetrieval.relatedPosts, candidates, assistantProperties.getMaxRelatedPosts());
+                if (!merged.isEmpty()) {
+                    response.setRelatedPosts(merged);
+                }
+                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates);
+            } else {
+                prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches);
+            }
         } else {
             List<CandidatePost> topRelated = candidates.subList(0, Math.min(assistantProperties.getMaxRelatedPosts(), candidates.size()));
             response.setRelatedPosts(toRelatedPostDtos(topRelated));
@@ -550,17 +559,87 @@ public class AssistantService {
         return result;
     }
 
-    private List<CandidatePost> findCandidates(List<String> keywords) {
-        return findCandidates(keywords, Collections.emptySet());
+    private boolean shouldLoadKeywordCandidates(List<String> keywords, RagRetrieval ragRetrieval) {
+        if (keywords == null || keywords.isEmpty()) {
+            return false;
+        }
+        int candidateLimit = resolveCandidateLimit();
+        if (candidateLimit <= 0) {
+            return false;
+        }
+        if (ragRetrieval == null) {
+            return true;
+        }
+        int ragCount = ragRetrieval.matches == null ? 0 : ragRetrieval.matches.size();
+        return ragCount < candidateLimit;
     }
 
-    private List<CandidatePost> findCandidates(List<String> keywords, Set<String> boardScope) {
-        List<BoardListDTO> boards = boardMapper.getBoardList();
+    private int resolveCandidateLimit() {
+        int contextPosts = Math.max(0, assistantProperties.getContextPosts());
+        int relatedPosts = Math.max(0, assistantProperties.getMaxRelatedPosts());
+        return Math.max(contextPosts, relatedPosts);
+    }
+
+    private List<BoardListDTO> getBoardListCached() {
+        int cacheSeconds = Math.max(0, assistantProperties.getBoardListCacheSeconds());
+        if (cacheSeconds == 0) {
+            try {
+                List<BoardListDTO> boards = boardMapper.getBoardList();
+                return boards == null ? Collections.emptyList() : boards;
+            } catch (Exception e) {
+                return Collections.emptyList();
+            }
+        }
+
+        long now = System.currentTimeMillis();
+        long cacheMillis = cacheSeconds * 1000L;
+        if (now - cachedBoardsAtMillis < cacheMillis && cachedBoards != null && !cachedBoards.isEmpty()) {
+            return cachedBoards;
+        }
+
+        synchronized (this) {
+            if (now - cachedBoardsAtMillis < cacheMillis && cachedBoards != null && !cachedBoards.isEmpty()) {
+                return cachedBoards;
+            }
+            try {
+                List<BoardListDTO> boards = boardMapper.getBoardList();
+                if (boards == null || boards.isEmpty()) {
+                    cachedBoards = Collections.emptyList();
+                } else {
+                    cachedBoards = boards;
+                }
+            } catch (Exception e) {
+                return cachedBoards == null ? Collections.emptyList() : cachedBoards;
+            }
+            cachedBoardsAtMillis = now;
+            return cachedBoards;
+        }
+    }
+
+    private List<CandidatePost> findCandidates(List<String> keywords, Set<String> boardScope, int maxResults) {
+        if (maxResults <= 0 || keywords == null || keywords.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<BoardListDTO> boards = getBoardListCached();
         if (boards == null || boards.isEmpty()) {
             return Collections.emptyList();
         }
 
-        List<CandidatePost> results = new ArrayList<>();
+        List<String> normalizedKeywords = new ArrayList<>();
+        for (String keyword : keywords) {
+            if (!StringUtils.hasText(keyword)) {
+                continue;
+            }
+            normalizedKeywords.add(keyword.toLowerCase(Locale.ROOT));
+        }
+        if (normalizedKeywords.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Comparator<CandidatePost> comparator = candidateComparator();
+        PriorityQueue<CandidatePost> heap = new PriorityQueue<>(maxResults, (a, b) -> comparator.compare(b, a));
+
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
             if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
@@ -573,7 +652,7 @@ public class AssistantService {
                 continue;
             }
             try {
-                List<BoardDTO> posts = boardMapper.searchPostsByKeywords(boardTitle, keywords, assistantProperties.getPerBoardLimit());
+                List<BoardDTO> posts = boardMapper.searchPostsByKeywords(boardTitle, normalizedKeywords, assistantProperties.getPerBoardLimit());
                 if (posts == null || posts.isEmpty()) {
                     continue;
                 }
@@ -581,53 +660,67 @@ public class AssistantService {
                     if (post == null) {
                         continue;
                     }
-                    results.add(new CandidatePost(boardTitle, post));
+                    String titleLower = safeLower(post.getTitle());
+                    String contentLower = safeLower(stripHtmlToText(post.getContent()));
+                    int score = scoreCandidate(titleLower, contentLower, normalizedKeywords);
+                    CandidatePost candidate = new CandidatePost(boardTitle, post, score);
+                    if (heap.size() < maxResults) {
+                        heap.add(candidate);
+                    } else if (compareCandidates(candidate, heap.peek()) < 0) {
+                        heap.poll();
+                        heap.add(candidate);
+                    }
                 }
             } catch (Exception ignored) {
                 // Skip broken boards without failing the whole request
             }
         }
+
+        if (heap.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<CandidatePost> results = new ArrayList<>(heap);
+        results.sort(comparator);
         return results;
     }
 
-    private Comparator<CandidatePost> candidateComparator(List<String> keywords) {
-        return (a, b) -> {
-            int scoreA = scoreCandidate(a, keywords);
-            int scoreB = scoreCandidate(b, keywords);
-            if (scoreA != scoreB) {
-                return Integer.compare(scoreB, scoreA);
-            }
-            Date dateA = a.post.getRegDate();
-            Date dateB = b.post.getRegDate();
-            if (dateA != null && dateB != null) {
-                int dateCompare = dateB.compareTo(dateA);
-                if (dateCompare != 0) {
-                    return dateCompare;
-                }
-            } else if (dateA != null) {
-                return -1;
-            } else if (dateB != null) {
-                return 1;
-            }
-            return Integer.compare(b.post.getPostNum(), a.post.getPostNum());
-        };
+    private static Comparator<CandidatePost> candidateComparator() {
+        return AssistantService::compareCandidates;
     }
 
-    private int scoreCandidate(CandidatePost candidate, List<String> keywords) {
-        if (candidate == null || candidate.post == null || keywords == null || keywords.isEmpty()) {
+    private static int compareCandidates(CandidatePost a, CandidatePost b) {
+        int scoreCompare = Integer.compare(b.score, a.score);
+        if (scoreCompare != 0) {
+            return scoreCompare;
+        }
+        Date dateA = a.post.getRegDate();
+        Date dateB = b.post.getRegDate();
+        if (dateA != null && dateB != null) {
+            int dateCompare = dateB.compareTo(dateA);
+            if (dateCompare != 0) {
+                return dateCompare;
+            }
+        } else if (dateA != null) {
+            return -1;
+        } else if (dateB != null) {
+            return 1;
+        }
+        return Integer.compare(b.post.getPostNum(), a.post.getPostNum());
+    }
+
+    private static int scoreCandidate(String titleLower, String contentLower, List<String> keywords) {
+        if (keywords == null || keywords.isEmpty()) {
             return 0;
         }
-        String title = safeLower(candidate.post.getTitle());
-        String content = safeLower(stripHtmlToText(candidate.post.getContent()));
         int score = 0;
         for (String keyword : keywords) {
             if (!StringUtils.hasText(keyword)) {
                 continue;
             }
-            String kw = keyword.toLowerCase(Locale.ROOT);
-            if (title.contains(kw)) {
+            if (titleLower.contains(keyword)) {
                 score += 3;
-            } else if (content.contains(kw)) {
+            } else if (contentLower.contains(keyword)) {
                 score += 1;
             }
         }
@@ -878,10 +971,12 @@ public class AssistantService {
     private static final class CandidatePost {
         private final String boardTitle;
         private final BoardDTO post;
+        private final int score;
 
-        private CandidatePost(String boardTitle, BoardDTO post) {
+        private CandidatePost(String boardTitle, BoardDTO post, int score) {
             this.boardTitle = boardTitle;
             this.post = post;
+            this.score = score;
         }
     }
 

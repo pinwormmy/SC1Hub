@@ -17,6 +17,7 @@ public class AssistantProperties {
     private int maxPostSnippetChars = 800;
     private int maxPromptChars = 12000;
     private List<String> excludedBoards = new ArrayList<>();
+    private int boardListCacheSeconds = 60;
 
     private int anonymousDailyLimit = 3;
     private int memberDailyLimit = 10;

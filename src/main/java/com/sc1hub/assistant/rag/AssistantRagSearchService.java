@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +35,8 @@ public class AssistantRagSearchService {
 
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
     private static final int SIGNATURE_SAMPLE_LIMIT = 5;
+    private static final int QUERY_EMBEDDING_CACHE_SIZE = 200;
+    private static final int QUERY_CACHE_MAX_CHARS = 8000;
 
     private final AssistantRagProperties ragProperties;
     private final GeminiProperties geminiProperties;
@@ -43,6 +46,12 @@ public class AssistantRagSearchService {
     private final AssistantProperties assistantProperties;
 
     private volatile LoadedIndex loadedIndex;
+    private final Map<String, float[]> queryEmbeddingCache = new LinkedHashMap<String, float[]>(QUERY_EMBEDDING_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, float[]> eldest) {
+            return size() > QUERY_EMBEDDING_CACHE_SIZE;
+        }
+    };
 
     public AssistantRagSearchService(AssistantRagProperties ragProperties,
                                     GeminiProperties geminiProperties,
@@ -95,7 +104,7 @@ public class AssistantRagSearchService {
             return new ArrayList<>();
         }
 
-        float[] queryVector = embeddingClient.embedText(query);
+        float[] queryVector = getQueryEmbedding(query);
         if (queryVector.length == 0) {
             return new ArrayList<>();
         }
@@ -140,6 +149,40 @@ public class AssistantRagSearchService {
         List<Match> results = new ArrayList<>(heap);
         results.sort((a, b) -> Double.compare(b.score, a.score));
         return results;
+    }
+
+    private float[] getQueryEmbedding(String query) {
+        String normalized = normalizeQuery(query);
+        if (!StringUtils.hasText(normalized)) {
+            return new float[0];
+        }
+        String embeddingModel = geminiProperties.getEmbeddingModel();
+        String cacheKey = (embeddingModel == null ? "" : embeddingModel) + ":" + normalized;
+        synchronized (queryEmbeddingCache) {
+            float[] cached = queryEmbeddingCache.get(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        float[] vector = embeddingClient.embedText(normalized);
+        if (vector.length == 0) {
+            return vector;
+        }
+        synchronized (queryEmbeddingCache) {
+            queryEmbeddingCache.put(cacheKey, vector);
+        }
+        return vector;
+    }
+
+    private static String normalizeQuery(String query) {
+        if (!StringUtils.hasText(query)) {
+            return "";
+        }
+        String normalized = query.trim().replaceAll("\\s+", " ");
+        if (normalized.length() <= QUERY_CACHE_MAX_CHARS) {
+            return normalized;
+        }
+        return normalized.substring(0, QUERY_CACHE_MAX_CHARS);
     }
 
     private LoadedIndex getOrLoadIndex() {
