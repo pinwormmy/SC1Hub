@@ -54,10 +54,10 @@
                                                 <c:forEach var="post" items="${board.posts}" end="4">
                                                     <tr>
                                                         <td class="sc-title-cell">
-                                                            <a class="sc-title-slide"
+                                                            <a class="sc-title-clip"
                                                                href="/boards/${board.boardTitle}/readPost?postNum=${post.postNum}"
                                                                data-menu-number="${menuIndex}">
-                                                                ${menuIndex}. <c:out value="${post.title}" />
+                                                                <span class="sc-title-slide">${menuIndex}. <c:out value="${post.title}" /></span>
                                                             </a>
                                                         </td>
                                                     </tr>

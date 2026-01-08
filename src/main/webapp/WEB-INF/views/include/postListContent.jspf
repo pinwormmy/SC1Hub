@@ -7,7 +7,7 @@
     <div id="comments" class="col-xs-12">
         <div id="comments-list" class="gap">
             <div class="media">
-                <table class="boardList">
+                <table class="boardList sc-ellipsis-table">
                    <!-- 테이블 헤더 -->
                    <thead>
                        <tr>
@@ -24,10 +24,10 @@
                    <c:forEach var="notice" items="${selfNoticeList}">
                        <tr class="notice-tr">
                            <td class="post-num hide-on-mobile">${notice.postNum}&nbsp;</td>
-                           <td class="title mobile-visible">
-                               <span>[공지]</span>
-                               <a class="noticeTitle" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">${notice.title}</a>
-                               <c:if test="${notice.commentCount > 0}">( ${notice.commentCount} )</c:if>
+                           <td class="title mobile-visible sc-title-cell">
+                               <a class="noticeTitle sc-title-clip" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">
+                                   <span class="sc-title-slide">[공지] ${notice.title}<c:if test="${notice.commentCount > 0}">( ${notice.commentCount} )</c:if></span>
+                               </a>
                            </td>
                            <td class="writer hide-on-mobile">${notice.writer}</td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${notice.regDate}"/></td>
@@ -39,9 +39,10 @@
                    <c:forEach var="post" items="${postList}">
                        <tr>
                            <td class="post-num hide-on-mobile">${post.postNum}&nbsp;</td>
-                           <td class="title mobile-visible">
-                               <a class="postTitle" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">${post.title}</a>
-                               <c:if test="${post.commentCount > 0}">( ${post.commentCount} )</c:if>
+                           <td class="title mobile-visible sc-title-cell">
+                               <a class="postTitle sc-title-clip" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">
+                                   <span class="sc-title-slide">${post.title}<c:if test="${post.commentCount > 0}">( ${post.commentCount} )</c:if></span>
+                               </a>
                            </td>
                            <td class="writer hide-on-mobile">${post.writer}</td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${post.regDate}"/></td>

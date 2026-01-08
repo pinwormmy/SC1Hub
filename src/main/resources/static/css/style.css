@@ -389,39 +389,56 @@ textarea.cke_source {
 }
 
 .sc-title-cell {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.sc-title-clip {
+    display: block;
     width: 100%;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: clip;
+    text-overflow: ellipsis;
 }
 
 
 .sc-title-slide {
     display: inline-block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: top;
     will-change: transform;
     padding-right: 2rem;
 }
 
-.sc-title-cell:hover .sc-title-slide {
-    animation: sc-title-marquee 8s linear infinite;
-}
-
-.boardList .title > a {
-    display: inline-block;
-    white-space: nowrap;
-    vertical-align: top;
-    will-change: transform;
-    padding-right: 2rem;
-}
-
-.boardList .title:hover > a {
+.sc-title-cell:hover .sc-title-slide,
+.boardList .title:hover .sc-title-slide {
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
     animation: sc-title-marquee 8s linear infinite;
 }
 
 .boardList .title {
-    text-overflow: clip;
+    overflow: hidden;
+}
+
+.boardList .title,
+.boardList .title * {
+    white-space: nowrap;
+}
+
+@media screen and (max-width: 600px) {
+    .sc-title-slide {
+        padding-right: 1rem;
+    }
 }
 
 @keyframes sc-title-marquee {
@@ -435,7 +452,7 @@ textarea.cke_source {
 
 @media (prefers-reduced-motion: reduce) {
     .sc-title-cell:hover .sc-title-slide,
-    .boardList .title:hover > a {
+    .boardList .title:hover .sc-title-slide {
         animation: none;
         transform: none;
     }

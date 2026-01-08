@@ -53,9 +53,12 @@
         }
         containerEl.innerHTML = '';
         const anchorEl = document.createElement('a');
-        anchorEl.className = 'sc-title-slide';
+        anchorEl.className = 'sc-title-clip';
         anchorEl.href = url;
-        anchorEl.textContent = '[최신글] ' + title;
+        const titleEl = document.createElement('span');
+        titleEl.className = 'sc-title-slide';
+        titleEl.textContent = '[최신글] ' + title;
+        anchorEl.appendChild(titleEl);
         containerEl.appendChild(anchorEl);
     }
 

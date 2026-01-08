@@ -77,9 +77,14 @@
     .boardList td {
         padding-top: 5px;
         padding-bottom: 5px;
+        padding-left: 1px;
+        padding-right: 1px;
     }
     .boardList .post-num {
         min-width: 55px;
+    }
+    .boardList .title {
+        max-width: 100%;
     }
 }
 /* 비 모바일 환경에서는 모든 열을 표시 */
@@ -93,6 +98,3 @@
 @media screen and (max-width: 600px) {
 
 }
-
-
-
