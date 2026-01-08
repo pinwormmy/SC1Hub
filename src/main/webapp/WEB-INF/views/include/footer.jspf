@@ -50,9 +50,10 @@
 	</div>
 
 <script>
-    // 페이지 이동 함수
-    function navigateToPage(menuNumber) {
-        var pageMap = {
+    var pageMapCache = null;
+
+    function buildPageMap() {
+        var map = {
             // 사이드바
             '1': '/boards/noticeBoard/',
             '2': '/boards/videoLinkBoard/',
@@ -69,54 +70,26 @@
             '18': '/boards/pVsPBoard/',
             '19': '/boards/teamPlayGuideBoard/',
             '20': '/boards/tipBoard/',
-            // 메인페이지
-            // 테란
-            '21': '/boards/tVsZBoard',
-            '22': '/boards/tVsZBoard/readPost?postNum=3',
-            '23': '/boards/tVsZBoard/readPost?postNum=2',
-            '24': '/boards/tVsZBoard/readPost?postNum=9',
-            '25': '/boards/tVsZBoard/readPost?postNum=6',
-            '26': '/boards/tVsPBoard',
-            '27': '/boards/tVsPBoard/readPost?postNum=7',
-            '28': '/boards/tVsPBoard/readPost?postNum=3',
-            '29': '/boards/tVsPBoard/readPost?postNum=11',
-            '30': '/boards/tVsPBoard/readPost?postNum=10',
-            '31': '/boards/tVsTBoard',
-            '32': '/boards/tVsTBoard/readPost?postNum=3',
-            '33': '/boards/tVsTBoard/readPost?postNum=2',
-            '34': '/boards/tVsTBoard/readPost?postNum=5',
-            // 저그
-            '35': '/boards/zVsTBoard',
-            '36': '/boards/zVsTBoard/readPost?postNum=3',
-            '37': '/boards/zVsTBoard/readPost?postNum=6',
-            '38': '/boards/zVsTBoard/readPost?postNum=8',
-            '39': '/boards/zVsTBoard/readPost?postNum=13',
-            '40': '/boards/zVsPBoard',
-            '41': '/boards/zVsPBoard/readPost?postNum=2',
-            '42': '/boards/zVsPBoard/readPost?postNum=3',
-            '43': '/boards/zVsPBoard/readPost?postNum=9',
-            '44': '/boards/zVsPBoard/readPost?postNum=4',
-            '45': '/boards/zVsZBoard',
-            '46': '/boards/zVsZBoard/readPost?postNum=2',
-            '47': '/boards/zVsZBoard/readPost?postNum=4',
-            '48': '/boards/zVsZBoard/readPost?postNum=3',
-            // 프로토스
-            '49': '/boards/pVsTBoard',
-            '50' : '/boards/pVsTBoard/readPost?postNum=2',
-            '51': '/boards/pVsTBoard/readPost?postNum=3',
-            '52': '/boards/pVsTBoard/readPost?postNum=4',
-            '53': '/boards/pVsTBoard/readPost?postNum=5',
-            '54': '/boards/pVsZBoard',
-            '55': '/boards/pVsZBoard/readPost?postNum=4',
-            '56': '/boards/pVsZBoard/readPost?postNum=3',
-            '57': '/boards/pVsZBoard/readPost?postNum=20',
-            '58': '/boards/pVsZBoard/readPost?postNum=8',
-            '59': '/boards/pVsPBoard',
-            '60': '/boards/pVsPBoard/readPost?postNum=4',
-            '61': '/boards/pVsPBoard/readPost?postNum=2',
-            '62': '/boards/pVsPBoard/readPost?postNum=5',
         };
-        var pageUrl = pageMap[menuNumber];
+
+        var dynamicLinks = document.querySelectorAll('[data-menu-number]');
+        Array.prototype.forEach.call(dynamicLinks, function(link) {
+            var key = link.getAttribute('data-menu-number');
+            var url = link.getAttribute('data-menu-url') || link.getAttribute('href');
+            if (key && url) {
+                map[key] = url;
+            }
+        });
+
+        return map;
+    }
+
+    // 페이지 이동 함수
+    function navigateToPage(menuNumber) {
+        if (!pageMapCache) {
+            pageMapCache = buildPageMap();
+        }
+        var pageUrl = pageMapCache[menuNumber];
         if (pageUrl) {
             if (window.scTerminal) {
                 if (window.scTerminal.isPostUrl && window.scTerminal.isPostUrl(pageUrl)) {

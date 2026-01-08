@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.AccessDeniedException;
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -217,6 +218,18 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public List<LatestPostDTO> showLatestPosts() {
         return boardMapper.showLatestPosts();
+    }
+
+    @Override
+    public List<BoardDTO> getPopularPosts(String boardTitle, int limit) throws Exception {
+        if (limit < 1) {
+            return Collections.emptyList();
+        }
+        if (boardTitle == null) {
+            return Collections.emptyList();
+        }
+        boardTitle = boardTitle.toLowerCase();
+        return boardMapper.selectPopularPosts(boardTitle, limit);
     }
 
     // 나머지 유틸리티 메서드들

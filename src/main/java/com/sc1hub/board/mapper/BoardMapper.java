@@ -74,6 +74,9 @@ public interface BoardMapper {
 
         List<LatestPostDTO> showLatestPosts();
 
+        List<BoardDTO> selectPopularPosts(@Param("boardTitle") String boardTitle,
+                        @Param("limit") int limit) throws Exception;
+
         List<BoardDTO> searchPostsByKeywords(@Param("boardTitle") String boardTitle,
                         @Param("keywords") List<String> keywords,
                         @Param("limit") int limit) throws Exception;

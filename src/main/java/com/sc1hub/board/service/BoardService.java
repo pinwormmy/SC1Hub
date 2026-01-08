@@ -61,6 +61,8 @@ public interface BoardService {
 
     List<LatestPostDTO> showLatestPosts();
 
+    List<BoardDTO> getPopularPosts(String boardTitle, int limit) throws Exception;
+
     // Refactored methods
     void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception;
 

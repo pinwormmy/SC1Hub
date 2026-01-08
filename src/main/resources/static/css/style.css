@@ -378,6 +378,68 @@ textarea.cke_source {
     cursor: pointer;
     display: inline-block;
 }
+
+.sc-ellipsis-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.sc-ellipsis-table td {
+    overflow: hidden;
+}
+
+.sc-title-cell {
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+}
+
+
+.sc-title-slide {
+    display: inline-block;
+    white-space: nowrap;
+    vertical-align: top;
+    will-change: transform;
+    padding-right: 2rem;
+}
+
+.sc-title-cell:hover .sc-title-slide {
+    animation: sc-title-marquee 8s linear infinite;
+}
+
+.boardList .title > a {
+    display: inline-block;
+    white-space: nowrap;
+    vertical-align: top;
+    will-change: transform;
+    padding-right: 2rem;
+}
+
+.boardList .title:hover > a {
+    animation: sc-title-marquee 8s linear infinite;
+}
+
+.boardList .title {
+    text-overflow: clip;
+}
+
+@keyframes sc-title-marquee {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sc-title-cell:hover .sc-title-slide,
+    .boardList .title:hover > a {
+        animation: none;
+        transform: none;
+    }
+}
 .sc-feed__post-menu summary::-webkit-details-marker {
     display: none;
 }

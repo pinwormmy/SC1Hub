@@ -59,7 +59,7 @@ class AssistantServiceTest {
     void chat_returnsError_whenDisabled() {
         assistantProperties.setEnabled(false);
 
-        AssistantChatResponseDTO response = assistantService.chat("질문", null);
+        AssistantChatResponseDTO response = assistantService.chat("5팩 질문", null);
 
         assertTrue(response.getError().contains("비활성화"));
     }
@@ -68,7 +68,7 @@ class AssistantServiceTest {
     void chat_returnsError_whenRequireLogin_andNotLoggedIn() {
         assistantProperties.setRequireLogin(true);
 
-        AssistantChatResponseDTO response = assistantService.chat("질문", null);
+        AssistantChatResponseDTO response = assistantService.chat("5팩 질문", null);
 
         assertTrue(response.getError().contains("로그인"));
     }
@@ -131,7 +131,7 @@ class AssistantServiceTest {
         when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(unsafe));
         when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
 
-        AssistantChatResponseDTO response = assistantService.chat("질문", null);
+        AssistantChatResponseDTO response = assistantService.chat("5팩", null);
 
         verify(boardMapper).getBoardList();
         verify(geminiClient).generateAnswer(anyString());

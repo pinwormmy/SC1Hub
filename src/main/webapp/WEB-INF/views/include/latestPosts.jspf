@@ -5,12 +5,11 @@
     margin-bottom: 10px;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 </style>
 
-<div class="latest-posts sc-col-12" id="latestPosts"></div>
+<div class="latest-posts sc-col-12 sc-title-cell" id="latestPosts"></div>
 
 <script>
 (() => {
@@ -54,6 +53,7 @@
         }
         containerEl.innerHTML = '';
         const anchorEl = document.createElement('a');
+        anchorEl.className = 'sc-title-slide';
         anchorEl.href = url;
         anchorEl.textContent = '[최신글] ' + title;
         containerEl.appendChild(anchorEl);

@@ -162,8 +162,8 @@
         SELECT korean_title FROM board_list WHERE board_title = #{boardTitle}
     </select>
 
-		    <select id="showLatestPosts" resultType="com.sc1hub.board.dto.LatestPostDTO">
-		        select post_num, title, reg_date, 'funBoard' as board_title from funboard
+    <select id="showLatestPosts" resultType="com.sc1hub.board.dto.LatestPostDTO">
+        select post_num, title, reg_date, 'funBoard' as board_title from funboard
 		        union all select post_num, title, reg_date, 'noticeBoard' as board_title from noticeboard
 		        union all select post_num, title, reg_date, 'promotionBoard' as board_title from promotionboard
 		        union all select post_num, title, reg_date, 'pVsPBoard' as board_title from pvspboard
@@ -179,9 +179,17 @@
 		        union all select post_num, title, reg_date, 'zVsPBoard' as board_title from zvspboard
 		        union all select post_num, title, reg_date, 'zVsTBoard' as board_title from zvstboard
 		        union all select post_num, title, reg_date, 'zVsZBoard' as board_title from zvszboard
-		            order by reg_date desc
-		            limit 5;
-		    </select>
+            order by reg_date desc
+            limit 5;
+    </select>
+
+    <select id="selectPopularPosts" resultType="com.sc1hub.board.dto.BoardDTO">
+        select post_num, title, reg_date, views, comment_count, recommend_count
+        from ${boardTitle}
+        where notice=0
+        order by recommend_count desc, views desc, reg_date desc
+        limit #{limit}
+    </select>
 
     <select id="searchPostsByKeywords" resultType="com.sc1hub.board.dto.BoardDTO">
         select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice
