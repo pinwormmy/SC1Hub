@@ -391,7 +391,7 @@ textarea.cke_source {
 .sc-title-cell {
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     min-width: 0;
 }
 
@@ -400,7 +400,7 @@ textarea.cke_source {
     width: 100%;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 
@@ -410,7 +410,7 @@ textarea.cke_source {
     max-width: 100%;
     box-sizing: border-box;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     white-space: nowrap;
     vertical-align: top;
     will-change: transform;
