@@ -119,6 +119,15 @@ a, a:focus, a:hover {
   text-decoration: none;
   outline: none;
 }
+.sc-menu-link--terran {
+    color: #00ffff;
+}
+.sc-menu-link--zerg {
+    color: #ea40f7;
+}
+.sc-menu-link--protoss {
+    color: #ffff00;
+}
 input {
     height: 50px;
     border: none;
@@ -183,12 +192,12 @@ button.cancel-btn:hover {
 }
 
 ::selection {
-    background-color: var(--sc-pc-highlight-bg);
-    color: var(--sc-pc-highlight-text);
+    background-color: var(--sc-pc-invert-bg);
+    color: var(--sc-pc-invert-text);
 }
 ::-moz-selection {
-    background-color: var(--sc-pc-highlight-bg);
-    color: var(--sc-pc-highlight-text);
+    background-color: var(--sc-pc-invert-bg);
+    color: var(--sc-pc-invert-text);
 }
 
 a:hover,
@@ -201,7 +210,7 @@ button.cancel-btn:hover,
 button.cancel-btn:focus-visible,
 summary:hover,
 summary:focus-visible {
-    color: var(--sc-pc-invert-text) !important;
+    color: var(--sc-pc-invert-text);
     background-color: var(--sc-pc-invert-bg);
     border-color: transparent;
     box-shadow: none;
@@ -217,14 +226,14 @@ button:hover *,
 button:focus-visible *,
 summary:hover *,
 summary:focus-visible * {
-    color: var(--sc-pc-invert-text) !important;
+    color: inherit;
 }
 
 a:active,
 .btn:active,
 button:active,
 summary:active {
-    color: var(--sc-pc-invert-text) !important;
+    color: var(--sc-pc-invert-text);
     background-color: var(--sc-pc-invert-bg);
     border-color: transparent;
     box-shadow: none;
@@ -236,7 +245,7 @@ a:active *,
 .btn:active *,
 button:active *,
 summary:active * {
-    color: var(--sc-pc-invert-text) !important;
+    color: inherit;
 }
 
 input:focus-visible,

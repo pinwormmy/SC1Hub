@@ -50,15 +50,15 @@
             <p class="menu-toggle-hint">클릭시 펼치기↑</p>
             <div id="strategyMenuContent" class="menu-content">
                 <ul>
-                    <li><a href="/boards/tVsZBoard" style="color:#00FFFF;">10. 테저전 게시판</a></li>
-                    <li><a href="/boards/tVsPBoard" style="color:#00FFFF;">11. 테프전 게시판</a></li>
-                    <li><a href="/boards/tVsTBoard" style="color:#00FFFF;">12. 테테전 게시판</a></li>
-                    <li><a href="/boards/zVsTBoard" style="color:#ea40f7;">13. 저테전 게시판</a></li>
-                    <li><a href="/boards/zVsPBoard" style="color:#ea40f7;">14. 저프전 게시판</a></li>
-                    <li><a href="/boards/zVsZBoard" style="color:#ea40f7;">15. 저저전 게시판</a></li>
-                    <li><a href="/boards/pVsTBoard" style="color:#FFFF00">16. 프테전 게시판</a></li>
-                    <li><a href="/boards/pVsZBoard" style="color:#FFFF00">17. 프저전 게시판</a></li>
-                    <li><a href="/boards/pVsPBoard" style="color:#FFFF00">18. 프프전 게시판</a></li>
+                    <li><a href="/boards/tVsZBoard" class="sc-menu-link sc-menu-link--terran">10. 테저전 게시판</a></li>
+                    <li><a href="/boards/tVsPBoard" class="sc-menu-link sc-menu-link--terran">11. 테프전 게시판</a></li>
+                    <li><a href="/boards/tVsTBoard" class="sc-menu-link sc-menu-link--terran">12. 테테전 게시판</a></li>
+                    <li><a href="/boards/zVsTBoard" class="sc-menu-link sc-menu-link--zerg">13. 저테전 게시판</a></li>
+                    <li><a href="/boards/zVsPBoard" class="sc-menu-link sc-menu-link--zerg">14. 저프전 게시판</a></li>
+                    <li><a href="/boards/zVsZBoard" class="sc-menu-link sc-menu-link--zerg">15. 저저전 게시판</a></li>
+                    <li><a href="/boards/pVsTBoard" class="sc-menu-link sc-menu-link--protoss">16. 프테전 게시판</a></li>
+                    <li><a href="/boards/pVsZBoard" class="sc-menu-link sc-menu-link--protoss">17. 프저전 게시판</a></li>
+                    <li><a href="/boards/pVsPBoard" class="sc-menu-link sc-menu-link--protoss">18. 프프전 게시판</a></li>
                     <li><a href="/boards/teamPlayGuideBoard">19. 팀플 게시판</a></li>
                     <li><a href="/boards/tipBoard" accesskey="t">20. 꿀팁보급고(T)</a></li>
                 </ul>
