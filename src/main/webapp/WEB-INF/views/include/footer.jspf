@@ -91,16 +91,6 @@
         }
         var pageUrl = pageMapCache[menuNumber];
         if (pageUrl) {
-            if (window.scTerminal) {
-                if (window.scTerminal.isPostUrl && window.scTerminal.isPostUrl(pageUrl)) {
-                    window.scTerminal.openPostFromUrl(pageUrl);
-                    return true;
-                }
-                if (window.scTerminal.isBoardUrl && window.scTerminal.isBoardUrl(pageUrl)) {
-                    window.scTerminal.openBoardFromUrl(pageUrl);
-                    return true;
-                }
-            }
             window.location.href = pageUrl;
             return true;
         } else {

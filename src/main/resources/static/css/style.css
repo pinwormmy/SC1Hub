@@ -506,8 +506,8 @@ textarea.cke_source {
     padding-right: 2rem;
 }
 
-.sc-title-cell:hover .sc-title-slide,
-.boardList .title:hover .sc-title-slide {
+.sc-title-cell.is-overflowing:hover .sc-title-slide,
+.boardList .title.is-overflowing:hover .sc-title-slide {
     width: max-content;
     max-width: none;
     overflow: visible;
@@ -540,8 +540,8 @@ textarea.cke_source {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .sc-title-cell:hover .sc-title-slide,
-    .boardList .title:hover .sc-title-slide {
+    .sc-title-cell.is-overflowing:hover .sc-title-slide,
+    .boardList .title.is-overflowing:hover .sc-title-slide {
         animation: none;
         transform: none;
     }

@@ -4,6 +4,9 @@
         return;
     }
 
+    const feedEnabled = false;
+    let titleSlideRafId = 0;
+
     function findBodyRow(sectionInnerEl) {
         for (const child of Array.from(sectionInnerEl.children)) {
             if (!child.classList.contains('container') && !child.classList.contains('sc-container')) {
@@ -19,6 +22,10 @@
     }
 
     function ensureFeedListEl() {
+        if (!feedEnabled) {
+            return null;
+        }
+
         const sectionInnerEl = document.querySelector('.section-inner');
         if (!sectionInnerEl) {
             return null;
@@ -54,6 +61,38 @@
 
     if (!outputEl || !inputEl) {
         return;
+    }
+
+    function updateTitleSlideOverflow() {
+        titleSlideRafId = 0;
+        const slideEls = document.querySelectorAll('.sc-title-slide');
+        slideEls.forEach((slideEl) => {
+            const containerEl = slideEl.closest('.sc-title-cell') || slideEl.closest('.title');
+            if (!containerEl) {
+                return;
+            }
+            const isOverflowing = slideEl.scrollWidth > slideEl.clientWidth + 1;
+            containerEl.classList.toggle('is-overflowing', isOverflowing);
+        });
+    }
+
+    function scheduleTitleSlideUpdate() {
+        if (titleSlideRafId) {
+            cancelAnimationFrame(titleSlideRafId);
+        }
+        titleSlideRafId = requestAnimationFrame(updateTitleSlideOverflow);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleTitleSlideUpdate);
+    } else {
+        scheduleTitleSlideUpdate();
+    }
+
+    window.addEventListener('resize', scheduleTitleSlideUpdate);
+
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(scheduleTitleSlideUpdate).catch(() => {});
     }
 
     const COLLAPSED_CLASS = 'is-collapsed';
@@ -192,7 +231,7 @@
     }
 
     function enableFeedMode() {
-        if (feedModeEnabled) {
+        if (!feedEnabled || feedModeEnabled) {
             return;
         }
         feedModeEnabled = true;
@@ -1343,6 +1382,12 @@
     }
 
     async function openPost(boardTitle, postNum) {
+        if (!feedEnabled) {
+            const url = `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(postNum)}`;
+            window.location.href = url;
+            return;
+        }
+
         enableFeedMode();
         try {
             const boardDisplayName = await getBoardDisplayName(boardTitle);
@@ -1355,6 +1400,13 @@
     }
 
     async function openBoardList(boardTitle, recentPage) {
+        if (!feedEnabled) {
+            const query = recentPage ? `?recentPage=${encodeURIComponent(recentPage)}` : '';
+            const url = `/boards/${encodeURIComponent(boardTitle)}${query}`;
+            window.location.href = url;
+            return;
+        }
+
         enableFeedMode();
         try {
             const data = await fetchBoardListData(boardTitle, recentPage);
@@ -1377,6 +1429,11 @@
         if (!parsed) {
             return false;
         }
+        if (!feedEnabled) {
+            const url = `/boards/${encodeURIComponent(parsed.boardTitle)}/readPost?postNum=${encodeURIComponent(parsed.postNum)}`;
+            window.location.href = url;
+            return true;
+        }
         void openPost(parsed.boardTitle, parsed.postNum);
         return true;
     }
@@ -1385,6 +1442,12 @@
         const parsed = parseBoardUrl(urlOrPath);
         if (!parsed) {
             return false;
+        }
+        if (!feedEnabled) {
+            const query = parsed.recentPage ? `?recentPage=${encodeURIComponent(parsed.recentPage)}` : '';
+            const url = `/boards/${encodeURIComponent(parsed.boardTitle)}${query}`;
+            window.location.href = url;
+            return true;
         }
         void openBoardList(parsed.boardTitle, parsed.recentPage);
         return true;
@@ -1617,37 +1680,39 @@
         );
     }
 
-    document.addEventListener('click', (event) => {
-        if (shouldBypassClick(event)) {
-            return;
-        }
-
-        const anchor = event.target.closest('a[href]');
-        if (!anchor) {
-            return;
-        }
-
-        if (anchor.hasAttribute('data-sc-terminal-bypass') || anchor.getAttribute('target') === '_blank') {
-            return;
-        }
-
-        const rawHref = anchor.getAttribute('href') || '';
-        if (!rawHref || rawHref.startsWith('javascript:') || rawHref.startsWith('#')) {
-            return;
-        }
-
-        if (!isPostUrl(anchor.href)) {
-            if (!isBoardUrl(anchor.href)) {
+    if (feedEnabled) {
+        document.addEventListener('click', (event) => {
+            if (shouldBypassClick(event)) {
                 return;
             }
-            event.preventDefault();
-            openBoardFromUrl(anchor.href);
-            return;
-        }
 
-        event.preventDefault();
-        openPostFromUrl(anchor.href);
-    });
+            const anchor = event.target.closest('a[href]');
+            if (!anchor) {
+                return;
+            }
+
+            if (anchor.hasAttribute('data-sc-terminal-bypass') || anchor.getAttribute('target') === '_blank') {
+                return;
+            }
+
+            const rawHref = anchor.getAttribute('href') || '';
+            if (!rawHref || rawHref.startsWith('javascript:') || rawHref.startsWith('#')) {
+                return;
+            }
+
+            if (!isPostUrl(anchor.href)) {
+                if (!isBoardUrl(anchor.href)) {
+                    return;
+                }
+                event.preventDefault();
+                openBoardFromUrl(anchor.href);
+                return;
+            }
+
+            event.preventDefault();
+            openPostFromUrl(anchor.href);
+        });
+    }
 
     terminalEl.addEventListener('mousedown', (event) => {
         const interactiveEl = event.target?.closest?.('input, textarea, select, button, a');

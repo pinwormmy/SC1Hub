@@ -11,8 +11,8 @@
                    <!-- 테이블 헤더 -->
                    <thead>
                        <tr>
-                           <th class="post-num hide-on-mobile" style="width: 10%;">번 호</th>
-                           <th style="title width: 56%;">제 &nbsp목</th>
+                           <th class="post-num hide-on-mobile" style="width: 7%;">번 호</th>
+                           <th style="width: 54%;">제 &nbsp목</th>
                            <th class="writer hide-on-mobile" style="width: 10%;">작성자</th>
                            <th class="date hide-on-mobile" style="width: 10%;">날 짜</th>
                            <th class="views hide-on-mobile" style="width: 7%;">조회</th>
