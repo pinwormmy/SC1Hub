@@ -3,6 +3,8 @@ html {
 }
 :root {
     --sc-font-family: "NeoDungGeunMo Pro", "NeoDungGeunMo", sans-serif;
+    --sc-pc-invert-bg: #f4f4f4;
+    --sc-pc-invert-text: #090909;
 }
 *, *::before, *::after {
     border-radius: 0 !important;
@@ -178,6 +180,75 @@ button.cancel-btn {
 }
 button.cancel-btn:hover {
     color: grey;
+}
+
+::selection {
+    background-color: var(--sc-pc-highlight-bg);
+    color: var(--sc-pc-highlight-text);
+}
+::-moz-selection {
+    background-color: var(--sc-pc-highlight-bg);
+    color: var(--sc-pc-highlight-text);
+}
+
+a:hover,
+a:focus-visible,
+.btn:hover,
+.btn:focus-visible,
+button:hover,
+button:focus-visible,
+button.cancel-btn:hover,
+button.cancel-btn:focus-visible,
+summary:hover,
+summary:focus-visible {
+    color: var(--sc-pc-invert-text) !important;
+    background-color: var(--sc-pc-invert-bg);
+    border-color: transparent;
+    box-shadow: none;
+    text-shadow: none;
+    outline: none;
+}
+
+a:hover *,
+a:focus-visible *,
+.btn:hover *,
+.btn:focus-visible *,
+button:hover *,
+button:focus-visible *,
+summary:hover *,
+summary:focus-visible * {
+    color: var(--sc-pc-invert-text) !important;
+}
+
+a:active,
+.btn:active,
+button:active,
+summary:active {
+    color: var(--sc-pc-invert-text) !important;
+    background-color: var(--sc-pc-invert-bg);
+    border-color: transparent;
+    box-shadow: none;
+    text-shadow: none;
+    outline: none;
+}
+
+a:active *,
+.btn:active *,
+button:active *,
+summary:active * {
+    color: var(--sc-pc-invert-text) !important;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    color: var(--sc-pc-invert-text);
+    background-color: var(--sc-pc-invert-bg);
+    border-color: transparent;
+    box-shadow: none;
+    text-shadow: none;
+    outline: none;
+    caret-color: var(--sc-pc-invert-text);
 }
 .section {
   padding: 80px 0;
