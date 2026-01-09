@@ -128,6 +128,15 @@ a, a:focus, a:hover {
 .sc-menu-link--protoss {
     color: #ffff00;
 }
+.sc-title-clip--vsT {
+    color: #00ffff;
+}
+.sc-title-clip--vsZ {
+    color: #ea40f7;
+}
+.sc-title-clip--vsP {
+    color: #ffff00;
+}
 input {
     height: 50px;
     border: none;

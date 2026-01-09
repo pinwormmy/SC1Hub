@@ -1,4 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
     <!DOCTYPE html>
     <html>
 
@@ -51,10 +52,22 @@
                                         </legend>
                                         <table class="boardList sc-ellipsis-table" style="width: 100%;">
                                             <c:forEach var="board" items="${section.boards}">
+                                                <c:set var="boardColorClass" value="" />
+                                                <c:choose>
+                                                    <c:when test="${fn:contains(board.boardTitle, 'VsT')}">
+                                                        <c:set var="boardColorClass" value="sc-title-clip--vsT" />
+                                                    </c:when>
+                                                    <c:when test="${fn:contains(board.boardTitle, 'VsZ')}">
+                                                        <c:set var="boardColorClass" value="sc-title-clip--vsZ" />
+                                                    </c:when>
+                                                    <c:when test="${fn:contains(board.boardTitle, 'VsP')}">
+                                                        <c:set var="boardColorClass" value="sc-title-clip--vsP" />
+                                                    </c:when>
+                                                </c:choose>
                                                 <c:forEach var="post" items="${board.posts}" end="4">
                                                     <tr>
                                                         <td class="sc-title-cell">
-                                                            <a class="sc-title-clip"
+                                                            <a class="sc-title-clip ${boardColorClass}"
                                                                href="/boards/${board.boardTitle}/readPost?postNum=${post.postNum}"
                                                                data-menu-number="${menuIndex}">
                                                                 <span class="sc-title-slide">${menuIndex}. <c:out value="${post.title}" /></span>
