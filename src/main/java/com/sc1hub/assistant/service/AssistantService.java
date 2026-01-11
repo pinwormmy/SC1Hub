@@ -29,6 +29,20 @@ public class AssistantService {
             "빌드", "빌드오더", "운영", "공략", "강의",
             "recommend", "recommendation", "how", "why", "what", "where", "please", "help"
     ));
+    private static final List<String> KOREAN_PARTICLE_SUFFIXES = Arrays.asList(
+            "으로부터", "로부터", "에게서", "한테서",
+            "으로써", "로써", "으로서", "로서",
+            "에서", "에게", "께서", "께", "한테",
+            "부터", "까지", "으로", "로",
+            "의", "은", "는", "이", "가", "을", "를", "과", "와", "도", "만", "에"
+    );
+    private static final Set<String> FACT_KEYWORDS = new HashSet<>(Arrays.asList(
+            "공격", "공격력", "방어", "방어력", "체력", "hp", "실드", "쉴드", "사거리", "사정거리", "시야",
+            "이동속도", "속도", "공속", "공격속도", "쿨다운", "비용", "가격", "미네랄", "가스", "자원", "서플라이",
+            "업그레이드", "업글", "기본", "특성", "능력치", "능력", "스탯", "스펙", "유닛",
+            "unit", "stats", "stat", "damage", "armor", "health", "shield", "range", "speed", "cooldown", "cost", "supply"
+    ));
+    private static final int FACT_BOARD_SCORE_BONUS = 2;
     private static final String BOARD_PVP = "pvspboard";
     private static final String BOARD_PVT = "pvstboard";
     private static final String BOARD_PVZ = "pvszboard";
@@ -82,11 +96,12 @@ public class AssistantService {
 
         Set<String> boardScope = resolveBoardScope(normalizedMessage);
         List<String> keywords = extractKeywords(normalizedMessage);
-        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope);
+        boolean factQuery = isFactQuery(normalizedMessage, keywords);
+        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope, factQuery);
 
         List<CandidatePost> candidates = Collections.emptyList();
         if (shouldLoadKeywordCandidates(keywords, ragRetrieval)) {
-            candidates = findCandidates(keywords, boardScope, resolveCandidateLimit());
+            candidates = findCandidates(keywords, boardScope, resolveCandidateLimit(), factQuery);
         }
 
         String prompt;
@@ -125,7 +140,10 @@ public class AssistantService {
         return response;
     }
 
-    private RagRetrieval tryRetrieveWithRag(String normalizedMessage, List<String> keywords, Set<String> boardScope) {
+    private RagRetrieval tryRetrieveWithRag(String normalizedMessage,
+                                            List<String> keywords,
+                                            Set<String> boardScope,
+                                            boolean preferFactBoards) {
         if (ragSearchService == null || ragProperties == null || !ragSearchService.isEnabled()) {
             return null;
         }
@@ -137,6 +155,12 @@ public class AssistantService {
             List<AssistantRagSearchService.Match> filtered = filterRagMatches(matches, keywords, boardScope);
             if (filtered.isEmpty()) {
                 return null;
+            }
+            if (preferFactBoards) {
+                filtered = preferFactBoardMatches(filtered);
+                if (filtered.isEmpty()) {
+                    return null;
+                }
             }
             List<AssistantRelatedPostDTO> relatedPosts = buildRelatedPostsFromMatches(filtered, assistantProperties.getMaxRelatedPosts());
             return new RagRetrieval(filtered, relatedPosts);
@@ -616,7 +640,10 @@ public class AssistantService {
         }
     }
 
-    private List<CandidatePost> findCandidates(List<String> keywords, Set<String> boardScope, int maxResults) {
+    private List<CandidatePost> findCandidates(List<String> keywords,
+                                               Set<String> boardScope,
+                                               int maxResults,
+                                               boolean preferFactBoards) {
         if (maxResults <= 0 || keywords == null || keywords.isEmpty()) {
             return Collections.emptyList();
         }
@@ -624,6 +651,26 @@ public class AssistantService {
         List<BoardListDTO> boards = getBoardListCached();
         if (boards == null || boards.isEmpty()) {
             return Collections.emptyList();
+        }
+
+        Set<String> factBoards = preferFactBoards ? resolveFactBoards() : Collections.emptySet();
+        List<BoardListDTO> orderedBoards = boards;
+        if (preferFactBoards && !factBoards.isEmpty()) {
+            List<BoardListDTO> preferred = new ArrayList<>();
+            List<BoardListDTO> others = new ArrayList<>();
+            for (BoardListDTO board : boards) {
+                String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+                if (factBoards.contains(boardTitle)) {
+                    preferred.add(board);
+                } else {
+                    others.add(board);
+                }
+            }
+            if (!preferred.isEmpty()) {
+                orderedBoards = new ArrayList<>(preferred.size() + others.size());
+                orderedBoards.addAll(preferred);
+                orderedBoards.addAll(others);
+            }
         }
 
         List<String> normalizedKeywords = new ArrayList<>();
@@ -640,7 +687,7 @@ public class AssistantService {
         Comparator<CandidatePost> comparator = candidateComparator();
         PriorityQueue<CandidatePost> heap = new PriorityQueue<>(maxResults, (a, b) -> comparator.compare(b, a));
 
-        for (BoardListDTO board : boards) {
+        for (BoardListDTO board : orderedBoards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
             if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
                 continue;
@@ -663,6 +710,9 @@ public class AssistantService {
                     String titleLower = safeLower(post.getTitle());
                     String contentLower = safeLower(stripHtmlToText(post.getContent()));
                     int score = scoreCandidate(titleLower, contentLower, normalizedKeywords);
+                    if (preferFactBoards && factBoards.contains(boardTitle)) {
+                        score += FACT_BOARD_SCORE_BONUS;
+                    }
                     CandidatePost candidate = new CandidatePost(boardTitle, post, score);
                     if (heap.size() < maxResults) {
                         heap.add(candidate);
@@ -785,6 +835,73 @@ public class AssistantService {
             return prompt;
         }
         return prompt.substring(0, assistantProperties.getMaxPromptChars());
+    }
+
+    private boolean isFactQuery(String message, List<String> keywords) {
+        if (!StringUtils.hasText(message) && (keywords == null || keywords.isEmpty())) {
+            return false;
+        }
+        String compact = safeLower(message).replaceAll("\\s+", "");
+        if (StringUtils.hasText(compact)) {
+            for (String keyword : FACT_KEYWORDS) {
+                if (!StringUtils.hasText(keyword)) {
+                    continue;
+                }
+                if (compact.contains(keyword.replaceAll("\\s+", ""))) {
+                    return true;
+                }
+            }
+        }
+        if (keywords != null) {
+            for (String keyword : keywords) {
+                if (!StringUtils.hasText(keyword)) {
+                    continue;
+                }
+                if (FACT_KEYWORDS.contains(keyword)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private Set<String> resolveFactBoards() {
+        if (assistantProperties == null) {
+            return Collections.emptySet();
+        }
+        List<String> boards = assistantProperties.getFactBoards();
+        if (boards == null || boards.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String board : boards) {
+            if (!StringUtils.hasText(board)) {
+                continue;
+            }
+            normalized.add(normalizeBoardTitle(board));
+        }
+        return normalized;
+    }
+
+    private List<AssistantRagSearchService.Match> preferFactBoardMatches(List<AssistantRagSearchService.Match> matches) {
+        if (matches == null || matches.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> factBoards = resolveFactBoards();
+        if (factBoards.isEmpty()) {
+            return matches;
+        }
+        List<AssistantRagSearchService.Match> preferred = new ArrayList<>();
+        for (AssistantRagSearchService.Match match : matches) {
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            String boardTitle = normalizeBoardTitle(match.getChunk().getBoardTitle());
+            if (factBoards.contains(boardTitle)) {
+                preferred.add(match);
+            }
+        }
+        return preferred.isEmpty() ? matches : preferred;
     }
 
     private boolean isExcludedBoard(String boardTitle) {
@@ -937,13 +1054,17 @@ public class AssistantService {
             if (!StringUtils.hasText(token)) {
                 continue;
             }
-            if (token.length() < 2) {
+            String normalizedToken = normalizeKeywordToken(token);
+            if (!StringUtils.hasText(normalizedToken)) {
                 continue;
             }
-            if (STOPWORDS.contains(token)) {
+            if (normalizedToken.length() < 2) {
                 continue;
             }
-            unique.add(token);
+            if (STOPWORDS.contains(normalizedToken)) {
+                continue;
+            }
+            unique.add(normalizedToken);
         }
 
         List<String> keywords = new ArrayList<>(unique);
@@ -952,6 +1073,52 @@ public class AssistantService {
             return keywords.subList(0, 6);
         }
         return keywords;
+    }
+
+    private static String normalizeKeywordToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            return "";
+        }
+        String normalized = token.toLowerCase(Locale.ROOT).trim();
+        if (!hasKorean(normalized)) {
+            return normalized;
+        }
+        return stripKoreanParticles(normalized);
+    }
+
+    private static boolean hasKorean(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch >= 0xAC00 && ch <= 0xD7A3) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String stripKoreanParticles(String token) {
+        String result = token;
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (String suffix : KOREAN_PARTICLE_SUFFIXES) {
+                if (!StringUtils.hasText(suffix)) {
+                    continue;
+                }
+                if (result.length() <= suffix.length() + 1) {
+                    continue;
+                }
+                if (result.endsWith(suffix)) {
+                    result = result.substring(0, result.length() - suffix.length());
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     private static String stripHtmlToText(String html) {

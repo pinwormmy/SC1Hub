@@ -11,10 +11,14 @@
         <textarea name="content" id="content"></textarea><br>
 
         <script type="text/javascript">
-            CKEDITOR.replace('content', {
-                filebrowserUploadUrl:'/imageUpload',
-                customConfig: '/ckeditor/config.js'
-            });
+            (function () {
+                var contextPath = '${pageContext.request.contextPath}';
+                CKEDITOR.replace('content', {
+                    filebrowserUploadUrl: contextPath + '/imageUpload',
+                    filebrowserUploadMethod: 'xhr',
+                    customConfig: contextPath + '/ckeditor/config.js'
+                });
+            })();
         </script>
 
         <button class="pull-left btn btn-theme" accesskey="s">게시하기(S)</button>

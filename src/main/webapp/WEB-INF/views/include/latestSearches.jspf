@@ -1,0 +1,122 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<style>
+.latest-searches {
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+</style>
+
+<div class="latest-searches sc-col-12 sc-title-cell" id="latestSearches"></div>
+
+<script>
+(() => {
+    const containerEl = document.getElementById('latestSearches');
+    if (!containerEl) {
+        return;
+    }
+
+    const stateKey = '__scLatestSearchesState';
+    const state = window[stateKey] ?? { items: [], index: 0, timerId: null, loaded: false, lastText: '' };
+    window[stateKey] = state;
+
+    function render() {
+        if (!Array.isArray(state.items) || state.items.length === 0) {
+            containerEl.innerHTML = '';
+            containerEl.hidden = true;
+            return;
+        }
+
+        containerEl.hidden = false;
+        const current = state.items[state.index % state.items.length];
+        const text = String(current?.message ?? '').trim();
+        if (!text) {
+            containerEl.innerHTML = '';
+            return;
+        }
+
+        containerEl.innerHTML = '';
+        const clipEl = document.createElement('div');
+        clipEl.className = 'sc-title-clip';
+        const slideEl = document.createElement('span');
+        slideEl.className = 'sc-title-slide';
+        slideEl.textContent = '[최신검색] ' + text;
+        clipEl.appendChild(slideEl);
+        containerEl.appendChild(clipEl);
+
+        if (text !== state.lastText) {
+            state.lastText = text;
+            requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+        }
+    }
+
+    function stopRotation() {
+        if (state.timerId) {
+            window.clearInterval(state.timerId);
+        }
+        state.timerId = null;
+    }
+
+    function startRotation() {
+        stopRotation();
+        if (!Array.isArray(state.items) || state.items.length <= 1) {
+            return;
+        }
+        state.timerId = window.setInterval(() => {
+            state.index = (state.index + 1) % state.items.length;
+            render();
+        }, 3000);
+    }
+
+    async function load() {
+        stopRotation();
+        try {
+            const response = await fetch('/api/assistant/latest-searches', {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+            });
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok) {
+                throw new Error('Failed to load latest searches: ' + response.status);
+            }
+            if (!contentType.includes('application/json')) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    'Latest searches response is not JSON (' + contentType + '): ' + bodyText.slice(0, 80),
+                );
+            }
+
+            const data = await response.json();
+            state.items = Array.isArray(data) ? data : [];
+            state.index = 0;
+            render();
+            startRotation();
+        } catch (error) {
+            containerEl.innerHTML = '';
+            containerEl.hidden = true;
+            console.error('최신 검색어 로딩 에러: ', error);
+        }
+    }
+
+    window.scLatestSearches = window.scLatestSearches ?? {};
+    window.scLatestSearches.load = load;
+    window.scLatestSearches.render = render;
+    window.scLatestSearches.startRotation = startRotation;
+    window.scLatestSearches.stopRotation = stopRotation;
+    window.scLatestSearches.el = containerEl;
+
+    if (!state.loaded) {
+        state.loaded = true;
+        const start = () => void load();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start, { once: true });
+        } else {
+            start();
+        }
+    } else {
+        render();
+        startRotation();
+    }
+})();
+</script>

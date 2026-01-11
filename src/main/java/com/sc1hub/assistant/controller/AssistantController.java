@@ -3,7 +3,9 @@ package com.sc1hub.assistant.controller;
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantChatRequestDTO;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
+import com.sc1hub.assistant.dto.AssistantSearchLogDTO;
 import com.sc1hub.assistant.service.AssistantRateLimiter;
+import com.sc1hub.assistant.service.AssistantSearchLogService;
 import com.sc1hub.assistant.service.AssistantService;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/assistant")
@@ -28,13 +32,16 @@ public class AssistantController {
     private final AssistantService assistantService;
     private final AssistantProperties assistantProperties;
     private final AssistantRateLimiter assistantRateLimiter;
+    private final AssistantSearchLogService searchLogService;
 
     public AssistantController(AssistantService assistantService,
                                AssistantProperties assistantProperties,
-                               AssistantRateLimiter assistantRateLimiter) {
+                               AssistantRateLimiter assistantRateLimiter,
+                               AssistantSearchLogService searchLogService) {
         this.assistantService = assistantService;
         this.assistantProperties = assistantProperties;
         this.assistantRateLimiter = assistantRateLimiter;
+        this.searchLogService = searchLogService;
     }
 
     @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -58,6 +65,10 @@ public class AssistantController {
         if (assistantProperties.isRequireLogin() && member == null) {
             response.setError("로그인 후 이용할 수 있습니다.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
+
+        if (searchLogService != null) {
+            searchLogService.recordSearch(message);
         }
 
         try {
@@ -96,6 +107,17 @@ public class AssistantController {
             response.setError("AI 응답 생성 중 오류가 발생했습니다.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
+    }
+
+    @GetMapping(value = "/latest-searches", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<AssistantSearchLogDTO>> latestSearches() {
+        if (!assistantProperties.isEnabled()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(java.util.Collections.emptyList());
+        }
+        if (searchLogService == null) {
+            return ResponseEntity.ok(java.util.Collections.emptyList());
+        }
+        return ResponseEntity.ok(searchLogService.getLatestSearches());
     }
 
     private String resolveUserTypeLabel(MemberDTO member) {

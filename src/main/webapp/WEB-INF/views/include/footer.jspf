@@ -30,8 +30,9 @@
 
 <div class="container">
 	    <div class="row">
-	        <div class="col-sm-12">
+        <div class="col-sm-12">
                 <div class="sc-terminal-wrap">
+                    <%@include file="./latestSearches.jspf" %>
                     <div class="sc-terminal__notice">단축키사용(ALT+단축키) &nbsp  게시물이동(초기화면 숫자입력) &nbsp AI사용(검색어 및 질문입력)</div>
                     <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
                         <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"></div>

@@ -40,6 +40,23 @@ body {
         font-size: 24px;
     }
 }
+@media (min-width: 769px) and (max-width: 1024px) {
+    html {
+        font-size: 18px;
+    }
+    body {
+        font-size: 18px;
+    }
+    h1, h2, h3 {
+        font-size: 28px;
+    }
+    .section {
+        padding: 60px 0;
+    }
+    .section-inner {
+        min-height: 720px;
+    }
+}
 .section-wrapper {
     min-height: 850px;
 }
@@ -401,6 +418,14 @@ textarea.cke_source {
 }
 .sc-terminal__content {
     margin-top: 6px;
+}
+.sc-terminal__related {
+    margin-top: 8px;
+}
+.sc-terminal__related ol {
+    margin-top: 6px;
+    margin-bottom: 0;
+    padding-left: 22px;
 }
 @keyframes sc-terminal-blink {
     0%, 49% { opacity: 1; }

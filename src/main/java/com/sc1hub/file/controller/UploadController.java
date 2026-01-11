@@ -2,12 +2,14 @@ package com.sc1hub.file.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
@@ -17,7 +19,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -27,7 +28,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -47,58 +50,45 @@ public class UploadController {
     private volatile Path resolvedUploadPath;
     private volatile Path resolvedImageUploadPath;
 
-    @PostMapping(value="/imageUpload")
-    public void imageUpload(HttpServletRequest request,
-                            HttpServletResponse response, MultipartHttpServletRequest multiFile
-            , @RequestParam MultipartFile upload) {
-        // 랜덤 문자 생성
+    @PostMapping(value = "/imageUpload", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> imageUpload(HttpServletRequest request,
+            @RequestParam("upload") MultipartFile upload) {
+        if (upload == null || upload.isEmpty()) {
+            return errorResponse("업로드할 파일이 없습니다.");
+        }
         UUID uid = UUID.randomUUID();
-        //인코딩
-        response.setCharacterEncoding("utf-8");
-        response.setContentType("text/html;charset=utf-8");
-        PrintWriter printWriter = null;
+        Path basePath;
         try {
-            Path basePath = getPrimaryUploadBasePath();
-            if (basePath == null) {
-                log.error("Upload path is not configured.");
-                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                return;
-            }
-            //파일 이름 가져오기
-            String fileName = upload.getOriginalFilename();
-            String safeFileName = sanitizeFileName(normalizeFileName(fileName));
-            byte[] bytes = upload.getBytes();
-
+            basePath = getPrimaryUploadBasePath();
+        } catch (RuntimeException e) {
+            log.error("Failed to resolve upload path.", e);
+            return errorResponse("업로드 경로를 확인할 수 없습니다.");
+        }
+        if (basePath == null) {
+            log.error("Upload path is not configured.");
+            return errorResponse("업로드 경로가 설정되어 있지 않습니다.");
+        }
+        String fileName = upload.getOriginalFilename();
+        String safeFileName = sanitizeFileName(normalizeFileName(fileName));
+        try {
             Files.createDirectories(basePath);
             Path targetPath = resolveUploadTarget(basePath, uid.toString(), safeFileName);
             if (targetPath == null) {
                 log.error("Failed to resolve upload path. basePath={}, fileName={}", basePath, safeFileName);
-                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                return;
+                return errorResponse("업로드 경로 생성에 실패했습니다.");
             }
             log.info("img upload path: {}", targetPath);
             try (OutputStream out = Files.newOutputStream(targetPath)) {
-                out.write(bytes);
+                out.write(upload.getBytes());
                 out.flush();
             }
-
-            request.getParameter("CKEditorFuncNum");
-            printWriter = response.getWriter();
             String encodedFileName = URLEncoder.encode(safeFileName, StandardCharsets.UTF_8.name());
-            String fileUrl = request.getContextPath() + "/ckImgSubmit?uid=" + uid + "&fileName=" + encodedFileName; // 작성화면
-            // 업로드시 메시지 출력
-            printWriter.println("{\"filename\" : \"" + safeFileName + "\", \"uploaded\" : 1, \"url\":\"" + fileUrl + "\"}");
-            printWriter.flush();
+            String fileUrl = request.getContextPath() + "/ckImgSubmit?uid=" + uid + "&fileName=" + encodedFileName;
+            return ResponseEntity.ok(buildSuccessResponse(safeFileName, fileUrl));
         } catch (IOException e) {
             log.error("Image upload failed.", e);
-        } finally {
-            try {
-                if (printWriter != null) {
-                    printWriter.close();
-                }
-            } catch (Exception e) {
-                log.warn("Failed to close upload stream.", e);
-            }
+            return errorResponse("이미지 업로드에 실패했습니다.");
         }
     }
 
@@ -315,5 +305,26 @@ public class UploadController {
             log.warn("Failed to redirect image request. uid={}, fileName={}", uid, fileName, e);
             return false;
         }
+    }
+
+    private ResponseEntity<Map<String, Object>> errorResponse(String message) {
+        return ResponseEntity.ok(buildErrorResponse(message));
+    }
+
+    private Map<String, Object> buildSuccessResponse(String fileName, String url) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("uploaded", 1);
+        body.put("fileName", fileName);
+        body.put("url", url);
+        return body;
+    }
+
+    private Map<String, Object> buildErrorResponse(String message) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("uploaded", 0);
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("message", message);
+        error.put("error", detail);
+        return error;
     }
 }

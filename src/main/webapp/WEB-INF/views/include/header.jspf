@@ -110,10 +110,48 @@
     }
     .super-top-menu ul {
         justify-content: flex-end;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        row-gap: 2px;
     }
     .super-top-menu ul li {
-        margin-right: 5px;
-        font-size: 20px;
+        margin: 2px 6px 2px 0;
+        font-size: 16px;
+        line-height: 1.2;
+        white-space: nowrap;
+        text-align: right;
+    }
+    .super-top-menu ul li a {
+        font-size: 16px;
+    }
+    .super-top-menu ul li.login-status {
+        flex: 0 0 100%;
+        margin: 0 0 2px 0;
+        text-align: right;
+    }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+    .navbar-wrapper {
+        height: 70px;
+    }
+    .this-header {
+        padding: 6px 10px;
+    }
+    .title-container .full-title {
+        font-size: 36px;
+    }
+    .super-top-menu ul {
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+    .super-top-menu ul li {
+        margin-right: 12px;
+        font-size: 18px;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .super-top-menu ul li a {
+        font-size: 18px;
     }
 }
 </style>
@@ -135,9 +173,9 @@
                         <li><a href="/signAgreement">[회원가입]</a></li>
                     </c:if>
                     <c:if test="${member != null}">
-                        <li>${member.nickName}님 로그인 중 : </li>
-                        <li><a href="/logout">[로그아웃]</a></li>
-                        <li><a href="javascript:goMyPage()">[회원정보]</a></li>
+                        <li class="login-status">${member.nickName}님 로그인 중 :</li>
+                        <li class="login-action"><a href="/logout">[로그아웃]</a></li>
+                        <li class="login-action"><a href="javascript:goMyPage()">[회원정보]</a></li>
                     </c:if>
                 </ul>
             </div>

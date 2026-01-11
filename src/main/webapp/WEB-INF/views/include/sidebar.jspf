@@ -28,6 +28,48 @@
 .basic-menu li {
     margin : 15px;
 }
+@media screen and (max-width: 600px) {
+    .basic-menu li {
+        margin: 5px;
+    }
+    .menu-header {
+        font-size: 16px;
+        padding: 6px 4px;
+    }
+    .menu-toggle-hint {
+        font-size: 12px;
+    }
+    .menu-content ul {
+        padding-left: 16px;
+        margin: 0;
+    }
+    .menu-content a {
+        display: inline-block;
+        font-size: 15px;
+        line-height: 1.3;
+    }
+}
+@media screen and (min-width: 769px) and (max-width: 1024px) {
+    .basic-menu li {
+        margin: 10px 12px;
+    }
+    .menu-header {
+        font-size: 18px;
+        padding: 6px 4px;
+    }
+    .menu-toggle-hint {
+        font-size: 13px;
+    }
+    .menu-content ul {
+        padding-left: 18px;
+        margin: 0;
+    }
+    .menu-content a {
+        display: inline-block;
+        font-size: 17px;
+        line-height: 1.3;
+    }
+}
 </style>
 
 <div class="sc-col-3">

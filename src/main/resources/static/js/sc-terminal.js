@@ -311,6 +311,45 @@
         return div.innerHTML;
     }
 
+    async function buildRelatedPostsHtml(related) {
+        if (!Array.isArray(related) || related.length === 0) {
+            return '';
+        }
+
+        const boardNameCache = new Map();
+        const itemsHtml = await Promise.all(
+            related.map(async (post) => {
+                const boardTitle = String(post?.boardTitle ?? '');
+                const postNum = Number.parseInt(String(post?.postNum ?? ''), 10);
+                const title = String(post?.title ?? '');
+                const url = String(post?.url ?? '');
+
+                if (!boardTitle || Number.isNaN(postNum)) {
+                    return '';
+                }
+
+                let boardDisplayName = boardTitle;
+                if (boardNameCache.has(boardTitle)) {
+                    boardDisplayName = boardNameCache.get(boardTitle);
+                } else {
+                    boardDisplayName = await getBoardDisplayName(boardTitle);
+                    boardNameCache.set(boardTitle, boardDisplayName);
+                }
+
+                const href = url || `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(postNum)}`;
+                const label = `[${boardDisplayName}] ${postNum}번 | ${title || '제목 없음'}`;
+                return `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></li>`;
+            }),
+        );
+
+        const filteredItems = itemsHtml.filter(Boolean);
+        if (!filteredItems.length) {
+            return '';
+        }
+
+        return `<div>${escapeHtml('[관련 게시물]')}</div><ol>${filteredItems.join('')}</ol>`;
+    }
+
     function createDivider() {
         const dividerEl = document.createElement('hr');
         dividerEl.className = 'sc-divider';
@@ -354,6 +393,12 @@
             itemEl.appendChild(createDivider());
         }
         appendLatestPostsInFeed(itemEl);
+    }
+
+    function refreshLatestSearches() {
+        if (window.scLatestSearches && typeof window.scLatestSearches.load === 'function') {
+            window.scLatestSearches.load();
+        }
     }
 
     function formatMmDd(dateText) {
@@ -1613,46 +1658,17 @@
                 pendingContentEl.innerHTML = usageHtml + answerHtml;
             }
 
+            const relatedHtml = await buildRelatedPostsHtml(related);
+
             if (relatedEl) {
-                if (!related.length) {
+                if (!relatedHtml) {
                     relatedEl.hidden = true;
                 } else {
-                    const boardNameCache = new Map();
-                    const itemsHtml = await Promise.all(
-                        related.map(async (post) => {
-                            const boardTitle = String(post?.boardTitle ?? '');
-                            const postNum = Number.parseInt(String(post?.postNum ?? ''), 10);
-                            const title = String(post?.title ?? '');
-                            const url = String(post?.url ?? '');
-
-                            if (!boardTitle || Number.isNaN(postNum)) {
-                                return '';
-                            }
-
-                            let boardDisplayName = boardTitle;
-                            if (boardNameCache.has(boardTitle)) {
-                                boardDisplayName = boardNameCache.get(boardTitle);
-                            } else {
-                                boardDisplayName = await getBoardDisplayName(boardTitle);
-                                boardNameCache.set(boardTitle, boardDisplayName);
-                            }
-
-                            const href = url || `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(
-                                postNum,
-                            )}`;
-                            const label = `[${boardDisplayName}] ${postNum}번 | ${title || '제목 없음'}`;
-                            return `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></li>`;
-                        }),
-                    );
-
-                    const filteredItems = itemsHtml.filter(Boolean);
-                    if (!filteredItems.length) {
-                        relatedEl.hidden = true;
-                    } else {
-                        relatedEl.hidden = false;
-                        relatedEl.innerHTML = `<div>${escapeHtml('[관련 게시물]')}</div><ol>${filteredItems.join('')}</ol>`;
-                    }
+                    relatedEl.hidden = false;
+                    relatedEl.innerHTML = relatedHtml;
                 }
+            } else if (pendingContentEl && relatedHtml) {
+                pendingContentEl.innerHTML += `<div class="sc-terminal__related">${relatedHtml}</div>`;
             }
         } catch (e) {
             const errorMessage = 'AI 응답을 불러오지 못했습니다.';
@@ -1665,6 +1681,8 @@
                 return;
             }
             appendSystemMessage(errorMessage);
+        } finally {
+            refreshLatestSearches();
         }
     }
 
