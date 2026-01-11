@@ -5,6 +5,22 @@
     white-space: nowrap;
     overflow: hidden;
 }
+
+.latest-searches__button {
+    background: none;
+    border: 0;
+    padding: 0;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+}
+
+.latest-searches__button:focus {
+    outline: 1px dotted currentColor;
+    outline-offset: 2px;
+}
 </style>
 
 <div class="latest-searches sc-col-12 sc-title-cell" id="latestSearches"></div>
@@ -36,13 +52,15 @@
         }
 
         containerEl.innerHTML = '';
-        const clipEl = document.createElement('div');
-        clipEl.className = 'sc-title-clip';
+        const buttonEl = document.createElement('button');
+        buttonEl.type = 'button';
+        buttonEl.className = 'sc-title-clip latest-searches__button';
+        buttonEl.setAttribute('data-latest-search', text);
         const slideEl = document.createElement('span');
         slideEl.className = 'sc-title-slide';
         slideEl.textContent = '[최신검색] ' + text;
-        clipEl.appendChild(slideEl);
-        containerEl.appendChild(clipEl);
+        buttonEl.appendChild(slideEl);
+        containerEl.appendChild(buttonEl);
 
         if (text !== state.lastText) {
             state.lastText = text;
@@ -99,12 +117,37 @@
         }
     }
 
+    function handleClick(event) {
+        const targetEl = event.target.closest('[data-latest-search]');
+        if (!targetEl) {
+            return;
+        }
+        event.preventDefault();
+        const value = String(targetEl.getAttribute('data-latest-search') || '').trim();
+        if (!value) {
+            return;
+        }
+        const terminalEl = document.getElementById('scTerminal');
+        if (terminalEl) {
+            terminalEl.classList.remove('is-collapsed');
+        }
+        const inputEl = document.getElementById('scTerminalInput');
+        if (!inputEl) {
+            return;
+        }
+        inputEl.value = value;
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        inputEl.focus();
+        inputEl.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }
+
     window.scLatestSearches = window.scLatestSearches ?? {};
     window.scLatestSearches.load = load;
     window.scLatestSearches.render = render;
     window.scLatestSearches.startRotation = startRotation;
     window.scLatestSearches.stopRotation = stopRotation;
     window.scLatestSearches.el = containerEl;
+    containerEl.addEventListener('click', handleClick);
 
     if (!state.loaded) {
         state.loaded = true;
