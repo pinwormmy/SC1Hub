@@ -39,6 +39,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: clip;
+    --sc-title-gap: 0;
     padding-right: 0;
 }
 

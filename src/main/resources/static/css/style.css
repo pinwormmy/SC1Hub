@@ -527,16 +527,32 @@ textarea.cke_source {
     text-overflow: clip;
     white-space: nowrap;
     vertical-align: top;
-    will-change: transform;
-    padding-right: 2rem;
+    --sc-title-gap: 2rem;
+    padding-right: var(--sc-title-gap);
 }
 
-.sc-title-cell.is-overflowing:hover .sc-title-slide,
-.boardList .title.is-overflowing:hover .sc-title-slide {
-    width: max-content;
-    max-width: none;
-    overflow: visible;
-    text-overflow: clip;
+.sc-title-slide__inner {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    gap: var(--sc-title-gap);
+    will-change: transform;
+}
+
+.sc-title-slide__item {
+    flex: 0 0 auto;
+}
+
+.sc-title-slide__item + .sc-title-slide__item {
+    display: none;
+}
+
+.sc-title-slide.is-marquee .sc-title-slide__item + .sc-title-slide__item {
+    display: inline-block;
+}
+
+.sc-title-cell.is-overflowing:hover .sc-title-slide.is-marquee .sc-title-slide__inner,
+.boardList .title.is-overflowing:hover .sc-title-slide.is-marquee .sc-title-slide__inner {
     animation: sc-title-marquee 8s linear infinite;
 }
 
@@ -551,7 +567,7 @@ textarea.cke_source {
 
 @media screen and (max-width: 600px) {
     .sc-title-slide {
-        padding-right: 1rem;
+        --sc-title-gap: 1rem;
     }
 }
 
@@ -560,15 +576,18 @@ textarea.cke_source {
         transform: translateX(0);
     }
     100% {
-        transform: translateX(-100%);
+        transform: translateX(calc(-50% - (var(--sc-title-gap) / 2)));
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .sc-title-cell.is-overflowing:hover .sc-title-slide,
-    .boardList .title.is-overflowing:hover .sc-title-slide {
+    .sc-title-cell.is-overflowing:hover .sc-title-slide.is-marquee .sc-title-slide__inner,
+    .boardList .title.is-overflowing:hover .sc-title-slide.is-marquee .sc-title-slide__inner {
         animation: none;
         transform: none;
+    }
+    .sc-title-slide.is-marquee .sc-title-slide__item + .sc-title-slide__item {
+        display: none;
     }
 }
 .sc-feed__post-menu summary::-webkit-details-marker {

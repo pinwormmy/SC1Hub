@@ -60,6 +60,7 @@
         titleEl.textContent = '[최신글] ' + title;
         anchorEl.appendChild(titleEl);
         containerEl.appendChild(anchorEl);
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
     }
 
     function stopRotation() {
