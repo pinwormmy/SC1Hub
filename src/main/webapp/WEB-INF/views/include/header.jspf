@@ -29,7 +29,7 @@
 <link rel="stylesheet" href="/css/style.css">
 <!-- Neo둥근모 Pro -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
-<link rel="preload" href="http://sc1hub.cdn1.cafe24.com/star_full.jpg" as="image">
+<link rel="preload" href="https://sc1hub.cdn1.cafe24.com/star_full.jpg" as="image">
 <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
 
 <style>
