@@ -1601,6 +1601,43 @@
         let answerEl = null;
         let relatedEl = null;
         let pendingContentEl = null;
+        let stopLoadingDots = null;
+
+        function startLoadingDots(targetEl, options = {}) {
+            if (!targetEl) {
+                return null;
+            }
+
+            const showAnswerLabel = Boolean(options.showAnswerLabel);
+
+            const lineEl = document.createElement('div');
+            if (showAnswerLabel) {
+                const labelEl = document.createElement('strong');
+                labelEl.textContent = 'A.';
+                lineEl.append(labelEl, ' ');
+            }
+
+            const textEl = document.createElement('span');
+            textEl.textContent = '답변 생성 중';
+
+            const dotsEl = document.createElement('span');
+            dotsEl.className = 'sc-loading-dots';
+
+            lineEl.append(textEl, dotsEl);
+            targetEl.innerHTML = '';
+            targetEl.appendChild(lineEl);
+
+            const maxDots = 3;
+            let dots = 1;
+            dotsEl.textContent = '.';
+
+            const timerId = window.setInterval(() => {
+                dots = (dots % maxDots) + 1;
+                dotsEl.textContent = '.'.repeat(dots);
+            }, 500);
+
+            return () => window.clearInterval(timerId);
+        }
 
         if (feedListEl) {
             enableFeedMode();
@@ -1621,7 +1658,7 @@
 
             answerEl = document.createElement('div');
             answerEl.className = 'sc-feed__content sc-feed__chat-answer';
-            answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml('답변 생성 중...')}</div>`;
+            stopLoadingDots = startLoadingDots(answerEl, { showAnswerLabel: true });
 
             relatedEl = document.createElement('div');
             relatedEl.className = 'sc-feed__content sc-feed__chat-related';
@@ -1639,8 +1676,9 @@
             terminalEl.scrollIntoView({ block: 'end' });
         } else {
             appendEntry(['[YOU]'], escapeHtml(trimmed));
-            const pendingEntryEl = appendEntry(['[AI]'], escapeHtml('답변 생성 중...'));
+            const pendingEntryEl = appendEntry(['[AI]'], escapeHtml('답변 생성 중'));
             pendingContentEl = pendingEntryEl.querySelector('.sc-terminal__content');
+            stopLoadingDots = startLoadingDots(pendingContentEl, { showAnswerLabel: false });
         }
 
         try {
@@ -1709,6 +1747,9 @@
             }
             appendSystemMessage(errorMessage);
         } finally {
+            if (stopLoadingDots) {
+                stopLoadingDots();
+            }
             refreshLatestSearches();
         }
     }
