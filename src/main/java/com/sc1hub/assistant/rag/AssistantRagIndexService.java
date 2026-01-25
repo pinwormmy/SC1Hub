@@ -111,26 +111,23 @@ public class AssistantRagIndexService {
             return ReindexResult.disabled();
         }
 
-        String embeddingModel = geminiProperties.getEmbeddingModel();
-        if (!StringUtils.hasText(embeddingModel)) {
-            throw new IllegalStateException("Gemini embeddingModel is not configured.");
-        }
+        String embeddingModel = requireEmbeddingModel();
 
         AssistantRagIndex index = new AssistantRagIndex();
         index.setEmbeddingModel(embeddingModel);
         index.setCreatedAt(new Date());
         index.setUpdatedAt(null);
 
+        IndexingContext indexingContext = new IndexingContext(index);
         int indexedPosts = 0;
         int indexedChunks = 0;
-        int dimension = 0;
+        int chunkSize = ragProperties.getChunkSizeChars();
+        int overlap = ragProperties.getChunkOverlapChars();
 
-        List<BoardListDTO> boards = filterIndexableBoards(boardMapper.getBoardList());
+        List<BoardListDTO> boards = loadIndexableBoards();
         if (boards == null || boards.isEmpty()) {
-            index.setBoardSnapshots(buildBoardSnapshots(boards));
-            index.setUpdatedAt(new Date());
-            saveIndex(index);
-            return new ReindexResult(true, 0, 0, 0, ragProperties.getIndexPath());
+            finalizeIndex(index, boards);
+            return new ReindexResult(true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath());
         }
 
         for (BoardListDTO board : boards) {
@@ -139,69 +136,27 @@ public class AssistantRagIndexService {
                 continue;
             }
 
-            List<BoardDTO> posts;
-            try {
-                posts = boardMapper.selectPostsForRag(boardTitle, ragProperties.getMaxPostsPerBoard());
-            } catch (Exception e) {
-                log.warn("RAG 인덱싱 중 게시판 로드 실패. boardTitle={}", boardTitle, e);
-                continue;
-            }
+            List<BoardDTO> posts = loadPostsForReindex(boardTitle);
 
             if (posts == null || posts.isEmpty()) {
                 continue;
             }
 
             for (BoardDTO post : posts) {
-                if (post == null) {
+                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap);
+                if (!result.hasSourceChunks()) {
                     continue;
                 }
-
-                String postText = buildPostText(post);
-                if (!StringUtils.hasText(postText)) {
-                    continue;
-                }
-
-                List<String> chunks = chunkText(postText, ragProperties.getChunkSizeChars(), ragProperties.getChunkOverlapChars());
-                if (chunks.isEmpty()) {
-                    continue;
-                }
-
                 indexedPosts += 1;
-                int chunkIndex = 0;
-                for (String chunk : chunks) {
-                    float[] vector = embeddingClient.embedText(chunk);
-                    if (vector.length == 0) {
-                        continue;
-                    }
-                    if (dimension == 0) {
-                        dimension = vector.length;
-                        index.setDimension(dimension);
-                    }
-                    if (vector.length != dimension) {
-                        continue;
-                    }
-
-                    AssistantRagChunk chunkDto = new AssistantRagChunk();
-                    chunkDto.setId(generateChunkId(boardTitle, post.getPostNum(), chunkIndex));
-                    chunkDto.setBoardTitle(boardTitle);
-                    chunkDto.setPostNum(post.getPostNum());
-                    chunkDto.setTitle(post.getTitle());
-                    chunkDto.setRegDate(post.getRegDate());
-                    chunkDto.setUrl(buildPostUrl(boardTitle, post.getPostNum()));
-                    chunkDto.setChunkIndex(chunkIndex);
-                    chunkDto.setText(chunk);
-                    chunkDto.setVector(vector);
-                    index.getChunks().add(chunkDto);
-                    indexedChunks += 1;
-                    chunkIndex += 1;
+                if (!result.getChunks().isEmpty()) {
+                    index.getChunks().addAll(result.getChunks());
+                    indexedChunks += result.getChunks().size();
                 }
             }
         }
 
-        index.setBoardSnapshots(buildBoardSnapshots(boards));
-        index.setUpdatedAt(new Date());
-        saveIndex(index);
-        return new ReindexResult(true, indexedPosts, indexedChunks, dimension, ragProperties.getIndexPath());
+        finalizeIndex(index, boards);
+        return new ReindexResult(true, indexedPosts, indexedChunks, indexingContext.getDimension(), ragProperties.getIndexPath());
     }
 
     public synchronized UpdateResult update() throws IOException {
@@ -214,10 +169,7 @@ public class AssistantRagIndexService {
             return UpdateResult.notReady(ragProperties.getIndexPath());
         }
 
-        String embeddingModel = geminiProperties.getEmbeddingModel();
-        if (!StringUtils.hasText(embeddingModel)) {
-            throw new IllegalStateException("Gemini embeddingModel is not configured.");
-        }
+        String embeddingModel = requireEmbeddingModel();
 
         AssistantRagIndex index;
         try {
@@ -230,13 +182,7 @@ public class AssistantRagIndexService {
         if (index == null) {
             throw new IllegalStateException("RAG index is empty.");
         }
-        if (!StringUtils.hasText(index.getEmbeddingModel())) {
-            index.setEmbeddingModel(embeddingModel);
-        }
-        if (StringUtils.hasText(index.getEmbeddingModel()) && !embeddingModel.equals(index.getEmbeddingModel())) {
-            throw new IllegalStateException("Embedding model has changed. Please reindex.");
-        }
-        index.setEmbeddingModel(embeddingModel);
+        validateEmbeddingModel(index, embeddingModel);
 
         if (index.getChunks() == null) {
             index.setChunks(new ArrayList<>());
@@ -246,19 +192,19 @@ public class AssistantRagIndexService {
         Map<String, Date> maxRegDateByBoard = buildMaxRegDateByBoard(index.getChunks());
         Map<String, Date> existingRegDateByPost = buildRegDateByPost(index.getChunks());
 
+        IndexingContext indexingContext = new IndexingContext(index);
         int updatedPosts = 0;
         int updatedChunks = 0;
-        int dimension = index.getDimension();
+        int chunkSize = ragProperties.getChunkSizeChars();
+        int overlap = ragProperties.getChunkOverlapChars();
 
-        List<BoardListDTO> boards = filterIndexableBoards(boardMapper.getBoardList());
+        List<BoardListDTO> boards = loadIndexableBoards();
         Set<String> allowedBoards = buildIndexableBoardSet(boards);
         removeChunksForMissingBoards(index, allowedBoards);
 
         if (boards == null || boards.isEmpty()) {
-            index.setBoardSnapshots(buildBoardSnapshots(boards));
-            index.setUpdatedAt(new Date());
-            saveIndex(index);
-            return new UpdateResult(true, true, 0, 0, dimension, ragProperties.getIndexPath());
+            finalizeIndex(index, boards);
+            return new UpdateResult(true, true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath());
         }
 
         for (BoardListDTO board : boards) {
@@ -273,29 +219,7 @@ public class AssistantRagIndexService {
                 sinceRegDate = new Date(0);
             }
 
-            Map<Integer, BoardDTO> postsByPostNum = new HashMap<>();
-            try {
-                List<BoardDTO> newPosts = boardMapper.selectNewPostsForRag(boardTitle, sincePostNum, ragProperties.getMaxPostsPerBoard());
-                if (newPosts != null) {
-                    for (BoardDTO post : newPosts) {
-                        if (post != null) {
-                            postsByPostNum.put(post.getPostNum(), post);
-                        }
-                    }
-                }
-
-                List<BoardDTO> updatedPostsByRegDate = boardMapper.selectUpdatedPostsForRag(boardTitle, sinceRegDate, ragProperties.getMaxPostsPerBoard());
-                if (updatedPostsByRegDate != null) {
-                    for (BoardDTO post : updatedPostsByRegDate) {
-                        if (post != null) {
-                            postsByPostNum.put(post.getPostNum(), post);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("RAG 업데이트 중 게시물 로드 실패. boardTitle={}", boardTitle, e);
-                continue;
-            }
+            Map<Integer, BoardDTO> postsByPostNum = loadCandidatePostsForUpdate(boardTitle, sincePostNum, sinceRegDate);
 
             if (postsByPostNum.isEmpty()) {
                 continue;
@@ -313,59 +237,19 @@ public class AssistantRagIndexService {
                     continue;
                 }
 
-                String postText = buildPostText(post);
-                if (!StringUtils.hasText(postText)) {
-                    continue;
-                }
+                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap);
 
-                List<String> chunks = chunkText(postText, ragProperties.getChunkSizeChars(), ragProperties.getChunkOverlapChars());
-                if (chunks.isEmpty()) {
-                    continue;
-                }
-
-                List<AssistantRagChunk> newChunks = new ArrayList<>();
-                int chunkIndex = 0;
-                for (String chunk : chunks) {
-                    float[] vector = embeddingClient.embedText(chunk);
-                    if (vector.length == 0) {
-                        continue;
-                    }
-
-                    if (dimension == 0) {
-                        dimension = vector.length;
-                        index.setDimension(dimension);
-                    }
-                    if (vector.length != dimension) {
-                        continue;
-                    }
-
-                    AssistantRagChunk chunkDto = new AssistantRagChunk();
-                    chunkDto.setId(generateChunkId(boardTitle, post.getPostNum(), chunkIndex));
-                    chunkDto.setBoardTitle(boardTitle);
-                    chunkDto.setPostNum(post.getPostNum());
-                    chunkDto.setTitle(post.getTitle());
-                    chunkDto.setRegDate(post.getRegDate());
-                    chunkDto.setUrl(buildPostUrl(boardTitle, post.getPostNum()));
-                    chunkDto.setChunkIndex(chunkIndex);
-                    chunkDto.setText(chunk);
-                    chunkDto.setVector(vector);
-                    newChunks.add(chunkDto);
-                    chunkIndex += 1;
-                }
-
-                if (!newChunks.isEmpty()) {
+                if (!result.getChunks().isEmpty()) {
                     removeChunksForPost(index, boardTitle, postNum);
-                    index.getChunks().addAll(newChunks);
+                    index.getChunks().addAll(result.getChunks());
                     updatedPosts += 1;
-                    updatedChunks += newChunks.size();
+                    updatedChunks += result.getChunks().size();
                 }
             }
         }
 
-        index.setBoardSnapshots(buildBoardSnapshots(boards));
-        index.setUpdatedAt(new Date());
-        saveIndex(index);
-        return new UpdateResult(true, true, updatedPosts, updatedChunks, dimension, ragProperties.getIndexPath());
+        finalizeIndex(index, boards);
+        return new UpdateResult(true, true, updatedPosts, updatedChunks, indexingContext.getDimension(), ragProperties.getIndexPath());
     }
 
     private void saveIndex(AssistantRagIndex index) throws IOException {
@@ -389,6 +273,116 @@ public class AssistantRagIndexService {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private String requireEmbeddingModel() {
+        String embeddingModel = geminiProperties.getEmbeddingModel();
+        if (!StringUtils.hasText(embeddingModel)) {
+            throw new IllegalStateException("Gemini embeddingModel is not configured.");
+        }
+        return embeddingModel;
+    }
+
+    private void validateEmbeddingModel(AssistantRagIndex index, String embeddingModel) {
+        String existing = index.getEmbeddingModel();
+        if (StringUtils.hasText(existing) && !embeddingModel.equals(existing)) {
+            throw new IllegalStateException("Embedding model has changed. Please reindex.");
+        }
+        index.setEmbeddingModel(embeddingModel);
+    }
+
+    private List<BoardListDTO> loadIndexableBoards() {
+        return filterIndexableBoards(boardMapper.getBoardList());
+    }
+
+    private void finalizeIndex(AssistantRagIndex index, List<BoardListDTO> boards) throws IOException {
+        index.setBoardSnapshots(buildBoardSnapshots(boards));
+        index.setUpdatedAt(new Date());
+        saveIndex(index);
+    }
+
+    private List<BoardDTO> loadPostsForReindex(String boardTitle) {
+        try {
+            return boardMapper.selectPostsForRag(boardTitle, ragProperties.getMaxPostsPerBoard());
+        } catch (Exception e) {
+            log.warn("RAG 인덱싱 중 게시판 로드 실패. boardTitle={}", boardTitle, e);
+            return new ArrayList<>();
+        }
+    }
+
+    private Map<Integer, BoardDTO> loadCandidatePostsForUpdate(String boardTitle, int sincePostNum, Date sinceRegDate) {
+        Map<Integer, BoardDTO> postsByPostNum = new HashMap<>();
+        try {
+            List<BoardDTO> newPosts = boardMapper.selectNewPostsForRag(boardTitle, sincePostNum, ragProperties.getMaxPostsPerBoard());
+            if (newPosts != null) {
+                for (BoardDTO post : newPosts) {
+                    if (post != null) {
+                        postsByPostNum.put(post.getPostNum(), post);
+                    }
+                }
+            }
+
+            List<BoardDTO> updatedPostsByRegDate = boardMapper.selectUpdatedPostsForRag(boardTitle, sinceRegDate, ragProperties.getMaxPostsPerBoard());
+            if (updatedPostsByRegDate != null) {
+                for (BoardDTO post : updatedPostsByRegDate) {
+                    if (post != null) {
+                        postsByPostNum.put(post.getPostNum(), post);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("RAG 업데이트 중 게시물 로드 실패. boardTitle={}", boardTitle, e);
+        }
+        return postsByPostNum;
+    }
+
+    private PostChunkResult buildChunksForPost(String boardTitle,
+                                               BoardDTO post,
+                                               IndexingContext context,
+                                               int chunkSize,
+                                               int overlap) {
+        if (post == null) {
+            return PostChunkResult.empty();
+        }
+        String postText = buildPostText(post);
+        if (!StringUtils.hasText(postText)) {
+            return PostChunkResult.empty();
+        }
+        List<String> chunks = chunkText(postText, chunkSize, overlap);
+        if (chunks.isEmpty()) {
+            return PostChunkResult.empty();
+        }
+
+        List<AssistantRagChunk> newChunks = new ArrayList<>();
+        int chunkIndex = 0;
+        for (String chunk : chunks) {
+            float[] vector = embeddingClient.embedText(chunk);
+            if (!context.acceptVector(vector)) {
+                continue;
+            }
+            newChunks.add(buildChunk(boardTitle, post, chunk, chunkIndex, vector));
+            chunkIndex += 1;
+        }
+
+        return new PostChunkResult(true, newChunks);
+    }
+
+    private static AssistantRagChunk buildChunk(String boardTitle,
+                                                BoardDTO post,
+                                                String chunk,
+                                                int chunkIndex,
+                                                float[] vector) {
+        AssistantRagChunk chunkDto = new AssistantRagChunk();
+        chunkDto.setId(generateChunkId(boardTitle, post.getPostNum(), chunkIndex));
+        chunkDto.setBoardTitle(boardTitle);
+        chunkDto.setPostNum(post.getPostNum());
+        chunkDto.setTitle(post.getTitle());
+        chunkDto.setRegDate(post.getRegDate());
+        chunkDto.setUrl(buildPostUrl(boardTitle, post.getPostNum()));
+        chunkDto.setChunkIndex(chunkIndex);
+        chunkDto.setText(chunk);
+        chunkDto.setVector(vector);
+        return chunkDto;
     }
 
     private static String normalizeBoardTitle(String boardTitle) {
@@ -558,6 +552,53 @@ public class AssistantRagIndexService {
             String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
             return !allowedBoards.contains(boardTitle);
         });
+    }
+
+    private static final class IndexingContext {
+        private final AssistantRagIndex index;
+        private int dimension;
+
+        private IndexingContext(AssistantRagIndex index) {
+            this.index = index;
+            this.dimension = Math.max(0, index.getDimension());
+        }
+
+        private boolean acceptVector(float[] vector) {
+            if (vector == null || vector.length == 0) {
+                return false;
+            }
+            if (dimension == 0) {
+                dimension = vector.length;
+                index.setDimension(dimension);
+            }
+            return vector.length == dimension;
+        }
+
+        private int getDimension() {
+            return dimension;
+        }
+    }
+
+    private static final class PostChunkResult {
+        private final boolean hasSourceChunks;
+        private final List<AssistantRagChunk> chunks;
+
+        private PostChunkResult(boolean hasSourceChunks, List<AssistantRagChunk> chunks) {
+            this.hasSourceChunks = hasSourceChunks;
+            this.chunks = chunks;
+        }
+
+        private static PostChunkResult empty() {
+            return new PostChunkResult(false, new ArrayList<>());
+        }
+
+        private boolean hasSourceChunks() {
+            return hasSourceChunks;
+        }
+
+        private List<AssistantRagChunk> getChunks() {
+            return chunks;
+        }
     }
 
     @Getter

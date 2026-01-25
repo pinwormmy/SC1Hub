@@ -26,6 +26,29 @@
     align-items: center;
     gap: 10px;
 }
+.admin-accordion-header {
+    cursor: pointer;
+    user-select: none;
+}
+.admin-accordion-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 16px;
+    white-space: nowrap;
+}
+.admin-accordion-indicator::after {
+    content: "▼";
+    font-size: 12px;
+    opacity: 0.75;
+}
+.admin-accordion-header[aria-expanded="true"] .admin-accordion-indicator::after {
+    content: "▲";
+}
 .admin-card-title {
     margin: 0;
     font-size: 28px;
@@ -215,95 +238,13 @@
             <%@include file="./include/latestPosts.jspf" %>
             <div class="col-sm-12">
                 <div class="admin-page">
-                    <div class="admin-card admin-card--members">
-                        <div class="admin-card-header">
-                            <div>
-                                <h2 class="admin-card-title">회원 관리</h2>
-                                <p class="admin-card-subtitle">회원목록 (최근 가입자 순)</p>
-                            </div>
-                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/myPage'">뒤로가기</button>
-                        </div>
-                        <form action="/adminPage" method="get" class="admin-search-form">
-                            <label class="admin-search-label" for="adminKeyword">회원 검색</label>
-                            <div class="admin-search-row">
-                                <input class="admin-input" id="adminKeyword" type="text" name="keyword" value="${pageInfo.keyword}" placeholder="ID, 별명, 이름">
-                                <button type="submit" class="admin-btn">검색</button>
-                                <c:if test="${pageInfo.keyword != ''}">
-                                    <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage'" accesskey="c">검색취소(C)</button>
-                                </c:if>
-                            </div>
-                        </form>
-                        <div class="admin-table-wrap">
-                            <table class="admin-memberlist">
-                                <thead>
-                                    <tr>
-                                        <th width="15%">ID</th>
-                                        <th width="15%">별명</th>
-                                        <th width="30%">이메일</th>
-                                        <th width="10%">등급</th>
-                                        <th width="10%">가입일</th>
-                                        <th width="20%">관리</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <c:forEach items="${memberList}" var="member">
-                                        <tr>
-                                            <td data-label="ID">${member.id}</td>
-                                            <td data-label="별명">${member.nickName}</td>
-                                            <td data-label="이메일">${member.email}</td>
-                                            <td data-label="등급">${member.grade}</td>
-                                            <td data-label="가입일"><fmt:formatDate value="${member.regDate}" pattern="yy.MM.dd"/></td>
-                                            <td data-label="관리">
-                                                <div class="admin-actions">
-                                                    <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/modifyMemberByAdmin?id=${member.id}'">수정</button>
-                                                    <button type="button" class="admin-btn admin-btn--danger" onclick="confirmDelete('${member.id}')">탈퇴</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </c:forEach>
-                                    <c:if test="${empty memberList}">
-                                        <tr>
-                                            <td class="admin-empty" colspan="6">조회 결과가 없습니다.</td>
-                                        </tr>
-                                    </c:if>
-                                </tbody>
-                            </table>
-                        </div>
-                        <nav class="admin-pagination">
-                            <ul class="page-list">
-                                <c:if test="${pageInfo.prevPageSetPoint != 0}">
-                                    <li class="page-item">
-                                        <a class="page-link" href="/adminPage?recentPage=${pageInfo.prevPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Previous">
-                                            <span aria-hidden="true">&laquo;</span>
-                                        </a>
-                                    </li>
-                                </c:if>
-                                <c:forEach var="i" begin="${pageInfo.pageBeginPoint}" end="${pageInfo.pageEndPoint}">
-                                    <c:choose>
-                                        <c:when test="${i == pageInfo.recentPage}">
-                                            <li><a class="page-link active" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
-                                        </c:when>
-                                        <c:otherwise>
-                                            <li><a class="page-link" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
-                                        </c:otherwise>
-                                    </c:choose>
-                                </c:forEach>
-                                <c:if test="${pageInfo.nextPageSetPoint <= pageInfo.totalPage}">
-                                    <li class="page-item">
-                                        <a class="page-link" href="/adminPage?recentPage=${pageInfo.nextPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Next">
-                                            <span aria-hidden="true">&raquo;</span>
-                                        </a>
-                                    </li>
-                                </c:if>
-                            </ul>
-                        </nav>
-                    </div>
                     <div class="admin-card admin-card--visitors">
                         <div class="admin-card-header">
                             <div>
                                 <h3 class="admin-card-title">일별 최근 방문자수</h3>
                                 <p class="admin-card-subtitle">최근 10일 기준</p>
                             </div>
+                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/myPage'">뒤로가기</button>
                         </div>
                         <c:choose>
                             <c:when test="${empty recentVisitors}">
@@ -320,6 +261,98 @@
                                 </div>
                             </c:otherwise>
                         </c:choose>
+                    </div>
+                    <div class="admin-card admin-card--members">
+                        <div class="admin-card-header admin-accordion-header" id="adminMemberAccordionHeader"
+                             role="button" tabindex="0" aria-controls="adminMemberAccordionBody" aria-expanded="false">
+                            <div>
+                                <h2 class="admin-card-title">회원 관리</h2>
+                                <p class="admin-card-subtitle">
+                                    총 가입회원 <fmt:formatNumber value="${totalMemberCount}" type="number"/>명
+                                    <c:if test="${pageInfo.keyword != ''}">
+                                        · 검색결과 <fmt:formatNumber value="${pageInfo.totalPostCount}" type="number"/>명
+                                    </c:if>
+                                    · 회원목록 (최근 가입자 순)
+                                </p>
+                            </div>
+                            <span class="admin-accordion-indicator" id="adminMemberAccordionIndicator">펼치기</span>
+                        </div>
+                        <div id="adminMemberAccordionBody" style="display: none;">
+                            <form action="/adminPage" method="get" class="admin-search-form">
+                                <label class="admin-search-label" for="adminKeyword">회원 검색</label>
+                                <div class="admin-search-row">
+                                    <input class="admin-input" id="adminKeyword" type="text" name="keyword" value="${pageInfo.keyword}" placeholder="ID, 별명, 이름">
+                                    <button type="submit" class="admin-btn">검색</button>
+                                    <c:if test="${pageInfo.keyword != ''}">
+                                        <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage'" accesskey="c">검색취소(C)</button>
+                                    </c:if>
+                                </div>
+                            </form>
+                            <div class="admin-table-wrap">
+                                <table class="admin-memberlist">
+                                    <thead>
+                                        <tr>
+                                            <th width="15%">ID</th>
+                                            <th width="15%">별명</th>
+                                            <th width="30%">이메일</th>
+                                            <th width="10%">등급</th>
+                                            <th width="10%">가입일</th>
+                                            <th width="20%">관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <c:forEach items="${memberList}" var="member">
+                                            <tr>
+                                                <td data-label="ID">${member.id}</td>
+                                                <td data-label="별명">${member.nickName}</td>
+                                                <td data-label="이메일">${member.email}</td>
+                                                <td data-label="등급">${member.grade}</td>
+                                                <td data-label="가입일"><fmt:formatDate value="${member.regDate}" pattern="yy.MM.dd"/></td>
+                                                <td data-label="관리">
+                                                    <div class="admin-actions">
+                                                        <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/modifyMemberByAdmin?id=${member.id}'">수정</button>
+                                                        <button type="button" class="admin-btn admin-btn--danger" onclick="confirmDelete('${member.id}')">탈퇴</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </c:forEach>
+                                        <c:if test="${empty memberList}">
+                                            <tr>
+                                                <td class="admin-empty" colspan="6">조회 결과가 없습니다.</td>
+                                            </tr>
+                                        </c:if>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <nav class="admin-pagination">
+                                <ul class="page-list">
+                                    <c:if test="${pageInfo.prevPageSetPoint != 0}">
+                                        <li class="page-item">
+                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.prevPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Previous">
+                                                <span aria-hidden="true">&laquo;</span>
+                                            </a>
+                                        </li>
+                                    </c:if>
+                                    <c:forEach var="i" begin="${pageInfo.pageBeginPoint}" end="${pageInfo.pageEndPoint}">
+                                        <c:choose>
+                                            <c:when test="${i == pageInfo.recentPage}">
+                                                <li><a class="page-link active" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <li><a class="page-link" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
+                                            </c:otherwise>
+                                        </c:choose>
+                                    </c:forEach>
+                                    <c:if test="${pageInfo.nextPageSetPoint <= pageInfo.totalPage}">
+                                        <li class="page-item">
+                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.nextPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Next">
+                                                <span aria-hidden="true">&raquo;</span>
+                                            </a>
+                                        </li>
+                                    </c:if>
+                                </ul>
+                            </nav>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -348,6 +381,62 @@ function confirmDelete(id) {
         });
     }
 }
+
+(function() {
+    var header = document.getElementById('adminMemberAccordionHeader');
+    var body = document.getElementById('adminMemberAccordionBody');
+    var indicator = document.getElementById('adminMemberAccordionIndicator');
+    var storageKey = 'sc1hub_admin_member_accordion_open';
+
+    if (!header || !body) {
+        return;
+    }
+
+    function applyExpanded(expanded) {
+        header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        body.style.display = expanded ? 'block' : 'none';
+        if (indicator) {
+            indicator.textContent = expanded ? '접기' : '펼치기';
+        }
+    }
+
+    function toggle() {
+        var nextExpanded = header.getAttribute('aria-expanded') !== 'true';
+        applyExpanded(nextExpanded);
+        try {
+            localStorage.setItem(storageKey, nextExpanded ? '1' : '0');
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle();
+        }
+    });
+
+    var keywordInput = document.getElementById('adminKeyword');
+    var hasKeyword = !!(keywordInput && keywordInput.value && keywordInput.value.trim());
+
+    try {
+        var stored = localStorage.getItem(storageKey);
+        if (stored === '1') {
+            applyExpanded(true);
+            return;
+        }
+        if (stored === '0') {
+            applyExpanded(false);
+            return;
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    applyExpanded(hasKeyword);
+})();
 </script>
 
 </body>

@@ -142,6 +142,10 @@ public class MemberController {
     public String adminPage(Model model, PageDTO page) throws Exception {
         log.info("관리자 모드");
         page = memberService.pageSetting(page);
+        PageDTO totalCountPage = new PageDTO();
+        totalCountPage.setKeyword("");
+        int totalMemberCount = memberService.getTotalMemberCount(totalCountPage);
+        model.addAttribute("totalMemberCount", totalMemberCount);
         model.addAttribute("pageInfo", page);
         model.addAttribute("memberList", memberService.getMemberList(page));
         model.addAttribute("recentVisitors", memberService.getRecentVisitors());
