@@ -81,6 +81,14 @@ public interface BoardMapper {
                         @Param("keywords") List<String> keywords,
                         @Param("limit") int limit) throws Exception;
 
+        List<BoardDTO> selectPostsForSearchTerms(@Param("boardTitle") String boardTitle,
+                        @Param("sincePostNum") int sincePostNum,
+                        @Param("limit") int limit) throws Exception;
+
+        void updateSearchTerms(@Param("boardTitle") String boardTitle,
+                        @Param("postNum") int postNum,
+                        @Param("searchTerms") String searchTerms) throws Exception;
+
         List<BoardDTO> selectPostsForRag(@Param("boardTitle") String boardTitle,
                         @Param("limit") int limit) throws Exception;
 

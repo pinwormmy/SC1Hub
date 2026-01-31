@@ -32,9 +32,11 @@
 
     <sql id="searchKeyword">
         <if test="page.searchType == 'title'">title like concat('%', #{page.keyword}, '%')</if>
-        <if test="page.searchType == 'content'">content like concat('%', #{page.keyword}, '%')</if>
+        <if test="page.searchType == 'content'">content like concat('%', #{page.keyword}, '%')
+            or search_terms like concat('%', #{page.keyword}, '%')</if>
         <if test="page.searchType == 'titleAndContent'">title like concat('%', #{page.keyword}, '%')
-            or content like concat('%', #{page.keyword}, '%')</if>
+            or content like concat('%', #{page.keyword}, '%')
+            or search_terms like concat('%', #{page.keyword}, '%')</if>
     </sql>
 
     <select id="readPost" resultType="com.sc1hub.board.dto.BoardDTO">
@@ -43,13 +45,14 @@
     </select>
 
     <insert id="submitPost">
-        insert into ${boardTitle}(title, writer, reg_date, views, content, comment_count, notice)
-        values(#{board.title}, #{board.writer}, now(), 0, #{board.content}, 0, #{board.notice})
+        insert into ${boardTitle}(title, writer, reg_date, views, content, comment_count, notice, search_terms)
+        values(#{board.title}, #{board.writer}, now(), 0, #{board.content}, 0, #{board.notice}, #{board.searchTerms})
     </insert>
 
     <update id="submitModifyPost">
         update ${boardTitle}
-            set title=#{board.title}, content=#{board.content}, writer=#{board.writer}, notice=#{board.notice}, reg_date=now()
+            set title=#{board.title}, content=#{board.content}, writer=#{board.writer}, notice=#{board.notice},
+                search_terms=#{board.searchTerms}, reg_date=now()
             where post_num=#{board.postNum}
     </update>
 
@@ -192,20 +195,37 @@
     </select>
 
     <select id="searchPostsByKeywords" resultType="com.sc1hub.board.dto.BoardDTO">
-        select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice
+        select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice, search_terms
         from ${boardTitle}
         where
         <foreach item="keyword" collection="keywords" open="(" separator=" or " close=")">
-            (title like concat('%', #{keyword}, '%') or content like concat('%', #{keyword}, '%'))
+            (title like concat('%', #{keyword}, '%')
+            or content like concat('%', #{keyword}, '%')
+            or search_terms like concat('%', #{keyword}, '%'))
         </foreach>
         order by (
             <foreach item="keyword" collection="keywords" separator=" + ">
                 (case when title like concat('%', #{keyword}, '%') then 3 else 0 end
-                 + case when content like concat('%', #{keyword}, '%') then 1 else 0 end)
+                 + case when content like concat('%', #{keyword}, '%') then 1 else 0 end
+                 + case when search_terms like concat('%', #{keyword}, '%') then 1 else 0 end)
             </foreach>
         ) desc, reg_date desc
         limit #{limit}
     </select>
+
+    <select id="selectPostsForSearchTerms" resultType="com.sc1hub.board.dto.BoardDTO">
+        select post_num, title, content, search_terms
+        from ${boardTitle}
+        where post_num &gt; #{sincePostNum}
+        order by post_num asc
+        limit #{limit}
+    </select>
+
+    <update id="updateSearchTerms">
+        update ${boardTitle}
+        set search_terms = #{searchTerms}
+        where post_num = #{postNum}
+    </update>
 
     <select id="selectPostsForRag" resultType="com.sc1hub.board.dto.BoardDTO">
         select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice

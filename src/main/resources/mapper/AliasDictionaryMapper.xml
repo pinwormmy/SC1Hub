@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sc1hub.assistant.mapper.AliasDictionaryMapper">
+
+    <select id="selectAll" resultType="com.sc1hub.assistant.dto.AliasDictionaryDTO">
+        SELECT id,
+               alias,
+               canonical_terms AS canonicalTerms,
+               matchup_hint AS matchupHint,
+               boost_board_ids AS boostBoardIds,
+               created_at AS createdAt,
+               updated_at AS updatedAt
+        FROM alias_dictionary
+        ORDER BY id ASC
+    </select>
+
+</mapper>

@@ -17,4 +17,5 @@ public class BoardDTO {
     private int commentCount;
     private int notice;
     private int recommendCount;
+    private String searchTerms;
 }

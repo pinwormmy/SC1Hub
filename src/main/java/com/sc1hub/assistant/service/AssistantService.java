@@ -6,8 +6,11 @@ import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.gemini.GeminiException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
+import com.sc1hub.assistant.search.AssistantQueryParseResult;
+import com.sc1hub.assistant.search.AssistantQueryParser;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -43,22 +46,14 @@ public class AssistantService {
             "unit", "stats", "stat", "damage", "armor", "health", "shield", "range", "speed", "cooldown", "cost", "supply"
     ));
     private static final int FACT_BOARD_SCORE_BONUS = 2;
-    private static final String BOARD_PVP = "pvspboard";
-    private static final String BOARD_PVT = "pvstboard";
-    private static final String BOARD_PVZ = "pvszboard";
-    private static final String BOARD_TVP = "tvspboard";
-    private static final String BOARD_TVT = "tvstboard";
-    private static final String BOARD_TVZ = "tvszboard";
-    private static final String BOARD_ZVP = "zvspboard";
-    private static final String BOARD_ZVT = "zvstboard";
-    private static final String BOARD_ZVZ = "zvszboard";
-    private static final String BOARD_TEAMPLAY = "teamplayguideboard";
 
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
     private final AssistantProperties assistantProperties;
     private final AssistantRagSearchService ragSearchService;
     private final AssistantRagProperties ragProperties;
+    private final AssistantQueryParser queryParser;
+    private final ObjectMapper objectMapper;
     private volatile List<BoardListDTO> cachedBoards = Collections.emptyList();
     private volatile long cachedBoardsAtMillis = 0L;
 
@@ -66,12 +61,16 @@ public class AssistantService {
                             GeminiClient geminiClient,
                             AssistantProperties assistantProperties,
                             AssistantRagSearchService ragSearchService,
-                            AssistantRagProperties ragProperties) {
+                            AssistantRagProperties ragProperties,
+                            AssistantQueryParser queryParser,
+                            ObjectMapper objectMapper) {
         this.boardMapper = boardMapper;
         this.geminiClient = geminiClient;
         this.assistantProperties = assistantProperties;
         this.ragSearchService = ragSearchService;
         this.ragProperties = ragProperties;
+        this.queryParser = queryParser;
+        this.objectMapper = objectMapper;
     }
 
     public AssistantChatResponseDTO chat(String message, MemberDTO member) {
@@ -94,14 +93,31 @@ public class AssistantService {
 
         String normalizedMessage = message.trim();
 
-        Set<String> boardScope = resolveBoardScope(normalizedMessage);
-        List<String> keywords = extractKeywords(normalizedMessage);
+        AssistantQueryParseResult parseResult;
+        try {
+            parseResult = queryParser.parse(normalizedMessage);
+        } catch (Exception e) {
+            log.warn("검색 파서 처리 실패. 기본 키워드 로직으로 대체합니다.", e);
+            parseResult = new AssistantQueryParseResult();
+            List<String> fallbackKeywords = extractKeywords(normalizedMessage);
+            parseResult.setKeywords(fallbackKeywords);
+            parseResult.setExpandedTerms(fallbackKeywords);
+        }
+        List<String> keywords = parseResult.getKeywords();
+        List<String> expandedTerms = parseResult.getExpandedTerms();
+        if (expandedTerms == null || expandedTerms.isEmpty()) {
+            expandedTerms = keywords == null ? Collections.emptyList() : keywords;
+            parseResult.setExpandedTerms(expandedTerms);
+        }
+        Map<String, Double> boardWeights = buildBoardWeights(parseResult.getBoardWeights());
+        parseResult.setBoardWeights(boardWeights);
+        logParserResult(parseResult, expandedTerms);
         boolean factQuery = isFactQuery(normalizedMessage, keywords);
-        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, keywords, boardScope, factQuery);
+        RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, expandedTerms, boardWeights, factQuery);
 
         List<CandidatePost> candidates = Collections.emptyList();
-        if (shouldLoadKeywordCandidates(keywords, ragRetrieval)) {
-            candidates = findCandidates(keywords, boardScope, resolveCandidateLimit(), factQuery);
+        if (shouldLoadKeywordCandidates(expandedTerms, ragRetrieval)) {
+            candidates = findCandidates(expandedTerms, boardWeights, resolveCandidateLimit(), factQuery);
         }
 
         String prompt;
@@ -141,8 +157,8 @@ public class AssistantService {
     }
 
     private RagRetrieval tryRetrieveWithRag(String normalizedMessage,
-                                            List<String> keywords,
-                                            Set<String> boardScope,
+                                            List<String> expandedTerms,
+                                            Map<String, Double> boardWeights,
                                             boolean preferFactBoards) {
         if (ragSearchService == null || ragProperties == null || !ragSearchService.isEnabled()) {
             return null;
@@ -152,7 +168,7 @@ public class AssistantService {
             if (matches == null || matches.isEmpty()) {
                 return null;
             }
-            List<AssistantRagSearchService.Match> filtered = filterRagMatches(matches, keywords, boardScope);
+            List<AssistantRagSearchService.Match> filtered = filterRagMatches(matches, expandedTerms);
             if (filtered.isEmpty()) {
                 return null;
             }
@@ -162,8 +178,10 @@ public class AssistantService {
                     return null;
                 }
             }
-            List<AssistantRelatedPostDTO> relatedPosts = buildRelatedPostsFromMatches(filtered, assistantProperties.getMaxRelatedPosts());
-            return new RagRetrieval(filtered, relatedPosts);
+            List<AssistantRagSearchService.Match> weightedMatches = applyBoardWeights(filtered, boardWeights);
+            logRagMatches(weightedMatches);
+            List<AssistantRelatedPostDTO> relatedPosts = buildRelatedPostsFromMatches(weightedMatches, assistantProperties.getMaxRelatedPosts());
+            return new RagRetrieval(weightedMatches, relatedPosts);
         } catch (Exception e) {
             log.warn("RAG 검색 실패. 키워드 검색으로 fallback 합니다.", e);
             return null;
@@ -171,8 +189,7 @@ public class AssistantService {
     }
 
     private List<AssistantRagSearchService.Match> filterRagMatches(List<AssistantRagSearchService.Match> matches,
-                                                                   List<String> keywords,
-                                                                   Set<String> boardScope) {
+                                                                   List<String> keywords) {
         if (matches == null || matches.isEmpty()) {
             return Collections.emptyList();
         }
@@ -185,9 +202,6 @@ public class AssistantService {
             AssistantRagChunk chunk = match.getChunk();
             String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
             if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
-                continue;
-            }
-            if (!isAllowedBoard(boardTitle, boardScope)) {
                 continue;
             }
             if (isExcludedBoard(boardTitle)) {
@@ -263,6 +277,25 @@ public class AssistantService {
         }
 
         return keywordMatches.isEmpty() ? matches : keywordMatches;
+    }
+
+    private List<AssistantRagSearchService.Match> applyBoardWeights(List<AssistantRagSearchService.Match> matches,
+                                                                    Map<String, Double> boardWeights) {
+        if (matches == null || matches.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<AssistantRagSearchService.Match> weighted = new ArrayList<>(matches.size());
+        for (AssistantRagSearchService.Match match : matches) {
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            String boardTitle = normalizeBoardTitle(match.getChunk().getBoardTitle());
+            double weight = resolveBoardWeight(boardTitle, boardWeights);
+            double score = match.getScore() * weight;
+            weighted.add(AssistantRagSearchService.Match.of(match.getChunk(), score));
+        }
+        weighted.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+        return weighted;
     }
 
     private static double clampScore(double value) {
@@ -583,8 +616,8 @@ public class AssistantService {
         return result;
     }
 
-    private boolean shouldLoadKeywordCandidates(List<String> keywords, RagRetrieval ragRetrieval) {
-        if (keywords == null || keywords.isEmpty()) {
+    private boolean shouldLoadKeywordCandidates(List<String> expandedTerms, RagRetrieval ragRetrieval) {
+        if (expandedTerms == null || expandedTerms.isEmpty()) {
             return false;
         }
         int candidateLimit = resolveCandidateLimit();
@@ -640,10 +673,101 @@ public class AssistantService {
         }
     }
 
+    private Map<String, Double> buildBoardWeights(Map<String, Double> parsedWeights) {
+        Map<String, Double> result = new LinkedHashMap<>();
+        if (parsedWeights != null) {
+            for (Map.Entry<String, Double> entry : parsedWeights.entrySet()) {
+                if (entry == null || !StringUtils.hasText(entry.getKey())) {
+                    continue;
+                }
+                result.put(normalizeBoardTitle(entry.getKey()), sanitizeWeight(entry.getValue()));
+            }
+        }
+        List<BoardListDTO> boards = getBoardListCached();
+        if (boards != null) {
+            for (BoardListDTO board : boards) {
+                String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+                if (!StringUtils.hasText(boardTitle)) {
+                    continue;
+                }
+                result.putIfAbsent(boardTitle, 1.0);
+            }
+        }
+        return result;
+    }
+
+    private static double resolveBoardWeight(String boardTitle, Map<String, Double> boardWeights) {
+        if (boardWeights == null || boardWeights.isEmpty()) {
+            return 1.0;
+        }
+        String normalized = normalizeBoardTitle(boardTitle);
+        Double weight = boardWeights.get(normalized);
+        if (weight == null) {
+            return 1.0;
+        }
+        return sanitizeWeight(weight);
+    }
+
+    private static boolean hasBoostedBoards(Map<String, Double> boardWeights) {
+        if (boardWeights == null || boardWeights.isEmpty()) {
+            return false;
+        }
+        for (double weight : boardWeights.values()) {
+            if (weight > 1.05) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Map<String, Double> relaxBoardWeights(Map<String, Double> boardWeights) {
+        if (boardWeights == null || boardWeights.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Double> relaxed = new LinkedHashMap<>();
+        for (String key : boardWeights.keySet()) {
+            if (!StringUtils.hasText(key)) {
+                continue;
+            }
+            relaxed.put(key, 1.0);
+        }
+        return relaxed;
+    }
+
+    private static double sanitizeWeight(Double weight) {
+        if (weight == null) {
+            return 1.0;
+        }
+        if (Double.isNaN(weight) || Double.isInfinite(weight)) {
+            return 1.0;
+        }
+        if (weight <= 0.1) {
+            return 0.1;
+        }
+        return Math.min(weight, 5.0);
+    }
+
     private List<CandidatePost> findCandidates(List<String> keywords,
-                                               Set<String> boardScope,
+                                               Map<String, Double> boardWeights,
                                                int maxResults,
                                                boolean preferFactBoards) {
+        List<CandidatePost> primary = findCandidatesInternal(keywords, boardWeights, maxResults, preferFactBoards);
+        if (primary.isEmpty()) {
+            return primary;
+        }
+        if (primary.size() < maxResults && hasBoostedBoards(boardWeights)) {
+            Map<String, Double> relaxedWeights = relaxBoardWeights(boardWeights);
+            List<CandidatePost> relaxed = findCandidatesInternal(keywords, relaxedWeights, maxResults, preferFactBoards);
+            primary = mergeCandidateResults(primary, relaxed, maxResults);
+        }
+        logKeywordCandidates(primary);
+        return primary;
+    }
+
+    private List<CandidatePost> findCandidatesInternal(List<String> keywords,
+                                                       Map<String, Double> boardWeights,
+                                                       int maxResults,
+                                                       boolean preferFactBoards) {
         if (maxResults <= 0 || keywords == null || keywords.isEmpty()) {
             return Collections.emptyList();
         }
@@ -692,9 +816,6 @@ public class AssistantService {
             if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
                 continue;
             }
-            if (!isAllowedBoard(boardTitle, boardScope)) {
-                continue;
-            }
             if (isExcludedBoard(boardTitle)) {
                 continue;
             }
@@ -703,16 +824,18 @@ public class AssistantService {
                 if (posts == null || posts.isEmpty()) {
                     continue;
                 }
+                double boardWeight = resolveBoardWeight(boardTitle, boardWeights);
                 for (BoardDTO post : posts) {
                     if (post == null) {
                         continue;
                     }
                     String titleLower = safeLower(post.getTitle());
                     String contentLower = safeLower(stripHtmlToText(post.getContent()));
-                    int score = scoreCandidate(titleLower, contentLower, normalizedKeywords);
+                    double score = scoreCandidate(titleLower, contentLower, normalizedKeywords);
                     if (preferFactBoards && factBoards.contains(boardTitle)) {
                         score += FACT_BOARD_SCORE_BONUS;
                     }
+                    score *= boardWeight;
                     CandidatePost candidate = new CandidatePost(boardTitle, post, score);
                     if (heap.size() < maxResults) {
                         heap.add(candidate);
@@ -735,12 +858,44 @@ public class AssistantService {
         return results;
     }
 
+    private static List<CandidatePost> mergeCandidateResults(List<CandidatePost> primary,
+                                                             List<CandidatePost> secondary,
+                                                             int limit) {
+        Map<String, CandidatePost> merged = new LinkedHashMap<>();
+        if (primary != null) {
+            for (CandidatePost post : primary) {
+                if (post == null || post.post == null) {
+                    continue;
+                }
+                merged.put(postKey(post.boardTitle, post.post.getPostNum()), post);
+            }
+        }
+        if (secondary != null) {
+            for (CandidatePost post : secondary) {
+                if (post == null || post.post == null) {
+                    continue;
+                }
+                String key = postKey(post.boardTitle, post.post.getPostNum());
+                CandidatePost existing = merged.get(key);
+                if (existing == null || post.score > existing.score) {
+                    merged.put(key, post);
+                }
+            }
+        }
+        List<CandidatePost> results = new ArrayList<>(merged.values());
+        results.sort(candidateComparator());
+        if (results.size() <= limit) {
+            return results;
+        }
+        return results.subList(0, limit);
+    }
+
     private static Comparator<CandidatePost> candidateComparator() {
         return AssistantService::compareCandidates;
     }
 
     private static int compareCandidates(CandidatePost a, CandidatePost b) {
-        int scoreCompare = Integer.compare(b.score, a.score);
+        int scoreCompare = Double.compare(b.score, a.score);
         if (scoreCompare != 0) {
             return scoreCompare;
         }
@@ -759,11 +914,11 @@ public class AssistantService {
         return Integer.compare(b.post.getPostNum(), a.post.getPostNum());
     }
 
-    private static int scoreCandidate(String titleLower, String contentLower, List<String> keywords) {
+    private static double scoreCandidate(String titleLower, String contentLower, List<String> keywords) {
         if (keywords == null || keywords.isEmpty()) {
             return 0;
         }
-        int score = 0;
+        double score = 0;
         for (String keyword : keywords) {
             if (!StringUtils.hasText(keyword)) {
                 continue;
@@ -949,79 +1104,6 @@ public class AssistantService {
         return value.trim().replaceAll("\\s+", " ");
     }
 
-    private static boolean isAllowedBoard(String boardTitle, Set<String> boardScope) {
-        if (boardScope == null || boardScope.isEmpty()) {
-            return true;
-        }
-        return boardScope.contains(normalizeBoardTitle(boardTitle));
-    }
-
-    private static Set<String> resolveBoardScope(String message) {
-        if (!StringUtils.hasText(message)) {
-            return Collections.emptySet();
-        }
-        String normalized = message.toLowerCase(Locale.ROOT);
-        String compact = normalized.replaceAll("\\s+", "");
-
-        Set<String> explicit = new LinkedHashSet<>();
-        addBoardIfContains(explicit, compact, BOARD_PVP, "프프전", "pvp");
-        addBoardIfContains(explicit, compact, BOARD_PVT, "프테전", "pvt");
-        addBoardIfContains(explicit, compact, BOARD_PVZ, "프저전", "pvz");
-        addBoardIfContains(explicit, compact, BOARD_TVP, "테프전", "tvp");
-        addBoardIfContains(explicit, compact, BOARD_TVT, "테테전", "tvt");
-        addBoardIfContains(explicit, compact, BOARD_TVZ, "테저전", "tvz");
-        addBoardIfContains(explicit, compact, BOARD_ZVP, "저프전", "zvp");
-        addBoardIfContains(explicit, compact, BOARD_ZVT, "저테전", "zvt");
-        addBoardIfContains(explicit, compact, BOARD_ZVZ, "저저전", "zvz");
-        addBoardIfContains(explicit, compact, BOARD_TEAMPLAY, "팀플", "teamplay");
-        if (!explicit.isEmpty()) {
-            return explicit;
-        }
-
-        Set<String> inferred = new LinkedHashSet<>();
-        if (containsAny(compact, "기어리버") || containsAny(normalized, "gear reaver", "gearreaver")) {
-            inferred.add(BOARD_PVP);
-        }
-
-        if (inferred.isEmpty() && (containsAny(compact, "미러전", "거울전", "동족전") || containsAny(normalized, "mirror"))) {
-            if (containsAny(compact, "프로토스", "프토", "플토") || containsAny(normalized, "protoss")) {
-                inferred.add(BOARD_PVP);
-            }
-            if (containsAny(compact, "테란") || containsAny(normalized, "terran")) {
-                inferred.add(BOARD_TVT);
-            }
-            if (containsAny(compact, "저그") || containsAny(normalized, "zerg")) {
-                inferred.add(BOARD_ZVZ);
-            }
-        }
-
-        return inferred;
-    }
-
-    private static void addBoardIfContains(Set<String> boards, String text, String boardTitle, String... tokens) {
-        if (boards == null || !StringUtils.hasText(text)) {
-            return;
-        }
-        if (containsAny(text, tokens)) {
-            boards.add(boardTitle);
-        }
-    }
-
-    private static boolean containsAny(String text, String... tokens) {
-        if (!StringUtils.hasText(text) || tokens == null || tokens.length == 0) {
-            return false;
-        }
-        for (String token : tokens) {
-            if (!StringUtils.hasText(token)) {
-                continue;
-            }
-            if (text.contains(token)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static String truncate(String value, int maxChars) {
         if (value == null) {
             return "";
@@ -1135,12 +1217,66 @@ public class AssistantService {
         return text.replaceAll("\\s+", " ").trim();
     }
 
+    private void logParserResult(AssistantQueryParseResult parseResult, List<String> expandedTerms) {
+        if (parseResult == null) {
+            return;
+        }
+        try {
+            String json = objectMapper == null ? parseResult.toString() : objectMapper.writeValueAsString(parseResult);
+            log.info("검색 파서 결과={}", json);
+        } catch (Exception e) {
+            log.info("검색 파서 결과 로깅 실패: {}", parseResult.toString());
+        }
+        if (expandedTerms != null && !expandedTerms.isEmpty()) {
+            log.info("확장 검색어={}", expandedTerms);
+        }
+    }
+
+    private void logRagMatches(List<AssistantRagSearchService.Match> matches) {
+        if (matches == null || matches.isEmpty()) {
+            return;
+        }
+        List<String> top = new ArrayList<>();
+        int limit = Math.min(10, matches.size());
+        for (int i = 0; i < limit; i += 1) {
+            AssistantRagSearchService.Match match = matches.get(i);
+            if (match == null || match.getChunk() == null) {
+                continue;
+            }
+            AssistantRagChunk chunk = match.getChunk();
+            String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
+            top.add(boardTitle + ":" + chunk.getPostNum() + ":" + String.format(Locale.ROOT, "%.4f", match.getScore()));
+        }
+        if (!top.isEmpty()) {
+            log.info("RAG 상위 문서={}", top);
+        }
+    }
+
+    private void logKeywordCandidates(List<CandidatePost> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        List<String> top = new ArrayList<>();
+        int limit = Math.min(10, candidates.size());
+        for (int i = 0; i < limit; i += 1) {
+            CandidatePost post = candidates.get(i);
+            if (post == null || post.post == null) {
+                continue;
+            }
+            String boardTitle = normalizeBoardTitle(post.boardTitle);
+            top.add(boardTitle + ":" + post.post.getPostNum() + ":" + String.format(Locale.ROOT, "%.2f", post.score));
+        }
+        if (!top.isEmpty()) {
+            log.info("키워드 상위 문서={}", top);
+        }
+    }
+
     private static final class CandidatePost {
         private final String boardTitle;
         private final BoardDTO post;
-        private final int score;
+        private final double score;
 
-        private CandidatePost(String boardTitle, BoardDTO post, int score) {
+        private CandidatePost(String boardTitle, BoardDTO post, double score) {
             this.boardTitle = boardTitle;
             this.post = post;
             this.score = score;

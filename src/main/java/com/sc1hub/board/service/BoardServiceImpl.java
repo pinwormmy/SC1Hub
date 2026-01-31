@@ -1,5 +1,6 @@
 package com.sc1hub.board.service;
 
+import com.sc1hub.assistant.search.AssistantSearchTermsService;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.dto.CommentDTO;
@@ -10,7 +11,6 @@ import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.util.PageService;
 import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +22,13 @@ import java.util.List;
 @Service
 public class BoardServiceImpl implements BoardService {
 
-    @Autowired
-    BoardMapper boardMapper;
+    private final BoardMapper boardMapper;
+    private final AssistantSearchTermsService searchTermsService;
+
+    public BoardServiceImpl(BoardMapper boardMapper, AssistantSearchTermsService searchTermsService) {
+        this.boardMapper = boardMapper;
+        this.searchTermsService = searchTermsService;
+    }
 
     @Override
     public List<BoardDTO> showPostList(String boardTitle, PageDTO page) throws Exception {
@@ -35,6 +40,9 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public void submitPost(String boardTitle, BoardDTO board) throws Exception {
         boardTitle = boardTitle.toLowerCase();
+        if (board != null) {
+            board.setSearchTerms(searchTermsService.buildSearchTerms(board.getTitle(), board.getContent()));
+        }
         boardMapper.submitPost(boardTitle, board);
     }
 
@@ -47,6 +55,9 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public void submitModifyPost(String boardTitle, BoardDTO post) throws Exception {
         boardTitle = boardTitle.toLowerCase();
+        if (post != null) {
+            post.setSearchTerms(searchTermsService.buildSearchTerms(post.getTitle(), post.getContent()));
+        }
         boardMapper.submitModifyPost(boardTitle, post);
     }
 
