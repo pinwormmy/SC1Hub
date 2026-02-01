@@ -79,3 +79,22 @@ fetch('/api/assistant/rag/status').then(r => r.json()).then(console.log)
 - `update`는 현재 보드 목록에 없는 보드의 기존 chunks를 자동으로 제거합니다.
 - `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 자동 `update`를 수행합니다.
 - `/api/assistant/rag/status` 응답의 `signatureAvailable`/`signatureMismatch`로 인덱스와 DB 불일치 여부를 확인할 수 있습니다.
+
+### search_terms 재인덱싱 (alias_dictionary 반영)
+
+alias_dictionary 등록/수정 후 기존 게시글의 `search_terms`를 갱신해야 관련 게시물/쿼리 확장에 반영됩니다.
+
+1) 관리자 계정으로 로그인
+2) 브라우저 콘솔에서 재인덱싱 실행
+
+```js
+fetch('/api/assistant/search-terms/reindex?batchSize=200', {
+  method: 'POST',
+  credentials: 'include'
+})
+  .then(r => r.json())
+  .then(console.log)
+  .catch(console.error)
+```
+
+- `batchSize`는 상황에 따라 100~500 사이로 조정 가능합니다.

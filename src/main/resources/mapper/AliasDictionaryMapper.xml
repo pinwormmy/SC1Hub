@@ -17,4 +17,52 @@
         ORDER BY id ASC
     </select>
 
+    <select id="search" resultType="com.sc1hub.assistant.dto.AliasDictionaryDTO">
+        SELECT id,
+               alias,
+               canonical_terms AS canonicalTerms,
+               matchup_hint AS matchupHint,
+               boost_board_ids AS boostBoardIds,
+               created_at AS createdAt,
+               updated_at AS updatedAt
+        FROM alias_dictionary
+        WHERE alias LIKE CONCAT('%', #{keyword}, '%')
+           OR canonical_terms LIKE CONCAT('%', #{keyword}, '%')
+           OR matchup_hint LIKE CONCAT('%', #{keyword}, '%')
+           OR boost_board_ids LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectById" resultType="com.sc1hub.assistant.dto.AliasDictionaryDTO">
+        SELECT id,
+               alias,
+               canonical_terms AS canonicalTerms,
+               matchup_hint AS matchupHint,
+               boost_board_ids AS boostBoardIds,
+               created_at AS createdAt,
+               updated_at AS updatedAt
+        FROM alias_dictionary
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.sc1hub.assistant.dto.AliasDictionaryDTO" useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO alias_dictionary (alias, canonical_terms, matchup_hint, boost_board_ids)
+        VALUES (#{alias}, #{canonicalTerms}, #{matchupHint}, #{boostBoardIds})
+    </insert>
+
+    <update id="update" parameterType="com.sc1hub.assistant.dto.AliasDictionaryDTO">
+        UPDATE alias_dictionary
+        SET alias = #{alias},
+            canonical_terms = #{canonicalTerms},
+            matchup_hint = #{matchupHint},
+            boost_board_ids = #{boostBoardIds}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM alias_dictionary
+        WHERE id = #{id}
+    </delete>
+
 </mapper>

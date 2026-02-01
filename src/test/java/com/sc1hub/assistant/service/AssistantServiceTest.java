@@ -6,10 +6,13 @@ import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
+import com.sc1hub.assistant.search.AssistantQueryParseResult;
+import com.sc1hub.assistant.search.AssistantQueryParser;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.member.dto.MemberDTO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,12 +20,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -38,6 +43,9 @@ class AssistantServiceTest {
     @Mock
     private AssistantRagSearchService ragSearchService;
 
+    @Mock
+    private AssistantQueryParser queryParser;
+
     private AssistantProperties assistantProperties;
     private AssistantRagProperties ragProperties;
     private AssistantService assistantService;
@@ -52,7 +60,10 @@ class AssistantServiceTest {
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
-        assistantService = new AssistantService(boardMapper, geminiClient, assistantProperties, ragSearchService, ragProperties);
+        ObjectMapper objectMapper = new ObjectMapper();
+        assistantService = new AssistantService(boardMapper, geminiClient, assistantProperties, ragSearchService, ragProperties, queryParser, objectMapper);
+        lenient().when(queryParser.parse(anyString()))
+                .thenAnswer(invocation -> buildParseResult(invocation.getArgument(0)));
     }
 
     @Test
@@ -219,5 +230,30 @@ class AssistantServiceTest {
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("Site posts"));
         assertTrue(prompt.contains("excerpt="));
+    }
+
+    private AssistantQueryParseResult buildParseResult(String message) {
+        AssistantQueryParseResult result = new AssistantQueryParseResult();
+        if (message == null) {
+            return result;
+        }
+        String trimmed = message.trim();
+        if (trimmed.isEmpty()) {
+            return result;
+        }
+        String[] tokens = trimmed.split("\\s+");
+        ArrayList<String> keywords = new ArrayList<>();
+        for (String token : tokens) {
+            if (token == null) {
+                continue;
+            }
+            String cleaned = token.trim();
+            if (!cleaned.isEmpty()) {
+                keywords.add(cleaned);
+            }
+        }
+        result.setKeywords(keywords);
+        result.setExpandedTerms(new ArrayList<>(keywords));
+        return result;
     }
 }

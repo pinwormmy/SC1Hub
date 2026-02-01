@@ -67,6 +67,11 @@ public class AssistantQueryParser {
         this.queryExpansion = queryExpansion;
     }
 
+    public void invalidateAliasCache() {
+        cachedAliases = Collections.emptyList();
+        cachedAtMillis = 0L;
+    }
+
     public AssistantQueryParseResult parse(String message) {
         AssistantQueryParseResult result = new AssistantQueryParseResult();
 
@@ -83,6 +88,7 @@ public class AssistantQueryParser {
         result.setIntent(intent);
 
         List<AliasDictionaryDTO> matchedAliases = matchAliases(normalizedMessage, keywords);
+        result.setAliasMatched(!matchedAliases.isEmpty());
         Map<String, Double> boardWeights = new LinkedHashMap<>();
 
         double confidence = matchupInfo.confidence;
@@ -538,7 +544,7 @@ public class AssistantQueryParser {
     }
 
     private static boolean containsAny(String text, String... tokens) {
-        if (!StringUtils.hasText(text) || tokens == null || tokens.length == 0) {
+        if (!StringUtils.hasText(text) || tokens == null) {
             return false;
         }
         for (String token : tokens) {

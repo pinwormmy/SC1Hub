@@ -116,7 +116,8 @@ public class AssistantService {
         RagRetrieval ragRetrieval = tryRetrieveWithRag(normalizedMessage, expandedTerms, boardWeights, factQuery);
 
         List<CandidatePost> candidates = Collections.emptyList();
-        if (shouldLoadKeywordCandidates(expandedTerms, ragRetrieval)) {
+        boolean forceKeywordCandidates = parseResult.isAliasMatched();
+        if (shouldLoadKeywordCandidates(expandedTerms, ragRetrieval, forceKeywordCandidates)) {
             candidates = findCandidates(expandedTerms, boardWeights, resolveCandidateLimit(), factQuery);
         }
 
@@ -124,7 +125,8 @@ public class AssistantService {
         if (ragRetrieval != null) {
             response.setRelatedPosts(ragRetrieval.relatedPosts);
             if (!candidates.isEmpty()) {
-                List<AssistantRelatedPostDTO> merged = mergeRelatedPosts(ragRetrieval.relatedPosts, candidates, assistantProperties.getMaxRelatedPosts());
+                int minCandidateSlots = resolveMinCandidateSlots(parseResult.isAliasMatched(), assistantProperties.getMaxRelatedPosts());
+                List<AssistantRelatedPostDTO> merged = mergeRelatedPosts(ragRetrieval.relatedPosts, candidates, assistantProperties.getMaxRelatedPosts(), minCandidateSlots);
                 if (!merged.isEmpty()) {
                     response.setRelatedPosts(merged);
                 }
@@ -302,13 +304,7 @@ public class AssistantService {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return 0.0;
         }
-        if (value < 0.0) {
-            return 0.0;
-        }
-        if (value > 1.0) {
-            return 1.0;
-        }
-        return value;
+        return Math.min(Math.max(value, 0.0), 1.0);
     }
 
     private List<AssistantRelatedPostDTO> buildRelatedPostsFromMatches(List<AssistantRagSearchService.Match> matches, int limit) {
@@ -567,9 +563,25 @@ public class AssistantService {
         return results;
     }
 
-    private List<AssistantRelatedPostDTO> mergeRelatedPosts(List<AssistantRelatedPostDTO> ragPosts, List<CandidatePost> candidates, int limit) {
-        Map<String, AssistantRelatedPostDTO> merged = new LinkedHashMap<>();
-        if (ragPosts != null) {
+    private List<AssistantRelatedPostDTO> mergeRelatedPosts(List<AssistantRelatedPostDTO> ragPosts,
+                                                            List<CandidatePost> candidates,
+                                                            int limit,
+                                                            int minCandidateSlots) {
+        int max = Math.max(0, limit);
+        if (max == 0) {
+            return Collections.emptyList();
+        }
+        boolean hasCandidates = candidates != null && !candidates.isEmpty();
+        int reservedCandidates = hasCandidates ? Math.max(0, minCandidateSlots) : 0;
+        if (reservedCandidates > max) {
+            reservedCandidates = max;
+        }
+        int ragSlots = max - reservedCandidates;
+
+        List<AssistantRelatedPostDTO> result = new ArrayList<>(max);
+        LinkedHashSet<String> used = new LinkedHashSet<>();
+
+        if (ragPosts != null && ragSlots > 0) {
             for (AssistantRelatedPostDTO dto : ragPosts) {
                 if (dto == null) {
                     continue;
@@ -578,11 +590,18 @@ public class AssistantService {
                 if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
                     continue;
                 }
-                merged.putIfAbsent(postKey(boardTitle, dto.getPostNum()), dto);
+                String key = postKey(boardTitle, dto.getPostNum());
+                if (!used.add(key)) {
+                    continue;
+                }
+                result.add(dto);
+                if (result.size() >= ragSlots) {
+                    break;
+                }
             }
         }
 
-        if (candidates != null) {
+        if (hasCandidates) {
             for (CandidatePost post : candidates) {
                 if (post == null || post.post == null) {
                     continue;
@@ -592,7 +611,7 @@ public class AssistantService {
                     continue;
                 }
                 String key = postKey(boardTitle, post.post.getPostNum());
-                if (merged.containsKey(key)) {
+                if (!used.add(key)) {
                     continue;
                 }
                 AssistantRelatedPostDTO dto = new AssistantRelatedPostDTO();
@@ -601,22 +620,39 @@ public class AssistantService {
                 dto.setTitle(post.post.getTitle());
                 dto.setRegDate(post.post.getRegDate());
                 dto.setUrl(buildPostUrl(boardTitle, post.post.getPostNum()));
-                merged.put(key, dto);
+                result.add(dto);
+                if (result.size() >= max) {
+                    return result;
+                }
             }
         }
 
-        int max = Math.max(0, limit);
-        List<AssistantRelatedPostDTO> result = new ArrayList<>();
-        for (AssistantRelatedPostDTO dto : merged.values()) {
-            if (result.size() >= max) {
-                break;
+        if (ragPosts != null && result.size() < max) {
+            for (AssistantRelatedPostDTO dto : ragPosts) {
+                if (dto == null) {
+                    continue;
+                }
+                String boardTitle = normalizeBoardTitle(dto.getBoardTitle());
+                if (!StringUtils.hasText(boardTitle) || !SAFE_BOARD_TITLE.matcher(boardTitle).matches()) {
+                    continue;
+                }
+                String key = postKey(boardTitle, dto.getPostNum());
+                if (!used.add(key)) {
+                    continue;
+                }
+                result.add(dto);
+                if (result.size() >= max) {
+                    break;
+                }
             }
-            result.add(dto);
         }
+
         return result;
     }
 
-    private boolean shouldLoadKeywordCandidates(List<String> expandedTerms, RagRetrieval ragRetrieval) {
+    private boolean shouldLoadKeywordCandidates(List<String> expandedTerms,
+                                                RagRetrieval ragRetrieval,
+                                                boolean forceCandidates) {
         if (expandedTerms == null || expandedTerms.isEmpty()) {
             return false;
         }
@@ -624,11 +660,24 @@ public class AssistantService {
         if (candidateLimit <= 0) {
             return false;
         }
+        if (forceCandidates) {
+            return true;
+        }
         if (ragRetrieval == null) {
             return true;
         }
         int ragCount = ragRetrieval.matches == null ? 0 : ragRetrieval.matches.size();
         return ragCount < candidateLimit;
+    }
+
+    private int resolveMinCandidateSlots(boolean aliasMatched, int maxRelatedPosts) {
+        if (!aliasMatched) {
+            return 0;
+        }
+        if (maxRelatedPosts <= 0) {
+            return 0;
+        }
+        return 1;
     }
 
     private int resolveCandidateLimit() {
@@ -1225,7 +1274,7 @@ public class AssistantService {
             String json = objectMapper == null ? parseResult.toString() : objectMapper.writeValueAsString(parseResult);
             log.info("검색 파서 결과={}", json);
         } catch (Exception e) {
-            log.info("검색 파서 결과 로깅 실패: {}", parseResult.toString());
+            log.info("검색 파서 결과 로깅 실패: {}", parseResult);
         }
         if (expandedTerms != null && !expandedTerms.isEmpty()) {
             log.info("확장 검색어={}", expandedTerms);

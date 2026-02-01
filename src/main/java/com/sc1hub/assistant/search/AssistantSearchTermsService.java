@@ -36,6 +36,11 @@ public class AssistantSearchTermsService {
         this.objectMapper = objectMapper;
     }
 
+    public void invalidateAliasCache() {
+        cachedAliases = Collections.emptyList();
+        cachedAtMillis = 0L;
+    }
+
     public String buildSearchTerms(String title, String content) {
         String safeTitle = title == null ? "" : title;
         String safeContent = content == null ? "" : stripHtmlToText(content);

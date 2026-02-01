@@ -354,6 +354,15 @@
                             </nav>
                         </div>
                     </div>
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div>
+                                <h2 class="admin-card-title">alias_dictionary 관리</h2>
+                                <p class="admin-card-subtitle">별칭 등록/수정/삭제 및 검색</p>
+                            </div>
+                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary'">관리하기</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -22,4 +22,6 @@ public class AssistantQueryParseResult {
     private List<String> expandedTerms = new ArrayList<>();
     @JsonProperty("board_weights")
     private Map<String, Double> boardWeights = new LinkedHashMap<>();
+    @JsonProperty("alias_matched")
+    private boolean aliasMatched;
 }
