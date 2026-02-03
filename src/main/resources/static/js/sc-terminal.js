@@ -1543,7 +1543,7 @@
             const memberMeta = getMemberMeta();
             const isAdmin = memberMeta.grade === 3;
             const base = '명령어: help, clear, close, open <url>, read <boardTitle> <postNum>, ask <question>';
-            const adminExtra = ', rag reindex [sync], rag update, searchterms reindex [batchSize]';
+            const adminExtra = ', index status, index reindex, index update';
             appendSystemMessage(isAdmin ? base + adminExtra : base);
             return true;
         }
@@ -1590,6 +1590,29 @@
             return true;
         }
 
+        if (command === 'index' && tokens.length >= 2) {
+            const memberMeta = getMemberMeta();
+            if (memberMeta.grade !== 3) {
+                appendSystemMessage('관리자만 실행할 수 있습니다.');
+                return true;
+            }
+            const action = String(tokens[1] || '').toLowerCase();
+            if (action === 'status') {
+                void runIndexStatus();
+                return true;
+            }
+            if (action === 'reindex') {
+                void runIndexReindex();
+                return true;
+            }
+            if (action === 'update') {
+                void runIndexUpdate();
+                return true;
+            }
+            appendSystemMessage('사용법: index status | index reindex | index update');
+            return true;
+        }
+
         if (command === 'rag' && tokens.length >= 2) {
             const memberMeta = getMemberMeta();
             if (memberMeta.grade !== 3) {
@@ -1599,14 +1622,16 @@
             const action = String(tokens[1] || '').toLowerCase();
             if (action === 'reindex') {
                 const sync = String(tokens[2] || '').toLowerCase() === 'sync';
-                void runRagReindex(!sync);
+                appendSystemMessage('안내: rag reindex는 index reindex로 통합되었습니다.');
+                void runIndexReindex();
                 return true;
             }
             if (action === 'update') {
-                void runRagUpdate();
+                appendSystemMessage('안내: rag update는 index update로 통합되었습니다.');
+                void runIndexUpdate();
                 return true;
             }
-            appendSystemMessage('사용법: rag reindex [sync] | rag update');
+            appendSystemMessage('사용법: index status | index reindex | index update');
             return true;
         }
 
@@ -1618,11 +1643,11 @@
             }
             const action = String(tokens[1] || '').toLowerCase();
             if (action === 'reindex') {
-                const batchSize = tokens.length >= 3 ? Number.parseInt(tokens[2], 10) : 200;
-                void runSearchTermsReindex(Number.isFinite(batchSize) ? batchSize : 200);
+                appendSystemMessage('안내: searchterms reindex는 index reindex로 통합되었습니다.');
+                void runIndexReindex();
                 return true;
             }
-            appendSystemMessage('사용법: searchterms reindex [batchSize]');
+            appendSystemMessage('사용법: index status | index reindex | index update');
             return true;
         }
 
@@ -1632,6 +1657,21 @@
     async function postJson(url) {
         const response = await fetch(url, {
             method: 'POST',
+            headers: { Accept: 'application/json' },
+            credentials: 'include',
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const bodyText = await response.text().catch(() => '');
+        if (!contentType.includes('application/json')) {
+            return { ok: response.ok, status: response.status, data: null, text: bodyText };
+        }
+        const data = bodyText ? JSON.parse(bodyText) : null;
+        return { ok: response.ok, status: response.status, data, text: bodyText };
+    }
+
+    async function getJson(url) {
+        const response = await fetch(url, {
+            method: 'GET',
             headers: { Accept: 'application/json' },
             credentials: 'include',
         });
@@ -1660,6 +1700,48 @@
         }
     }
 
+    async function runIndexStatus() {
+        try {
+            appendSystemMessage('[INDEX] status 조회...');
+            const result = await getJson('/api/assistant/index/status');
+            if (!result.ok) {
+                appendSystemMessage(`[INDEX] status 실패 (${result.status}): ${result.text.slice(0, 500)}`);
+                return;
+            }
+            appendSystemMessage(`[INDEX] status 응답 (${result.status}): ${result.text.slice(0, 500)}`);
+        } catch (e) {
+            appendSystemMessage('[INDEX] status 실패');
+        }
+    }
+
+    async function runIndexReindex() {
+        try {
+            appendSystemMessage('[INDEX] reindex 시작...');
+            const result = await postJson('/api/assistant/index/reindex');
+            if (!result.ok) {
+                appendSystemMessage(`[INDEX] reindex 실패 (${result.status}): ${result.text.slice(0, 500)}`);
+                return;
+            }
+            appendSystemMessage(`[INDEX] reindex 응답 (${result.status}): ${result.text.slice(0, 500)}`);
+        } catch (e) {
+            appendSystemMessage('[INDEX] reindex 실패');
+        }
+    }
+
+    async function runIndexUpdate() {
+        try {
+            appendSystemMessage('[INDEX] update 시작...');
+            const result = await postJson('/api/assistant/index/update');
+            if (!result.ok) {
+                appendSystemMessage(`[INDEX] update 실패 (${result.status}): ${result.text.slice(0, 500)}`);
+                return;
+            }
+            appendSystemMessage(`[INDEX] update 응답 (${result.status}): ${result.text.slice(0, 500)}`);
+        } catch (e) {
+            appendSystemMessage('[INDEX] update 실패');
+        }
+    }
+
     async function runRagUpdate() {
         try {
             appendSystemMessage('[RAG] update 시작...');
@@ -1671,22 +1753,6 @@
             appendSystemMessage(`[RAG] update 응답 (${result.status}): ${result.text.slice(0, 500)}`);
         } catch (e) {
             appendSystemMessage('[RAG] update 실패');
-        }
-    }
-
-    async function runSearchTermsReindex(batchSize) {
-        try {
-            const size = Number.isFinite(batchSize) ? batchSize : 200;
-            appendSystemMessage(`[search_terms] reindex 시작 (batchSize=${size})...`);
-            const url = `/api/assistant/search-terms/reindex?batchSize=${encodeURIComponent(size)}`;
-            const result = await postJson(url);
-            if (!result.ok) {
-                appendSystemMessage(`[search_terms] reindex 실패 (${result.status})`);
-                return;
-            }
-            appendSystemMessage(`[search_terms] reindex 응답 (${result.status}): ${result.text.slice(0, 500)}`);
-        } catch (e) {
-            appendSystemMessage('[search_terms] reindex 실패');
         }
     }
 

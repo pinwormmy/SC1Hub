@@ -9,7 +9,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpSession;
@@ -29,8 +28,7 @@ public class AssistantSearchTermsController {
     }
 
     @PostMapping("/reindex")
-    public ResponseEntity<AssistantSearchTermsReindexResponseDTO> reindex(HttpSession session,
-                                                                          @RequestParam(name = "batchSize", defaultValue = "200") int batchSize) {
+    public ResponseEntity<AssistantSearchTermsReindexResponseDTO> reindex(HttpSession session) {
         AssistantSearchTermsReindexResponseDTO response = new AssistantSearchTermsReindexResponseDTO();
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
         if (!isAdmin(member)) {
@@ -40,7 +38,7 @@ public class AssistantSearchTermsController {
         }
 
         try {
-            AssistantSearchTermsIndexService.ReindexResult result = indexService.reindexAll(batchSize);
+            AssistantSearchTermsIndexService.ReindexResult result = indexService.reindexAllDefault();
             response.setSuccess(true);
             response.setBoardCount(result.getBoardCount());
             response.setScannedPosts(result.getScannedPosts());

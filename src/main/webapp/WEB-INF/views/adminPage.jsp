@@ -413,28 +413,18 @@
                         <div class="admin-card-header">
                             <div>
                                 <h2 class="admin-card-title">인덱싱</h2>
-                                <p class="admin-card-subtitle">RAG / search_terms 재인덱싱</p>
+                                <p class="admin-card-subtitle">RAG + search_terms 통합 재인덱싱</p>
                             </div>
                         </div>
 
                         <div class="admin-indexing-section">
-                            <h3 class="admin-indexing-title">RAG (벡터 검색)</h3>
+                            <h3 class="admin-indexing-title">통합 실행</h3>
                             <div class="admin-indexing-row">
-                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagStatusBtn" data-admin-indexing-action="true">상태</button>
-                                <button type="button" class="admin-btn" id="adminRagReindexAsyncBtn" data-admin-indexing-action="true">reindex(비동기)</button>
-                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagReindexSyncBtn" data-admin-indexing-action="true">reindex(동기)</button>
-                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagUpdateBtn" data-admin-indexing-action="true">update</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminIndexStatusBtn" data-admin-indexing-action="true">상태</button>
+                                <button type="button" class="admin-btn" id="adminIndexReindexBtn" data-admin-indexing-action="true">reindex</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminIndexUpdateBtn" data-admin-indexing-action="true">update</button>
                             </div>
-                        </div>
-
-                        <div class="admin-indexing-section">
-                            <h3 class="admin-indexing-title">search_terms (alias_dictionary 반영)</h3>
-                            <div class="admin-indexing-row">
-                                <label class="admin-indexing-label" for="adminSearchTermsBatchSize">batchSize</label>
-                                <input class="admin-indexing-input" id="adminSearchTermsBatchSize" type="number" min="50" max="2000" step="10" value="200">
-                                <button type="button" class="admin-btn" id="adminSearchTermsReindexBtn" data-admin-indexing-action="true">reindex</button>
-                            </div>
-                            <div class="admin-indexing-hint">alias_dictionary 등록/수정 후 실행하면 기존 게시글의 search_terms가 갱신됩니다.</div>
+                            <div class="admin-indexing-hint">reindex: RAG reindex(비동기) + search_terms 재인덱싱. update: RAG update + search_terms 재인덱싱. alias_dictionary 등록/수정 후 실행하면 기존 게시글의 search_terms가 갱신됩니다.</div>
                         </div>
 
                         <div class="admin-indexing-section">
@@ -533,7 +523,6 @@ function confirmDelete(id) {
     }
 
     var actionEls = Array.prototype.slice.call(document.querySelectorAll('[data-admin-indexing-action]'));
-    var batchSizeEl = document.getElementById('adminSearchTermsBatchSize');
 
     function setBusy(busy) {
         actionEls.forEach(function(el) {
@@ -578,17 +567,6 @@ function confirmDelete(id) {
         return { ok: response.ok, status: response.status, contentType: contentType, text: text, json: json };
     }
 
-    function normalizeBatchSize() {
-        var value = batchSizeEl ? Number.parseInt(batchSizeEl.value, 10) : 200;
-        if (!Number.isFinite(value) || value <= 0) {
-            value = 200;
-        }
-        if (batchSizeEl) {
-            batchSizeEl.value = String(value);
-        }
-        return value;
-    }
-
     function bind(id, handler) {
         var el = document.getElementById(id);
         if (!el) {
@@ -597,75 +575,43 @@ function confirmDelete(id) {
         el.addEventListener('click', handler);
     }
 
-    bind('adminRagStatusBtn', async function() {
+    bind('adminIndexStatusBtn', async function() {
         setBusy(true);
         try {
-            var result = await request('GET', '/api/assistant/rag/status');
-            writeOutput('GET /api/assistant/rag/status', result);
+            var result = await request('GET', '/api/assistant/index/status');
+            writeOutput('GET /api/assistant/index/status', result);
         } catch (e) {
-            writeOutput('GET /api/assistant/rag/status', { error: e });
+            writeOutput('GET /api/assistant/index/status', { error: e });
         } finally {
             setBusy(false);
         }
     });
 
-    bind('adminRagReindexAsyncBtn', async function() {
-        if (!confirm('RAG reindex(비동기)를 실행할까요?')) {
+    bind('adminIndexReindexBtn', async function() {
+        if (!confirm('통합 reindex를 실행할까요? (RAG reindex + search_terms 재인덱싱)')) {
             return;
         }
         setBusy(true);
         try {
-            var result = await request('POST', '/api/assistant/rag/reindex?async=true');
-            writeOutput('POST /api/assistant/rag/reindex?async=true', result);
+            var result = await request('POST', '/api/assistant/index/reindex');
+            writeOutput('POST /api/assistant/index/reindex', result);
         } catch (e) {
-            writeOutput('POST /api/assistant/rag/reindex?async=true', { error: e });
+            writeOutput('POST /api/assistant/index/reindex', { error: e });
         } finally {
             setBusy(false);
         }
     });
 
-    bind('adminRagReindexSyncBtn', async function() {
-        if (!confirm('RAG reindex(동기)는 시간이 걸릴 수 있습니다. 실행할까요?')) {
+    bind('adminIndexUpdateBtn', async function() {
+        if (!confirm('통합 update를 실행할까요? (RAG update + search_terms 재인덱싱)')) {
             return;
         }
         setBusy(true);
         try {
-            var result = await request('POST', '/api/assistant/rag/reindex?async=false');
-            writeOutput('POST /api/assistant/rag/reindex?async=false', result);
+            var result = await request('POST', '/api/assistant/index/update');
+            writeOutput('POST /api/assistant/index/update', result);
         } catch (e) {
-            writeOutput('POST /api/assistant/rag/reindex?async=false', { error: e });
-        } finally {
-            setBusy(false);
-        }
-    });
-
-    bind('adminRagUpdateBtn', async function() {
-        if (!confirm('RAG update를 실행할까요?')) {
-            return;
-        }
-        setBusy(true);
-        try {
-            var result = await request('POST', '/api/assistant/rag/update');
-            writeOutput('POST /api/assistant/rag/update', result);
-        } catch (e) {
-            writeOutput('POST /api/assistant/rag/update', { error: e });
-        } finally {
-            setBusy(false);
-        }
-    });
-
-    bind('adminSearchTermsReindexBtn', async function() {
-        var batchSize = normalizeBatchSize();
-        if (!confirm('search_terms 재인덱싱을 실행할까요? (batchSize=' + batchSize + ')')) {
-            return;
-        }
-        setBusy(true);
-        try {
-            var url = '/api/assistant/search-terms/reindex?batchSize=' + encodeURIComponent(String(batchSize));
-            var result = await request('POST', url);
-            writeOutput('POST ' + url, result);
-        } catch (e) {
-            writeOutput('POST /api/assistant/search-terms/reindex', { error: e });
+            writeOutput('POST /api/assistant/index/update', { error: e });
         } finally {
             setBusy(false);
         }

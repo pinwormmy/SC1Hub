@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -24,16 +25,49 @@ public class AssistantSearchTermsIndexService {
     private final BoardMapper boardMapper;
     private final AssistantSearchTermsService searchTermsService;
 
+    private volatile boolean reindexRunning = false;
+    private volatile Date lastReindexStartedAt;
+    private volatile Date lastReindexFinishedAt;
+    private volatile String lastReindexError;
+    private volatile ReindexResult lastReindexResult;
+
     public AssistantSearchTermsIndexService(BoardMapper boardMapper, AssistantSearchTermsService searchTermsService) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
     }
 
+    public Status getStatus() {
+        return Status.of(reindexRunning, lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
+    }
+
     public ReindexResult reindexAll(int batchSize) {
         int resolvedBatchSize = Math.max(1, batchSize);
+        reindexRunning = true;
+        lastReindexStartedAt = new Date();
+        lastReindexFinishedAt = null;
+        lastReindexError = null;
+
+        try {
+            ReindexResult result = doReindex(resolvedBatchSize);
+            lastReindexResult = result;
+            return result;
+        } catch (Exception e) {
+            lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
+            throw e;
+        } finally {
+            lastReindexFinishedAt = new Date();
+            reindexRunning = false;
+        }
+    }
+
+    public ReindexResult reindexAllDefault() {
+        return reindexAll(DEFAULT_BATCH_SIZE);
+    }
+
+    private ReindexResult doReindex(int batchSize) {
         List<BoardListDTO> boards = loadBoards();
         if (boards.isEmpty()) {
-            return new ReindexResult(0, 0, 0, resolvedBatchSize, Collections.emptyList());
+            return new ReindexResult(0, 0, 0, batchSize, Collections.emptyList());
         }
 
         int boardCount = 0;
@@ -50,7 +84,7 @@ public class AssistantSearchTermsIndexService {
             try {
                 int lastPostNum = 0;
                 while (true) {
-                    List<BoardDTO> posts = boardMapper.selectPostsForSearchTerms(boardTitle, lastPostNum, resolvedBatchSize);
+                    List<BoardDTO> posts = boardMapper.selectPostsForSearchTerms(boardTitle, lastPostNum, batchSize);
                     if (posts == null || posts.isEmpty()) {
                         break;
                     }
@@ -74,11 +108,7 @@ public class AssistantSearchTermsIndexService {
             }
         }
 
-        return new ReindexResult(boardCount, scannedPosts, updatedPosts, resolvedBatchSize, failedBoards);
-    }
-
-    public ReindexResult reindexAllDefault() {
-        return reindexAll(DEFAULT_BATCH_SIZE);
+        return new ReindexResult(boardCount, scannedPosts, updatedPosts, batchSize, failedBoards);
     }
 
     private List<BoardListDTO> loadBoards() {
@@ -116,6 +146,27 @@ public class AssistantSearchTermsIndexService {
             this.updatedPosts = updatedPosts;
             this.batchSize = batchSize;
             this.failedBoards = failedBoards == null ? Collections.emptyList() : failedBoards;
+        }
+    }
+
+    @Getter
+    public static final class Status {
+        private final boolean running;
+        private final Date startedAt;
+        private final Date finishedAt;
+        private final ReindexResult lastResult;
+        private final String lastError;
+
+        private Status(boolean running, Date startedAt, Date finishedAt, ReindexResult lastResult, String lastError) {
+            this.running = running;
+            this.startedAt = startedAt;
+            this.finishedAt = finishedAt;
+            this.lastResult = lastResult;
+            this.lastError = lastError;
+        }
+
+        private static Status of(boolean running, Date startedAt, Date finishedAt, ReindexResult lastResult, String lastError) {
+            return new Status(running, startedAt, finishedAt, lastResult, lastError);
         }
     }
 }
