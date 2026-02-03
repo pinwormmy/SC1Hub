@@ -1889,10 +1889,10 @@
 
             if (answerEl) {
                 const answerText = answer || '답변을 생성하지 못했습니다.';
-                answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml(answerText).replace(/\\n/g, '<br>')}</div>`;
+                answerEl.innerHTML = `<div><strong>A.</strong> ${escapeHtml(answerText).replace(/\r?\n/g, '<br>')}</div>`;
             } else if (pendingContentEl) {
                 const usageHtml = usageText ? `<div>${escapeHtml(usageText)}</div>` : '';
-                const answerHtml = escapeHtml(answer || '답변을 생성하지 못했습니다.').replace(/\\n/g, '<br>');
+                const answerHtml = escapeHtml(answer || '답변을 생성하지 못했습니다.').replace(/\r?\n/g, '<br>');
                 pendingContentEl.innerHTML = usageHtml + answerHtml;
             }
 

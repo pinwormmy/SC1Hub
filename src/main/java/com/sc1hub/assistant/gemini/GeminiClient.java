@@ -31,6 +31,10 @@ public class GeminiClient {
     }
 
     public String generateAnswer(String prompt) {
+        return generateAnswer(prompt, null);
+    }
+
+    public String generateAnswer(String prompt, Integer maxOutputTokens) {
         String apiKey = geminiProperties.getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             log.warn("Gemini API key가 설정되지 않았습니다.");
@@ -61,7 +65,10 @@ public class GeminiClient {
 
         Map<String, Object> generationConfig = new HashMap<>();
         generationConfig.put("temperature", geminiProperties.getTemperature());
-        generationConfig.put("maxOutputTokens", geminiProperties.getMaxOutputTokens());
+        int resolvedMaxOutputTokens = resolveMaxOutputTokens(maxOutputTokens);
+        if (resolvedMaxOutputTokens > 0) {
+            generationConfig.put("maxOutputTokens", resolvedMaxOutputTokens);
+        }
         payload.put("generationConfig", generationConfig);
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(payload, headers);
@@ -79,22 +86,45 @@ public class GeminiClient {
         }
     }
 
+    private int resolveMaxOutputTokens(Integer override) {
+        if (override != null && override > 0) {
+            return override;
+        }
+        return Math.max(0, geminiProperties.getMaxOutputTokens());
+    }
+
     private String extractTextFromResponse(String rawBody) {
         if (!StringUtils.hasText(rawBody)) {
             return "";
         }
         try {
             JsonNode root = objectMapper.readTree(rawBody);
-            JsonNode textNode = root.path("candidates")
+            JsonNode partsNode = root.path("candidates")
                     .path(0)
                     .path("content")
-                    .path("parts")
-                    .path(0)
-                    .path("text");
-            if (textNode.isMissingNode() || textNode.isNull()) {
+                    .path("parts");
+            if (partsNode.isMissingNode() || partsNode.isNull()) {
                 return "";
             }
-            return textNode.asText("");
+            if (partsNode.isArray()) {
+                StringBuilder sb = new StringBuilder();
+                for (JsonNode part : partsNode) {
+                    if (part == null || part.isNull() || part.isMissingNode()) {
+                        continue;
+                    }
+                    JsonNode textNode = part.get("text");
+                    if (textNode == null || textNode.isNull() || textNode.isMissingNode()) {
+                        continue;
+                    }
+                    sb.append(textNode.asText(""));
+                }
+                return sb.toString();
+            }
+            JsonNode singleText = partsNode.path("text");
+            if (singleText.isMissingNode() || singleText.isNull()) {
+                return "";
+            }
+            return singleText.asText("");
         } catch (Exception e) {
             return "";
         }

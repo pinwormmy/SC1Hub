@@ -59,6 +59,9 @@ class AssistantServiceTest {
         assistantProperties.setRequireLogin(false);
         assistantProperties.setMaxRelatedPosts(5);
         assistantProperties.setContextPosts(3);
+        assistantProperties.setAnswerMaxSentences(8);
+        assistantProperties.setAnswerMaxChars(1500);
+        assistantProperties.setAnswerMaxOutputTokens(2048);
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
@@ -117,7 +120,7 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         MemberDTO member = new MemberDTO();
         member.setNickName("tester");
@@ -133,11 +136,101 @@ class AssistantServiceTest {
         assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture());
+        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("User question"));
+        assertTrue(prompt.contains("max 8 sentences"));
+        assertTrue(prompt.contains("<= 1500 chars"));
         assertTrue(prompt.contains("board=freeboard"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
+    }
+
+    @Test
+    void chat_fallsBackToKeywordCandidates_whenCitationsEmpty() throws Exception {
+        BoardListDTO free = new BoardListDTO();
+        free.setBoardTitle("FreeBoard");
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(free));
+
+        BoardDTO match = new BoardDTO();
+        match.setPostNum(9);
+        match.setTitle("커공발 운영");
+        match.setContent("프로토스 대저그 커공발 운영 정리");
+        match.setRegDate(new Date());
+
+        doReturn(Collections.singletonList(match))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[]}");
+
+        AssistantChatResponseDTO response = assistantService.chat("커공발 알려줘", null);
+
+        assertEquals("답변입니다.", response.getAnswer());
+        assertTrue(response.getUsedPostIds().isEmpty());
+        assertNotNull(response.getRelatedPosts());
+        assertFalse(response.getRelatedPosts().isEmpty());
+        assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
+        assertEquals(9, response.getRelatedPosts().get(0).getPostNum());
+        assertTrue(response.getRelatedPostsNotice() == null || !response.getRelatedPostsNotice().contains("못했습니다"));
+    }
+
+    @Test
+    void chat_ordersRelatedPostsByRelevance_andFillsUpToThree() throws Exception {
+        BoardListDTO pvz = new BoardListDTO();
+        pvz.setBoardTitle("PvZBoard");
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(pvz));
+
+        BoardDTO best = new BoardDTO();
+        best.setPostNum(4);
+        best.setTitle("대저그전 중반 정석 빌드, 커공발 운영법");
+        best.setContent("커공발은 커세어 공업 발업 질럿 운영입니다. 커세어로 상대 스커지/오버로드를 견제하고 멀티를 안전하게 가져갑니다.");
+        best.setRegDate(new Date());
+
+        BoardDTO weaker = new BoardDTO();
+        weaker.setPostNum(17);
+        weaker.setTitle("깔끔하게 정리해보자~ 프저전 빌드 로드맵 (커공발 포함)");
+        weaker.setContent("프저전 빌드 로드맵 정리 글입니다. 커공발도 포함되어 있습니다.");
+        weaker.setRegDate(new Date(System.currentTimeMillis() - 1000));
+
+        BoardDTO third = new BoardDTO();
+        third.setPostNum(8);
+        third.setTitle("커공발 이후 운영 팁 모음");
+        third.setContent("커공발 운영 이후 운영 팁들을 정리했습니다. 커세어와 질럿 컨트롤, 공업/발업 타이밍을 다룹니다.");
+        third.setRegDate(new Date(System.currentTimeMillis() - 2000));
+
+        doReturn(Arrays.asList(best, weaker, third))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("pvzboard"), anyList(), anyInt());
+
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
+                "{\"answer\":\"커공발은 커세어 공업 발업 질럿 운영입니다.\",\"citations\":[\"pvzboard:4\"]}"
+        );
+
+        AssistantChatResponseDTO response = assistantService.chat("커공발 알려줘", null);
+
+        assertEquals(3, response.getRelatedPosts().size());
+        assertEquals("pvzboard", response.getRelatedPosts().get(0).getBoardTitle());
+        assertEquals(4, response.getRelatedPosts().get(0).getPostNum());
+    }
+
+    @Test
+    void chat_returnsNotice_whenNoRelatedPosts() throws Exception {
+        BoardListDTO free = new BoardListDTO();
+        free.setBoardTitle("FreeBoard");
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(free));
+
+        doReturn(Collections.emptyList())
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
+                "{\"answer\":\"관련 글을 찾지 못했습니다.\",\"citations\":[]}"
+        );
+
+        AssistantChatResponseDTO response = assistantService.chat("커공발 알려줘", null);
+
+        assertTrue(response.getRelatedPosts().isEmpty());
+        assertEquals("관련 글이 없습니다.", response.getRelatedPostsNotice());
     }
 
     @Test
@@ -146,12 +239,12 @@ class AssistantServiceTest {
         unsafe.setBoardTitle("freeboard;drop table member;");
 
         when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(unsafe));
-        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("답변입니다.");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩", null);
 
         verify(boardMapper).getBoardList();
-        verify(geminiClient).generateAnswer(anyString());
+        verify(geminiClient).generateAnswer(anyString(), anyInt());
         assertTrue(response.getRelatedPosts().isEmpty());
     }
 
@@ -171,7 +264,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -180,7 +273,7 @@ class AssistantServiceTest {
         assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture());
+        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("chunkIndex=0"));
@@ -224,7 +317,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -233,7 +326,7 @@ class AssistantServiceTest {
         assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture());
+        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("Site posts"));
@@ -272,7 +365,8 @@ class AssistantServiceTest {
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
         String classificationJson = "{\"intent\":\"guide\",\"playerRace\":\"T\",\"opponentRace\":\"P\",\"confidence\":0.9}";
-        when(geminiClient.generateAnswer(anyString())).thenReturn(classificationJson, "{\"answer\":\"답변입니다.\",\"citations\":[\"tvspboard:1\"]}");
+        when(geminiClient.generateAnswer(anyString())).thenReturn(classificationJson);
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"tvspboard:1\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 운영", null);
 
@@ -281,7 +375,8 @@ class AssistantServiceTest {
         assertEquals(1, response.getRelatedPosts().size());
         assertEquals("tvspboard", response.getRelatedPosts().get(0).getBoardTitle());
         assertTrue(response.getRelatedPostsNotice() == null || response.getRelatedPostsNotice().contains("관련 글"));
-        verify(geminiClient, times(2)).generateAnswer(anyString());
+        verify(geminiClient).generateAnswer(anyString());
+        verify(geminiClient).generateAnswer(anyString(), anyInt());
     }
 
     @Test
@@ -311,8 +406,8 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString())).thenReturn(
-                "[2,1]",
+        when(geminiClient.generateAnswer(anyString())).thenReturn("[2,1]");
+        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
                 "{\"answer\":\"첫번째 답변\",\"citations\":[\"freeboard:2\"]}",
                 "{\"answer\":\"두번째 답변\",\"citations\":[\"freeboard:2\"]}"
         );
@@ -326,7 +421,8 @@ class AssistantServiceTest {
         assertEquals(2, secondCall.getRelatedPosts().get(0).getPostNum());
 
         // rerank 1회 + answer 2회
-        verify(geminiClient, times(3)).generateAnswer(anyString());
+        verify(geminiClient).generateAnswer(anyString());
+        verify(geminiClient, times(2)).generateAnswer(anyString(), anyInt());
     }
 
     private AssistantQueryParseResult buildParseResult(String message) {

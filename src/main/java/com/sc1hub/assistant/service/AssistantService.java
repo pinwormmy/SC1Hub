@@ -157,7 +157,8 @@ public class AssistantService {
         AssistantAnswerResult answerResult;
         String answer;
         try {
-            String rawAnswer = geminiClient.generateAnswer(prompt);
+            int answerMaxOutputTokens = Math.max(0, assistantProperties.getAnswerMaxOutputTokens());
+            String rawAnswer = geminiClient.generateAnswer(prompt, answerMaxOutputTokens);
             answerResult = parseAnswerResult(rawAnswer, allowedSourceIds);
             answer = answerResult.getAnswer() == null ? "" : answerResult.getAnswer().trim();
             if (!StringUtils.hasText(answer)) {
@@ -1108,7 +1109,12 @@ public class AssistantService {
         sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site snippets' as factual ground.\n");
         sb.append("If the snippets are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
-        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Keep the answer concise (max ")
+                .append(Math.max(1, assistantProperties.getAnswerMaxSentences()))
+                .append(" sentences, <= ")
+                .append(Math.max(100, assistantProperties.getAnswerMaxChars()))
+                .append(" chars).\n");
+        sb.append("Answer must end with a complete sentence. Do not stop mid-sentence.\n");
         sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any snippet, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
@@ -1182,7 +1188,12 @@ public class AssistantService {
         sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site snippets' and 'Site posts' as factual ground.\n");
         sb.append("If the sources are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
-        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Keep the answer concise (max ")
+                .append(Math.max(1, assistantProperties.getAnswerMaxSentences()))
+                .append(" sentences, <= ")
+                .append(Math.max(100, assistantProperties.getAnswerMaxChars()))
+                .append(" chars).\n");
+        sb.append("Answer must end with a complete sentence. Do not stop mid-sentence.\n");
         sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any source, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
@@ -1676,7 +1687,12 @@ public class AssistantService {
         sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site posts' as factual ground.\n");
         sb.append("If the posts are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
-        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Keep the answer concise (max ")
+                .append(Math.max(1, assistantProperties.getAnswerMaxSentences()))
+                .append(" sentences, <= ")
+                .append(Math.max(100, assistantProperties.getAnswerMaxChars()))
+                .append(" chars).\n");
+        sb.append("Answer must end with a complete sentence. Do not stop mid-sentence.\n");
         sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any post, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
@@ -1738,31 +1754,54 @@ public class AssistantService {
             return RelatedPostsSelection.empty(null);
         }
 
-        if (usedPostIds == null || usedPostIds.isEmpty()) {
-            return RelatedPostsSelection.empty("관련 글을 찾지 못했습니다.");
-        }
+        double threshold = sanitizeRelatedThreshold(assistantProperties.getRelatedPostThreshold());
+        double floorThreshold = resolveRelatedFloorThreshold(threshold);
 
         Map<String, RelatedPostCandidate> candidatePool = buildRelatedCandidatePool(ragRetrieval, keywordCandidates);
-        RelatedPostCandidate evidence = pickEvidenceCandidate(usedPostIds, candidatePool);
-        if (evidence == null) {
-            return RelatedPostsSelection.empty("관련 글을 찾지 못했습니다.");
+        if (candidatePool.isEmpty()) {
+            return RelatedPostsSelection.empty("관련 글이 없습니다.");
         }
 
+        Set<String> queryTokens = tokenizeForSimilarity(query);
+        Set<String> answerTokens = tokenizeForSimilarity(answer);
+        Set<String> expandedTokens = tokenizeForSimilarity(expandedTerms == null ? "" : String.join(" ", expandedTerms));
+
+        RelatedPostCandidate seed = pickBestCandidateByRelevance(candidatePool, queryTokens, answerTokens, expandedTokens, boardWeights);
+        if (seed == null) {
+            return RelatedPostsSelection.empty("관련 글이 없습니다.");
+        }
         List<String> dbKeywords = buildDbKeywords(expandedTerms);
-        expandBoostedBoardCandidates(candidatePool, evidence, dbKeywords, boardWeights);
+        expandBoostedBoardCandidates(candidatePool, seed, dbKeywords, boardWeights);
+
+        ScoredRelatedCandidate topCandidate = pickTopScoredCandidate(candidatePool, queryTokens, answerTokens, expandedTokens, boardWeights);
+        if (topCandidate == null || topCandidate.breakdown == null || topCandidate.candidate == null) {
+            return RelatedPostsSelection.empty("관련 글이 없습니다.");
+        }
+        if (topCandidate.breakdown.total < floorThreshold) {
+            return RelatedPostsSelection.empty("관련 글이 없습니다.");
+        }
+
+        RelatedPostCandidate evidence = pickEvidenceCandidate(usedPostIds, candidatePool);
+        if (evidence != null) {
+            RelatedScoreBreakdown evidenceScore = scoreRelatedCandidate(queryTokens, answerTokens, expandedTokens, evidence, "", boardWeights);
+            if (evidenceScore.total < floorThreshold) {
+                evidence = null;
+            }
+        }
+        if (evidence == null) {
+            evidence = topCandidate.candidate;
+        }
 
         List<ScoredRelatedCandidate> scored = scoreSupportingCandidates(query, answer, expandedTerms, evidence, candidatePool, boardWeights);
         int supportingLimit = Math.max(0, maxLinks - 1);
-
-        double threshold = sanitizeRelatedThreshold(assistantProperties.getRelatedPostThreshold());
 
         RelatedPostsSelection llmSelected = trySelectRelatedPostsWithLlm(query, answer, usedPostIds, evidence, scored, supportingLimit, threshold, candidatePool);
         if (llmSelected != null) {
             return llmSelected;
         }
 
-        List<AssistantRelatedPostDTO> selected = new ArrayList<>(maxLinks);
-        selected.add(toRelatedPostDto(evidence));
+        List<RelatedPostCandidate> selectedCandidates = new ArrayList<>(maxLinks);
+        selectedCandidates.add(evidence);
 
         String evidenceTitleKey = normalizeTitleKey(evidence.title);
         Set<String> usedTitleKeys = new HashSet<>();
@@ -1776,16 +1815,20 @@ public class AssistantService {
         }
 
         Map<String, RelatedScoreBreakdown> selectedBreakdowns = new LinkedHashMap<>();
+        List<ScoredRelatedCandidate> fallbackCandidates = new ArrayList<>();
 
         for (ScoredRelatedCandidate candidate : scored) {
             if (candidate == null || candidate.candidate == null || candidate.breakdown == null) {
                 continue;
             }
-            if (selected.size() >= 1 + supportingLimit) {
+            if (selectedCandidates.size() >= 1 + supportingLimit) {
                 break;
             }
             if (candidate.breakdown.total < threshold) {
-                break;
+                if (candidate.breakdown.total >= floorThreshold) {
+                    fallbackCandidates.add(candidate);
+                }
+                continue;
             }
 
             String titleKey = normalizeTitleKey(candidate.candidate.title);
@@ -1798,7 +1841,7 @@ public class AssistantService {
                 continue;
             }
 
-            selected.add(toRelatedPostDto(candidate.candidate));
+            selectedCandidates.add(candidate.candidate);
             selectedBreakdowns.put(candidate.candidate.sourceId, candidate.breakdown);
             if (StringUtils.hasText(titleKey)) {
                 usedTitleKeys.add(titleKey);
@@ -1808,11 +1851,151 @@ public class AssistantService {
             }
         }
 
+        if (selectedCandidates.size() < maxLinks && !fallbackCandidates.isEmpty()) {
+            for (ScoredRelatedCandidate candidate : fallbackCandidates) {
+                if (candidate == null || candidate.candidate == null) {
+                    continue;
+                }
+                if (selectedCandidates.size() >= maxLinks) {
+                    break;
+                }
+                String titleKey = normalizeTitleKey(candidate.candidate.title);
+                if (StringUtils.hasText(titleKey) && usedTitleKeys.contains(titleKey)) {
+                    continue;
+                }
+                String writerKey = normalizeWriterKey(candidate.candidate.writer);
+                if (StringUtils.hasText(writerKey) && usedWriters.contains(writerKey)) {
+                    continue;
+                }
+                selectedCandidates.add(candidate.candidate);
+                selectedBreakdowns.put(candidate.candidate.sourceId, candidate.breakdown);
+                if (StringUtils.hasText(titleKey)) {
+                    usedTitleKeys.add(titleKey);
+                }
+                if (StringUtils.hasText(writerKey)) {
+                    usedWriters.add(writerKey);
+                }
+            }
+        }
+
+        List<AssistantRelatedPostDTO> selected = new ArrayList<>(selectedCandidates.size());
+        for (RelatedPostCandidate candidate : selectedCandidates) {
+            if (candidate == null) {
+                continue;
+            }
+            selected.add(toRelatedPostDto(candidate));
+        }
+
         String notice = null;
         if (selected.size() < maxLinks) {
             notice = "관련 글이 부족합니다.";
         }
         return new RelatedPostsSelection(selected, notice, evidence.sourceId, selectedBreakdowns, false, Collections.emptyMap());
+    }
+
+    private static double resolveRelatedFloorThreshold(double threshold) {
+        if (Double.isNaN(threshold) || Double.isInfinite(threshold) || threshold <= 0.0) {
+            return 0.18;
+        }
+        return Math.min(threshold, 0.18);
+    }
+
+    private static RelatedPostCandidate pickBestCandidateByRelevance(Map<String, RelatedPostCandidate> pool,
+                                                                     Set<String> queryTokens,
+                                                                     Set<String> answerTokens,
+                                                                     Set<String> expandedTokens,
+                                                                     Map<String, Double> boardWeights) {
+        ScoredRelatedCandidate best = pickTopScoredCandidate(pool, queryTokens, answerTokens, expandedTokens, boardWeights);
+        return best == null ? null : best.candidate;
+    }
+
+    private static ScoredRelatedCandidate pickTopScoredCandidate(Map<String, RelatedPostCandidate> pool,
+                                                                 Set<String> queryTokens,
+                                                                 Set<String> answerTokens,
+                                                                 Set<String> expandedTokens,
+                                                                 Map<String, Double> boardWeights) {
+        if (pool == null || pool.isEmpty()) {
+            return null;
+        }
+        ScoredRelatedCandidate best = null;
+        for (RelatedPostCandidate candidate : pool.values()) {
+            if (candidate == null) {
+                continue;
+            }
+            RelatedScoreBreakdown breakdown = scoreRelatedCandidate(queryTokens, answerTokens, expandedTokens, candidate, "", boardWeights);
+            ScoredRelatedCandidate scored = new ScoredRelatedCandidate(candidate, breakdown);
+            if (best == null) {
+                best = scored;
+                continue;
+            }
+            if (compareScoredRelatedCandidates(scored, best) < 0) {
+                best = scored;
+            }
+        }
+        return best;
+    }
+
+    private static RelatedScoreBreakdown scoreRelatedCandidate(Set<String> queryTokens,
+                                                               Set<String> answerTokens,
+                                                               Set<String> expandedTokens,
+                                                               RelatedPostCandidate candidate,
+                                                               String evidenceBoardTitle,
+                                                               Map<String, Double> boardWeights) {
+        if (candidate == null) {
+            return new RelatedScoreBreakdown(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        Set<String> postTokens = tokenizeForSimilarity(safeText(candidate.title) + " " + safeText(candidate.searchTerms));
+        Set<String> snippetTokens = tokenizeForSimilarity(candidate.snippet);
+
+        double querySimilarity = overlapRatio(queryTokens, postTokens);
+        double answerSimilarity = binaryCosineSimilarity(answerTokens, snippetTokens);
+        double keywordOverlap = overlapRatio(expandedTokens, postTokens);
+
+        double boardBonus = computeBoardBonus(candidate.boardTitle, evidenceBoardTitle, boardWeights);
+        double penalty = computePenalty(candidate);
+
+        double total = 0.35 * querySimilarity + 0.45 * answerSimilarity + 0.20 * keywordOverlap + boardBonus - penalty;
+        return new RelatedScoreBreakdown(
+                querySimilarity,
+                answerSimilarity,
+                keywordOverlap,
+                boardBonus,
+                penalty,
+                total
+        );
+    }
+
+    private static int compareScoredRelatedCandidates(ScoredRelatedCandidate a, ScoredRelatedCandidate b) {
+        if (a == null && b == null) {
+            return 0;
+        }
+        if (a == null) {
+            return 1;
+        }
+        if (b == null) {
+            return -1;
+        }
+        double scoreA = a.breakdown == null ? 0.0 : a.breakdown.total;
+        double scoreB = b.breakdown == null ? 0.0 : b.breakdown.total;
+        int scoreCompare = Double.compare(scoreB, scoreA);
+        if (scoreCompare != 0) {
+            return scoreCompare;
+        }
+        Date dateA = a.candidate == null ? null : a.candidate.regDate;
+        Date dateB = b.candidate == null ? null : b.candidate.regDate;
+        if (dateA != null && dateB != null) {
+            int dateCompare = dateB.compareTo(dateA);
+            if (dateCompare != 0) {
+                return dateCompare;
+            }
+        } else if (dateA != null) {
+            return -1;
+        } else if (dateB != null) {
+            return 1;
+        }
+        int postNumA = a.candidate == null ? 0 : a.candidate.postNum;
+        int postNumB = b.candidate == null ? 0 : b.candidate.postNum;
+        return Integer.compare(postNumB, postNumA);
     }
 
     private Map<String, RelatedPostCandidate> buildRelatedCandidatePool(RagRetrieval ragRetrieval,
@@ -2077,56 +2260,11 @@ public class AssistantService {
             if (candidate.sourceId.equals(evidence.sourceId)) {
                 continue;
             }
-
-            Set<String> postTokens = tokenizeForSimilarity(safeText(candidate.title) + " " + safeText(candidate.searchTerms));
-            Set<String> snippetTokens = tokenizeForSimilarity(candidate.snippet);
-
-            double querySimilarity = binaryCosineSimilarity(queryTokens, postTokens);
-            double answerSimilarity = binaryCosineSimilarity(answerTokens, snippetTokens);
-            double keywordOverlap = overlapRatio(expandedTokens, postTokens);
-
-            double boardBonus = computeBoardBonus(candidate.boardTitle, evidence.boardTitle, boardWeights);
-            double penalty = computePenalty(candidate);
-
-            double total = 0.35 * querySimilarity + 0.45 * answerSimilarity + 0.20 * keywordOverlap + boardBonus - penalty;
-
-            RelatedScoreBreakdown breakdown = new RelatedScoreBreakdown(
-                    querySimilarity,
-                    answerSimilarity,
-                    keywordOverlap,
-                    boardBonus,
-                    penalty,
-                    total
-            );
+            RelatedScoreBreakdown breakdown = scoreRelatedCandidate(queryTokens, answerTokens, expandedTokens, candidate, evidence.boardTitle, boardWeights);
             scored.add(new ScoredRelatedCandidate(candidate, breakdown));
         }
 
-        scored.sort((a, b) -> {
-            if (a == null || b == null) {
-                return 0;
-            }
-            double scoreA = a.breakdown == null ? 0.0 : a.breakdown.total;
-            double scoreB = b.breakdown == null ? 0.0 : b.breakdown.total;
-            int scoreCompare = Double.compare(scoreB, scoreA);
-            if (scoreCompare != 0) {
-                return scoreCompare;
-            }
-            Date dateA = a.candidate == null ? null : a.candidate.regDate;
-            Date dateB = b.candidate == null ? null : b.candidate.regDate;
-            if (dateA != null && dateB != null) {
-                int dateCompare = dateB.compareTo(dateA);
-                if (dateCompare != 0) {
-                    return dateCompare;
-                }
-            } else if (dateA != null) {
-                return -1;
-            } else if (dateB != null) {
-                return 1;
-            }
-            int postNumA = a.candidate == null ? 0 : a.candidate.postNum;
-            int postNumB = b.candidate == null ? 0 : b.candidate.postNum;
-            return Integer.compare(postNumB, postNumA);
-        });
+        scored.sort(AssistantService::compareScoredRelatedCandidates);
         return scored;
     }
 
@@ -2918,9 +3056,14 @@ public class AssistantService {
             }
             logMap.put("evidencePostId", selection.evidenceSourceId);
             if (StringUtils.hasText(selection.evidenceSourceId)) {
-                String evidenceReason = selection.llmSelected
-                        ? safeText(selection.llmReasons.get(selection.evidenceSourceId))
-                        : "citations";
+                String evidenceReason;
+                if (selection.llmSelected) {
+                    evidenceReason = safeText(selection.llmReasons.get(selection.evidenceSourceId));
+                } else if (usedPostIds != null && usedPostIds.contains(selection.evidenceSourceId)) {
+                    evidenceReason = "citations";
+                } else {
+                    evidenceReason = "fallback";
+                }
                 if (StringUtils.hasText(evidenceReason)) {
                     logMap.put("evidenceReason", evidenceReason);
                 }

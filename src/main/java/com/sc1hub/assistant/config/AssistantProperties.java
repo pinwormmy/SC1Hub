@@ -14,10 +14,14 @@ public class AssistantProperties {
     private boolean requireLogin = false;
     private int maxRelatedPosts = 3;
     private int contextPosts = 3;
+    // Answer generation limits (prompt guidance + output token budget)
+    private int answerMaxSentences = 5;
+    private int answerMaxChars = 600;
+    private int answerMaxOutputTokens = 0;
     // Answer-grounded related posts: candidate pool size for selecting high-quality supporting links.
     private int relatedCandidatePoolSize = 40;
     // Minimum score threshold to show supporting posts (0~1-ish). Evidence post still shows when available.
-    private double relatedPostThreshold = 0.35;
+    private double relatedPostThreshold = 0.25;
     private int perBoardLimit = 5;
     private int maxPostSnippetChars = 800;
     private int maxPromptChars = 12000;
