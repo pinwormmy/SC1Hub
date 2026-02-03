@@ -131,6 +131,7 @@ public class AssistantService {
         logParserResult(parseResult, expandedTerms);
         boolean factQuery = isFactQuery(normalizedMessage, keywords);
         boolean aliasMatched = parseResult.isAliasMatched();
+        int contextLimit = resolveContextLimit(aliasMatched);
         String ragQuery = buildRagQuery(normalizedMessage, expandedTerms, aliasMatched);
         RagRetrieval ragRetrieval = tryRetrieveWithRag(ragQuery, expandedTerms, boardWeights, factQuery, aliasMatched);
 
@@ -144,12 +145,12 @@ public class AssistantService {
         Set<String> allowedSourceIds = new LinkedHashSet<>();
         if (ragRetrieval != null) {
             if (!candidates.isEmpty()) {
-                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates, allowedSourceIds);
+                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates, allowedSourceIds, contextLimit);
             } else {
                 prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches, allowedSourceIds);
             }
         } else {
-            List<CandidatePost> contextPosts = candidates.subList(0, Math.min(assistantProperties.getContextPosts(), candidates.size()));
+            List<CandidatePost> contextPosts = candidates.subList(0, Math.min(contextLimit, candidates.size()));
             prompt = buildPrompt(normalizedMessage, contextPosts, allowedSourceIds);
         }
 
@@ -202,8 +203,13 @@ public class AssistantService {
             return result;
         }
 
-        String json = extractFirstJsonObject(trimmed);
+        String cleaned = stripCodeFences(trimmed);
+        String json = extractFirstJsonObject(cleaned);
         if (!StringUtils.hasText(json)) {
+            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
+            if (loose != null) {
+                return loose;
+            }
             result.setAnswer(trimmed);
             return result;
         }
@@ -226,8 +232,177 @@ public class AssistantService {
             result.setUsedPostIds(new ArrayList<>(used));
             return result;
         } catch (Exception e) {
+            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
+            if (loose != null) {
+                return loose;
+            }
             result.setAnswer(trimmed);
             return result;
+        }
+    }
+
+    private AssistantAnswerResult parseLooseAnswerResult(String raw, Set<String> allowedSourceIds) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String answer = extractLooseJsonStringField(raw, "answer");
+        if (!StringUtils.hasText(answer)) {
+            answer = extractLooseJsonStringField(raw, "text");
+        }
+        if (!StringUtils.hasText(answer)) {
+            return null;
+        }
+        AssistantAnswerResult result = new AssistantAnswerResult();
+        result.setAnswer(answer.trim());
+        LinkedHashSet<String> used = new LinkedHashSet<>();
+        addSourceIdsFromLooseArray(used, raw, "citations", allowedSourceIds);
+        addSourceIdsFromLooseArray(used, raw, "used_post_ids", allowedSourceIds);
+        addSourceIdsFromLooseArray(used, raw, "usedPostIds", allowedSourceIds);
+        result.setUsedPostIds(new ArrayList<>(used));
+        return result;
+    }
+
+    private static String stripCodeFences(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return "";
+        }
+        String cleaned = raw;
+        cleaned = cleaned.replace("```json", "");
+        cleaned = cleaned.replace("```JSON", "");
+        cleaned = cleaned.replace("```", "");
+        return cleaned.trim();
+    }
+
+    private static String extractLooseJsonStringField(String raw, String fieldName) {
+        if (!StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
+            return "";
+        }
+        String needle = "\"" + fieldName + "\"";
+        int keyIndex = raw.indexOf(needle);
+        if (keyIndex < 0) {
+            return "";
+        }
+        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
+        if (colonIndex < 0) {
+            return "";
+        }
+        int quoteIndex = raw.indexOf('"', colonIndex + 1);
+        if (quoteIndex < 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean escape = false;
+        for (int i = quoteIndex + 1; i < raw.length(); i++) {
+            char ch = raw.charAt(i);
+            if (escape) {
+                switch (ch) {
+                    case 'n':
+                        sb.append('\n');
+                        break;
+                    case 'r':
+                        sb.append('\r');
+                        break;
+                    case 't':
+                        sb.append('\t');
+                        break;
+                    case '"':
+                        sb.append('"');
+                        break;
+                    case '\\':
+                        sb.append('\\');
+                        break;
+                    default:
+                        sb.append(ch);
+                        break;
+                }
+                escape = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escape = true;
+                continue;
+            }
+            if (ch == '"') {
+                break;
+            }
+            sb.append(ch);
+        }
+        return sb.toString();
+    }
+
+    private void addSourceIdsFromLooseArray(Set<String> target, String raw, String fieldName, Set<String> allowedSourceIds) {
+        if (target == null || !StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
+            return;
+        }
+        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
+            return;
+        }
+        String needle = "\"" + fieldName + "\"";
+        int keyIndex = raw.indexOf(needle);
+        if (keyIndex < 0) {
+            return;
+        }
+        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
+        if (colonIndex < 0) {
+            return;
+        }
+        int arrayStart = raw.indexOf('[', colonIndex + 1);
+        if (arrayStart < 0) {
+            return;
+        }
+
+        boolean inString = false;
+        boolean escape = false;
+        StringBuilder current = new StringBuilder();
+        for (int i = arrayStart + 1; i < raw.length(); i++) {
+            char ch = raw.charAt(i);
+            if (inString) {
+                if (escape) {
+                    switch (ch) {
+                        case 'n':
+                            current.append('\n');
+                            break;
+                        case 'r':
+                            current.append('\r');
+                            break;
+                        case 't':
+                            current.append('\t');
+                            break;
+                        case '"':
+                            current.append('"');
+                            break;
+                        case '\\':
+                            current.append('\\');
+                            break;
+                        default:
+                            current.append(ch);
+                            break;
+                    }
+                    escape = false;
+                    continue;
+                }
+                if (ch == '\\') {
+                    escape = true;
+                    continue;
+                }
+                if (ch == '"') {
+                    inString = false;
+                    addValidatedSourceId(target, current.toString(), allowedSourceIds);
+                    current.setLength(0);
+                    continue;
+                }
+                current.append(ch);
+                continue;
+            }
+
+            if (ch == '"') {
+                inString = true;
+                current.setLength(0);
+                continue;
+            }
+            if (ch == ']') {
+                break;
+            }
         }
     }
 
@@ -707,27 +882,58 @@ public class AssistantService {
     }
 
     private static String extractFirstJsonObject(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            return "";
-        }
-        return raw.substring(start, end + 1).trim();
+        return extractFirstBalancedJson(raw, '{', '}');
     }
 
     private static String extractFirstJsonArray(String raw) {
+        return extractFirstBalancedJson(raw, '[', ']');
+    }
+
+    private static String extractFirstBalancedJson(String raw, char open, char close) {
         if (!StringUtils.hasText(raw)) {
             return "";
         }
-        int start = raw.indexOf('[');
-        int end = raw.lastIndexOf(']');
-        if (start < 0 || end <= start) {
+        int start = raw.indexOf(open);
+        if (start < 0) {
             return "";
         }
-        return raw.substring(start, end + 1).trim();
+        boolean inString = false;
+        boolean escape = false;
+        int depth = 0;
+        for (int i = start; i < raw.length(); i++) {
+            char ch = raw.charAt(i);
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (ch == '\\') {
+                if (inString) {
+                    escape = true;
+                }
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                continue;
+            }
+            if (ch == open) {
+                depth += 1;
+                continue;
+            }
+            if (ch == close) {
+                depth -= 1;
+                if (depth == 0) {
+                    return raw.substring(start, i + 1).trim();
+                }
+                if (depth < 0) {
+                    return "";
+                }
+            }
+        }
+        return "";
     }
 
     private static String textOrNull(JsonNode node) {
@@ -899,9 +1105,11 @@ public class AssistantService {
         sb.append("You are the SC1Hub assistant.\n");
         sb.append("Answer in Korean.\n");
         sb.append("Return JSON only. Do not include markdown or explanations.\n");
+        sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site snippets' as factual ground.\n");
-        sb.append("If the snippets are insufficient, say you cannot find enough information and suggest checking related posts.\n");
-        sb.append("Keep the answer concise (max 5 sentences).\n");
+        sb.append("If the snippets are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
+        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any snippet, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
@@ -962,14 +1170,20 @@ public class AssistantService {
         return prompt.substring(0, assistantProperties.getMaxPromptChars());
     }
 
-    private String buildHybridPrompt(String message, List<AssistantRagSearchService.Match> matches, List<CandidatePost> candidates, Set<String> allowedSourceIds) {
+    private String buildHybridPrompt(String message,
+                                     List<AssistantRagSearchService.Match> matches,
+                                     List<CandidatePost> candidates,
+                                     Set<String> allowedSourceIds,
+                                     int contextLimit) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are the SC1Hub assistant.\n");
         sb.append("Answer in Korean.\n");
         sb.append("Return JSON only. Do not include markdown or explanations.\n");
+        sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site snippets' and 'Site posts' as factual ground.\n");
-        sb.append("If the snippets are insufficient, say you cannot find enough information and suggest checking related posts.\n");
-        sb.append("Keep the answer concise (max 5 sentences).\n");
+        sb.append("If the sources are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
+        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any source, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
@@ -981,7 +1195,7 @@ public class AssistantService {
 
         int maxPromptChars = assistantProperties.getMaxPromptChars();
         int maxSnippetChars = assistantProperties.getMaxPostSnippetChars();
-        int ragLimit = Math.max(1, assistantProperties.getContextPosts() * 2);
+        int ragLimit = Math.max(1, contextLimit * 2);
 
         List<RagEvidence> ragEvidence = buildRagEvidence(matches);
         Set<String> includedKeys = new HashSet<>();
@@ -1025,7 +1239,7 @@ public class AssistantService {
             sb.append("- (no related posts found)\n");
         } else {
             int index = 1;
-            int keywordLimit = Math.max(0, assistantProperties.getContextPosts());
+            int keywordLimit = Math.max(0, contextLimit);
             for (CandidatePost post : candidates) {
                 if (post == null || post.post == null) {
                     continue;
@@ -1141,6 +1355,14 @@ public class AssistantService {
         int baseLimit = resolveCandidateLimit();
         int pool = Math.max(0, assistantProperties.getRelatedCandidatePoolSize());
         return Math.max(baseLimit, pool);
+    }
+
+    private int resolveContextLimit(boolean aliasMatched) {
+        int base = Math.max(0, assistantProperties.getContextPosts());
+        if (aliasMatched) {
+            return Math.max(base, 5);
+        }
+        return base;
     }
 
     private List<BoardListDTO> getBoardListCached() {
@@ -1451,9 +1673,11 @@ public class AssistantService {
         sb.append("You are the SC1Hub assistant.\n");
         sb.append("Answer in Korean.\n");
         sb.append("Return JSON only. Do not include markdown or explanations.\n");
+        sb.append("Do NOT wrap JSON in ``` fences. Output must start with '{' and end with '}'.\n");
         sb.append("Use only the information provided in 'Site posts' as factual ground.\n");
-        sb.append("If the posts are insufficient, say you cannot find enough information and suggest checking related posts.\n");
-        sb.append("Keep the answer concise (max 5 sentences).\n");
+        sb.append("If the posts are insufficient or missing, answer must be '관련 글을 찾지 못했습니다.' and citations must be [].\n");
+        sb.append("Keep the answer concise (max 5 sentences, <= 600 chars).\n");
+        sb.append("Always include citations array (empty is allowed).\n");
         sb.append("If you used any post, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");

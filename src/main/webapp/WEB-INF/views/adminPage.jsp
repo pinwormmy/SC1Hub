@@ -168,6 +168,52 @@
 .visitor-count {
     font-size: 22px;
 }
+.admin-indexing-section {
+    margin-top: 14px;
+}
+.admin-indexing-title {
+    margin: 0;
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.9);
+}
+.admin-indexing-row {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.admin-indexing-label {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 14px;
+}
+.admin-indexing-input {
+    width: 120px;
+    height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    background: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+    padding-left: 10px;
+}
+.admin-indexing-hint {
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    line-height: 1.4;
+}
+.admin-indexing-output {
+    margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+}
 @media (max-width: 768px) {
     .admin-card {
         padding: 14px;
@@ -363,6 +409,39 @@
                             <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary'">관리하기</button>
                         </div>
                     </div>
+                    <div class="admin-card admin-card--indexing">
+                        <div class="admin-card-header">
+                            <div>
+                                <h2 class="admin-card-title">인덱싱</h2>
+                                <p class="admin-card-subtitle">RAG / search_terms 재인덱싱</p>
+                            </div>
+                        </div>
+
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">RAG (벡터 검색)</h3>
+                            <div class="admin-indexing-row">
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagStatusBtn" data-admin-indexing-action="true">상태</button>
+                                <button type="button" class="admin-btn" id="adminRagReindexAsyncBtn" data-admin-indexing-action="true">reindex(비동기)</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagReindexSyncBtn" data-admin-indexing-action="true">reindex(동기)</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminRagUpdateBtn" data-admin-indexing-action="true">update</button>
+                            </div>
+                        </div>
+
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">search_terms (alias_dictionary 반영)</h3>
+                            <div class="admin-indexing-row">
+                                <label class="admin-indexing-label" for="adminSearchTermsBatchSize">batchSize</label>
+                                <input class="admin-indexing-input" id="adminSearchTermsBatchSize" type="number" min="50" max="2000" step="10" value="200">
+                                <button type="button" class="admin-btn" id="adminSearchTermsReindexBtn" data-admin-indexing-action="true">reindex</button>
+                            </div>
+                            <div class="admin-indexing-hint">alias_dictionary 등록/수정 후 실행하면 기존 게시글의 search_terms가 갱신됩니다.</div>
+                        </div>
+
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">최근 응답</h3>
+                            <pre class="admin-indexing-output" id="adminIndexingOutput" aria-live="polite"></pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -445,6 +524,152 @@ function confirmDelete(id) {
     }
 
     applyExpanded(hasKeyword);
+})();
+
+(function() {
+    var outputEl = document.getElementById('adminIndexingOutput');
+    if (!outputEl) {
+        return;
+    }
+
+    var actionEls = Array.prototype.slice.call(document.querySelectorAll('[data-admin-indexing-action]'));
+    var batchSizeEl = document.getElementById('adminSearchTermsBatchSize');
+
+    function setBusy(busy) {
+        actionEls.forEach(function(el) {
+            el.disabled = !!busy;
+        });
+    }
+
+    function writeOutput(title, result) {
+        var timestamp = new Date().toLocaleString();
+        var body = '';
+        if (result && result.json) {
+            body = JSON.stringify(result.json, null, 2);
+        } else if (result && typeof result.text === 'string') {
+            body = result.text;
+        } else if (result && result.error) {
+            body = String(result.error);
+        }
+
+        var header = '[' + timestamp + '] ' + title;
+        if (result && typeof result.status === 'number') {
+            header += ' (' + result.status + ')';
+        }
+        outputEl.textContent = header + '\n' + (body || '') + '\n';
+    }
+
+    async function request(method, url) {
+        var response = await fetch(url, {
+            method: method,
+            headers: { Accept: 'application/json' },
+            credentials: 'include',
+        });
+        var contentType = response.headers.get('content-type') || '';
+        var text = await response.text().catch(function() { return ''; });
+        var json = null;
+        if (contentType.indexOf('application/json') !== -1 && text) {
+            try {
+                json = JSON.parse(text);
+            } catch (e) {
+                json = null;
+            }
+        }
+        return { ok: response.ok, status: response.status, contentType: contentType, text: text, json: json };
+    }
+
+    function normalizeBatchSize() {
+        var value = batchSizeEl ? Number.parseInt(batchSizeEl.value, 10) : 200;
+        if (!Number.isFinite(value) || value <= 0) {
+            value = 200;
+        }
+        if (batchSizeEl) {
+            batchSizeEl.value = String(value);
+        }
+        return value;
+    }
+
+    function bind(id, handler) {
+        var el = document.getElementById(id);
+        if (!el) {
+            return;
+        }
+        el.addEventListener('click', handler);
+    }
+
+    bind('adminRagStatusBtn', async function() {
+        setBusy(true);
+        try {
+            var result = await request('GET', '/api/assistant/rag/status');
+            writeOutput('GET /api/assistant/rag/status', result);
+        } catch (e) {
+            writeOutput('GET /api/assistant/rag/status', { error: e });
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    bind('adminRagReindexAsyncBtn', async function() {
+        if (!confirm('RAG reindex(비동기)를 실행할까요?')) {
+            return;
+        }
+        setBusy(true);
+        try {
+            var result = await request('POST', '/api/assistant/rag/reindex?async=true');
+            writeOutput('POST /api/assistant/rag/reindex?async=true', result);
+        } catch (e) {
+            writeOutput('POST /api/assistant/rag/reindex?async=true', { error: e });
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    bind('adminRagReindexSyncBtn', async function() {
+        if (!confirm('RAG reindex(동기)는 시간이 걸릴 수 있습니다. 실행할까요?')) {
+            return;
+        }
+        setBusy(true);
+        try {
+            var result = await request('POST', '/api/assistant/rag/reindex?async=false');
+            writeOutput('POST /api/assistant/rag/reindex?async=false', result);
+        } catch (e) {
+            writeOutput('POST /api/assistant/rag/reindex?async=false', { error: e });
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    bind('adminRagUpdateBtn', async function() {
+        if (!confirm('RAG update를 실행할까요?')) {
+            return;
+        }
+        setBusy(true);
+        try {
+            var result = await request('POST', '/api/assistant/rag/update');
+            writeOutput('POST /api/assistant/rag/update', result);
+        } catch (e) {
+            writeOutput('POST /api/assistant/rag/update', { error: e });
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    bind('adminSearchTermsReindexBtn', async function() {
+        var batchSize = normalizeBatchSize();
+        if (!confirm('search_terms 재인덱싱을 실행할까요? (batchSize=' + batchSize + ')')) {
+            return;
+        }
+        setBusy(true);
+        try {
+            var url = '/api/assistant/search-terms/reindex?batchSize=' + encodeURIComponent(String(batchSize));
+            var result = await request('POST', url);
+            writeOutput('POST ' + url, result);
+        } catch (e) {
+            writeOutput('POST /api/assistant/search-terms/reindex', { error: e });
+        } finally {
+            setBusy(false);
+        }
+    });
 })();
 </script>
 
