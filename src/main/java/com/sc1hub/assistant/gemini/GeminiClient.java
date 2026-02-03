@@ -52,6 +52,43 @@ public class GeminiClient {
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
         headers.set("x-goog-api-key", apiKey);
 
+        Map<String, Object> payload = buildPayload(prompt, maxOutputTokens, true);
+
+        try {
+            String responseBody = restTemplate.postForObject(url, new HttpEntity<>(payload, headers), String.class);
+            return extractTextFromResponse(responseBody);
+        } catch (HttpStatusCodeException e) {
+            if (isUnknownFieldError(e, "responseMimeType")) {
+                try {
+                    Map<String, Object> fallback = buildPayload(prompt, maxOutputTokens, false);
+                    String responseBody = restTemplate.postForObject(url, new HttpEntity<>(fallback, headers), String.class);
+                    return extractTextFromResponse(responseBody);
+                } catch (HttpStatusCodeException fallbackException) {
+                    String body = safeShortBody(fallbackException);
+                    log.error("Gemini API 요청 실패. status={}, model={}, body={}", fallbackException.getStatusCode(), geminiProperties.getModel(), body);
+                    throw new GeminiException("Gemini API request failed: " + fallbackException.getStatusCode() + (body == null ? "" : " " + body), fallbackException);
+                } catch (Exception fallbackException) {
+                    log.error("Gemini API 요청 중 예외 발생. model={}", geminiProperties.getModel(), fallbackException);
+                    throw new GeminiException("Gemini API request failed.", fallbackException);
+                }
+            }
+            String body = safeShortBody(e);
+            log.error("Gemini API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), geminiProperties.getModel(), body);
+            throw new GeminiException("Gemini API request failed: " + e.getStatusCode() + (body == null ? "" : " " + body), e);
+        } catch (Exception e) {
+            log.error("Gemini API 요청 중 예외 발생. model={}", geminiProperties.getModel(), e);
+            throw new GeminiException("Gemini API request failed.", e);
+        }
+    }
+
+    private int resolveMaxOutputTokens(Integer override) {
+        if (override != null && override > 0) {
+            return override;
+        }
+        return Math.max(0, geminiProperties.getMaxOutputTokens());
+    }
+
+    private Map<String, Object> buildPayload(String prompt, Integer maxOutputTokens, boolean jsonMode) {
         Map<String, Object> payload = new HashMap<>();
 
         Map<String, Object> userPart = new HashMap<>();
@@ -69,28 +106,27 @@ public class GeminiClient {
         if (resolvedMaxOutputTokens > 0) {
             generationConfig.put("maxOutputTokens", resolvedMaxOutputTokens);
         }
+        if (jsonMode) {
+            generationConfig.put("responseMimeType", "application/json");
+        }
         payload.put("generationConfig", generationConfig);
 
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(payload, headers);
-
-        try {
-            String responseBody = restTemplate.postForObject(url, requestEntity, String.class);
-            return extractTextFromResponse(responseBody);
-        } catch (HttpStatusCodeException e) {
-            String body = safeShortBody(e);
-            log.error("Gemini API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), geminiProperties.getModel(), body);
-            throw new GeminiException("Gemini API request failed: " + e.getStatusCode() + (body == null ? "" : " " + body), e);
-        } catch (Exception e) {
-            log.error("Gemini API 요청 중 예외 발생. model={}", geminiProperties.getModel(), e);
-            throw new GeminiException("Gemini API request failed.", e);
-        }
+        return payload;
     }
 
-    private int resolveMaxOutputTokens(Integer override) {
-        if (override != null && override > 0) {
-            return override;
+    private static boolean isUnknownFieldError(HttpStatusCodeException e, String fieldName) {
+        if (e == null || !StringUtils.hasText(fieldName)) {
+            return false;
         }
-        return Math.max(0, geminiProperties.getMaxOutputTokens());
+        try {
+            String body = e.getResponseBodyAsString();
+            if (!StringUtils.hasText(body)) {
+                return false;
+            }
+            return body.contains("Unknown name") && body.contains(fieldName);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private String extractTextFromResponse(String rawBody) {

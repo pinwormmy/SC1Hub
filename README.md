@@ -77,12 +77,13 @@ fetch('/api/assistant/rag/status').then(r => r.json()).then(console.log)
 - 인덱싱 대상 보드는 `*board`로 끝나는 보드만 포함됩니다.
 - 게시글 수정 시 `reg_date`가 갱신되므로, `update`는 수정된 글도 자동으로 재인덱싱합니다.
 - `update`는 현재 보드 목록에 없는 보드의 기존 chunks를 자동으로 제거합니다.
-- `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 자동 `update`를 수행합니다.
+- `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 RAG `update` + `search_terms` 재인덱싱을 같이 수행합니다. (search_terms 기본 batchSize=200)
 - `/api/assistant/rag/status` 응답의 `signatureAvailable`/`signatureMismatch`로 인덱스와 DB 불일치 여부를 확인할 수 있습니다.
 
 ### search_terms 재인덱싱 (alias_dictionary 반영)
 
 alias_dictionary 등록/수정 후 기존 게시글의 `search_terms`를 갱신해야 관련 게시물/쿼리 확장에 반영됩니다.
+(`sc1hub.assistant.rag.autoUpdate.enabled=true`면 매일 자동으로도 재인덱싱됩니다.)
 
 1) 관리자 계정으로 로그인
 2) 브라우저 콘솔에서 재인덱싱 실행

@@ -132,7 +132,8 @@ public class AssistantService {
         boolean factQuery = isFactQuery(normalizedMessage, keywords);
         boolean aliasMatched = parseResult.isAliasMatched();
         int contextLimit = resolveContextLimit(aliasMatched);
-        String ragQuery = buildRagQuery(normalizedMessage, expandedTerms, aliasMatched);
+        boolean includeExpandedTermsInRag = aliasMatched || StringUtils.hasText(parseResult.getMatchup());
+        String ragQuery = buildRagQuery(normalizedMessage, expandedTerms, includeExpandedTermsInRag);
         RagRetrieval ragRetrieval = tryRetrieveWithRag(ragQuery, expandedTerms, boardWeights, factQuery, aliasMatched);
 
         List<CandidatePost> candidates = Collections.emptyList();
@@ -1816,6 +1817,7 @@ public class AssistantService {
 
         Map<String, RelatedScoreBreakdown> selectedBreakdowns = new LinkedHashMap<>();
         List<ScoredRelatedCandidate> fallbackCandidates = new ArrayList<>();
+        boolean usedBelowThreshold = false;
 
         for (ScoredRelatedCandidate candidate : scored) {
             if (candidate == null || candidate.candidate == null || candidate.breakdown == null) {
@@ -1869,11 +1871,81 @@ public class AssistantService {
                 }
                 selectedCandidates.add(candidate.candidate);
                 selectedBreakdowns.put(candidate.candidate.sourceId, candidate.breakdown);
+                usedBelowThreshold = true;
                 if (StringUtils.hasText(titleKey)) {
                     usedTitleKeys.add(titleKey);
                 }
                 if (StringUtils.hasText(writerKey)) {
                     usedWriters.add(writerKey);
+                }
+            }
+        }
+
+        if (selectedCandidates.size() < maxLinks) {
+            Set<String> usedSourceIds = new HashSet<>();
+            for (RelatedPostCandidate candidate : selectedCandidates) {
+                if (candidate == null || !StringUtils.hasText(candidate.sourceId)) {
+                    continue;
+                }
+                usedSourceIds.add(candidate.sourceId);
+            }
+
+            for (ScoredRelatedCandidate candidate : scored) {
+                if (candidate == null || candidate.candidate == null || candidate.breakdown == null) {
+                    continue;
+                }
+                if (selectedCandidates.size() >= maxLinks) {
+                    break;
+                }
+                if (usedSourceIds.contains(candidate.candidate.sourceId)) {
+                    continue;
+                }
+                if (candidate.breakdown.total < floorThreshold) {
+                    continue;
+                }
+
+                String titleKey = normalizeTitleKey(candidate.candidate.title);
+                if (StringUtils.hasText(titleKey) && usedTitleKeys.contains(titleKey)) {
+                    continue;
+                }
+
+                selectedCandidates.add(candidate.candidate);
+                selectedBreakdowns.put(candidate.candidate.sourceId, candidate.breakdown);
+                usedSourceIds.add(candidate.candidate.sourceId);
+                if (candidate.breakdown.total < threshold) {
+                    usedBelowThreshold = true;
+                }
+                if (StringUtils.hasText(titleKey)) {
+                    usedTitleKeys.add(titleKey);
+                }
+            }
+
+            if (selectedCandidates.size() < maxLinks) {
+                for (ScoredRelatedCandidate candidate : scored) {
+                    if (candidate == null || candidate.candidate == null || candidate.breakdown == null) {
+                        continue;
+                    }
+                    if (selectedCandidates.size() >= maxLinks) {
+                        break;
+                    }
+                    if (usedSourceIds.contains(candidate.candidate.sourceId)) {
+                        continue;
+                    }
+
+                    String titleKey = normalizeTitleKey(candidate.candidate.title);
+                    if (StringUtils.hasText(titleKey) && usedTitleKeys.contains(titleKey)) {
+                        continue;
+                    }
+
+                    selectedCandidates.add(candidate.candidate);
+                    selectedBreakdowns.put(candidate.candidate.sourceId, candidate.breakdown);
+                    usedSourceIds.add(candidate.candidate.sourceId);
+                    if (candidate.breakdown.total < threshold) {
+                        usedBelowThreshold = true;
+                    }
+                    if (StringUtils.hasText(titleKey)) {
+                        usedTitleKeys.add(titleKey);
+                    }
                 }
             }
         }
@@ -1886,10 +1958,7 @@ public class AssistantService {
             selected.add(toRelatedPostDto(candidate));
         }
 
-        String notice = null;
-        if (selected.size() < maxLinks) {
-            notice = "관련 글이 부족합니다.";
-        }
+        String notice = usedBelowThreshold ? "일부 관련 글은 연관도가 낮을 수 있습니다." : null;
         return new RelatedPostsSelection(selected, notice, evidence.sourceId, selectedBreakdowns, false, Collections.emptyMap());
     }
 
@@ -2606,13 +2675,8 @@ public class AssistantService {
             }
         }
 
-        String notice = null;
-        int maxLinks = Math.min(3, Math.max(0, assistantProperties.getMaxRelatedPosts()));
-        if (selected.size() < maxLinks) {
-            notice = "관련 글이 부족합니다.";
-        }
         Map<String, String> reasons = selection.reasons == null ? Collections.emptyMap() : selection.reasons;
-        return new RelatedPostsSelection(selected, notice, evidence.sourceId, selectedBreakdowns, true, reasons);
+        return new RelatedPostsSelection(selected, null, evidence.sourceId, selectedBreakdowns, true, reasons);
     }
 
     private static double sanitizeRelatedThreshold(double threshold) {
@@ -2882,8 +2946,8 @@ public class AssistantService {
         return false;
     }
 
-    private String buildRagQuery(String message, List<String> expandedTerms, boolean aliasMatched) {
-        if (!aliasMatched || expandedTerms == null || expandedTerms.isEmpty()) {
+    private String buildRagQuery(String message, List<String> expandedTerms, boolean includeExpandedTerms) {
+        if (!includeExpandedTerms || expandedTerms == null || expandedTerms.isEmpty()) {
             return message == null ? "" : message;
         }
         String base = message == null ? "" : message.trim();

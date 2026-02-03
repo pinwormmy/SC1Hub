@@ -162,6 +162,18 @@ public class AssistantQueryParser {
             return ordered;
         }
 
+        MatchupInfo roleBased = findMatchupFromRoleTokens(normalized);
+        if (roleBased != null) {
+            roleBased.confidence = 0.85;
+            return roleBased;
+        }
+
+        MatchupInfo opponentBased = findMatchupFromOpponentSuffixTokens(normalized);
+        if (opponentBased != null) {
+            opponentBased.confidence = 0.75;
+            return opponentBased;
+        }
+
         Set<String> races = detectRaceTokens(normalized, compact);
         if (races.size() >= 2) {
             List<String> list = new ArrayList<>(races);
@@ -182,6 +194,103 @@ public class AssistantQueryParser {
         }
 
         return new MatchupInfo();
+    }
+
+    private MatchupInfo findMatchupFromRoleTokens(String normalized) {
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        String[] tokens = TOKEN_SPLITTER.matcher(normalized).replaceAll(" ").trim().split("\\s+");
+        if (tokens.length < 2) {
+            return null;
+        }
+        for (int i = 0; i < tokens.length - 1; i++) {
+            String playerToken = tokens[i];
+            String opponentToken = tokens[i + 1];
+
+            String playerRace = normalizeRoleRaceToken(playerToken);
+            if (!StringUtils.hasText(playerRace)) {
+                continue;
+            }
+            String opponentRace = normalizeRaceToken(opponentToken);
+            if (!StringUtils.hasText(opponentRace)) {
+                continue;
+            }
+
+            MatchupInfo info = matchupFromRaces(playerRace, opponentRace);
+            if (info != null) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    private MatchupInfo findMatchupFromOpponentSuffixTokens(String normalized) {
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        String[] tokens = TOKEN_SPLITTER.matcher(normalized).replaceAll(" ").trim().split("\\s+");
+        if (tokens.length < 2) {
+            return null;
+        }
+
+        String opponentRace = "";
+        for (String token : tokens) {
+            if (!StringUtils.hasText(token)) {
+                continue;
+            }
+            if (!token.endsWith("전")) {
+                continue;
+            }
+            String race = normalizeRaceToken(token);
+            if (StringUtils.hasText(race)) {
+                opponentRace = race;
+                break;
+            }
+        }
+        if (!StringUtils.hasText(opponentRace)) {
+            return null;
+        }
+
+        for (String token : tokens) {
+            String playerRace = normalizeRaceToken(token);
+            if (!StringUtils.hasText(playerRace)) {
+                continue;
+            }
+            if (playerRace.equals(opponentRace)) {
+                continue;
+            }
+            return matchupFromRaces(playerRace, opponentRace);
+        }
+        return null;
+    }
+
+    private String normalizeRoleRaceToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            return "";
+        }
+        String normalized = token.trim().toLowerCase(Locale.ROOT);
+        String stripped = stripTrailingRoleParticle(normalized);
+        if (!StringUtils.hasText(stripped)) {
+            return "";
+        }
+        if (stripped.equals(normalized)) {
+            return "";
+        }
+        return normalizeRaceToken(stripped);
+    }
+
+    private static String stripTrailingRoleParticle(String token) {
+        if (!StringUtils.hasText(token)) {
+            return "";
+        }
+        if (token.endsWith("으로") && token.length() > 2) {
+            return token.substring(0, token.length() - 2);
+        }
+        if (token.endsWith("로") && token.length() > 1) {
+            return token.substring(0, token.length() - 1);
+        }
+        return token;
     }
 
     private MatchupInfo findMatchupFromTokens(String compact) {
@@ -306,7 +415,7 @@ public class AssistantQueryParser {
 
     private Set<String> detectRaceTokens(String normalized, String compact) {
         Set<String> races = new LinkedHashSet<>();
-        if (containsAny(normalized, "프로토스", "프토", "플토", "protoss")) {
+        if (containsAny(normalized, "프로토스", "프토", "플토", "protoss", "토스")) {
             races.add("P");
         }
         if (containsAny(normalized, "테란", "terran")) {
@@ -331,8 +440,9 @@ public class AssistantQueryParser {
         if (!StringUtils.hasText(token)) {
             return "";
         }
-        String normalized = token.toLowerCase(Locale.ROOT);
-        if (Arrays.asList("프로토스", "프토", "플토", "protoss", "프").contains(normalized)) {
+        String normalized = token.trim().toLowerCase(Locale.ROOT);
+        normalized = stripTrailingMatchupSuffix(normalized);
+        if (Arrays.asList("프로토스", "프토", "플토", "protoss", "토스", "프").contains(normalized)) {
             return "P";
         }
         if (Arrays.asList("테란", "terran", "테").contains(normalized)) {
@@ -342,6 +452,16 @@ public class AssistantQueryParser {
             return "Z";
         }
         return "";
+    }
+
+    private static String stripTrailingMatchupSuffix(String token) {
+        if (!StringUtils.hasText(token)) {
+            return "";
+        }
+        if (token.endsWith("전") && token.length() > 1) {
+            return token.substring(0, token.length() - 1);
+        }
+        return token;
     }
 
     private static boolean isVsToken(String token) {
