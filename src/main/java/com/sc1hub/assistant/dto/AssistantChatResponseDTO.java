@@ -11,6 +11,10 @@ public class AssistantChatResponseDTO {
     private List<AssistantRelatedPostDTO> relatedPosts = new ArrayList<>();
     private String error;
 
+    // Answer-grounded related posts (backward compatible fields)
+    private List<String> usedPostIds = new ArrayList<>();
+    private String relatedPostsNotice;
+
     private String usageText;
     private Integer usageUsed;
     private Integer usageLimit;

@@ -338,9 +338,13 @@
         return div.innerHTML;
     }
 
-    async function buildRelatedPostsHtml(related) {
+    async function buildRelatedPostsHtml(related, noticeText) {
+        const notice = String(noticeText ?? '').trim();
         if (!Array.isArray(related) || related.length === 0) {
-            return '';
+            if (!notice) {
+                return '';
+            }
+            return `<div>${escapeHtml('[관련 게시물]')}</div><div>${escapeHtml(notice)}</div>`;
         }
 
         const boardNameCache = new Map();
@@ -374,7 +378,8 @@
             return '';
         }
 
-        return `<div>${escapeHtml('[관련 게시물]')}</div><ol>${filteredItems.join('')}</ol>`;
+        const noticeHtml = notice ? `<div>${escapeHtml(notice)}</div>` : '';
+        return `<div>${escapeHtml('[관련 게시물]')}</div><ol>${filteredItems.join('')}</ol>${noticeHtml}`;
     }
 
     function createDivider() {
@@ -1708,6 +1713,7 @@
 
             const answer = data?.answer ? String(data.answer) : '';
             const related = Array.isArray(data?.relatedPosts) ? data.relatedPosts : [];
+            const relatedNotice = data?.relatedPostsNotice ? String(data.relatedPostsNotice) : '';
             const usageText = data?.usageText ? String(data.usageText) : '';
 
             if (metaEl && usageText) {
@@ -1723,7 +1729,7 @@
                 pendingContentEl.innerHTML = usageHtml + answerHtml;
             }
 
-            const relatedHtml = await buildRelatedPostsHtml(related);
+            const relatedHtml = await buildRelatedPostsHtml(related, relatedNotice);
 
             if (relatedEl) {
                 if (!relatedHtml) {

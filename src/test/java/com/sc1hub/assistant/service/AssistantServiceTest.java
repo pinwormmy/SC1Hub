@@ -27,7 +27,9 @@ import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,16 +106,18 @@ class AssistantServiceTest {
 
         BoardDTO weakMatch = new BoardDTO();
         weakMatch.setPostNum(2);
-        weakMatch.setTitle("운영 질문 모음");
-        weakMatch.setContent("내용에 5팩이 포함되어 있습니다.");
+        weakMatch.setTitle("5팩 골리앗 빌드 정리");
+        weakMatch.setContent("테란 5팩 골리앗 빌드/운영 정리 내용입니다. 5팩 골리앗 빌드 정리 내용입니다.");
         weakMatch.setRegDate(new Date());
 
-        when(boardMapper.searchPostsByKeywords(eq("freeboard"), anyList(), anyInt()))
-                .thenReturn(Collections.singletonList(strongMatch));
-        when(boardMapper.searchPostsByKeywords(eq("tipboard"), anyList(), anyInt()))
-                .thenReturn(Collections.singletonList(weakMatch));
+        doReturn(Collections.singletonList(strongMatch))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+        doReturn(Collections.singletonList(weakMatch))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         MemberDTO member = new MemberDTO();
         member.setNickName("tester");
@@ -121,10 +125,12 @@ class AssistantServiceTest {
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", member);
 
         assertEquals("답변입니다.", response.getAnswer());
+        assertEquals(Collections.singletonList("freeboard:9"), response.getUsedPostIds());
         assertNotNull(response.getRelatedPosts());
         assertEquals(2, response.getRelatedPosts().size());
         assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
         assertEquals("/boards/freeboard/readPost?postNum=9", response.getRelatedPosts().get(0).getUrl());
+        assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
         verify(geminiClient).generateAnswer(promptCaptor.capture());
@@ -165,7 +171,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -196,14 +202,16 @@ class AssistantServiceTest {
 
         BoardDTO keywordMatch = new BoardDTO();
         keywordMatch.setPostNum(3);
-        keywordMatch.setTitle("운영 팁 모음");
-        keywordMatch.setContent("5팩 운영 관련 내용");
+        keywordMatch.setTitle("5팩 골리앗 운영 정리");
+        keywordMatch.setContent("테란 5팩 골리앗 운영 팁 정리 내용입니다.");
         keywordMatch.setRegDate(new Date());
 
-        when(boardMapper.searchPostsByKeywords(eq("freeboard"), anyList(), anyInt()))
-                .thenReturn(Collections.emptyList());
-        when(boardMapper.searchPostsByKeywords(eq("tipboard"), anyList(), anyInt()))
-                .thenReturn(Collections.singletonList(keywordMatch));
+        doReturn(Collections.emptyList())
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+        doReturn(Collections.singletonList(keywordMatch))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());
 
         AssistantRagChunk chunk = new AssistantRagChunk();
         chunk.setBoardTitle("freeboard");
@@ -216,7 +224,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString())).thenReturn("답변입니다.");
+        when(geminiClient.generateAnswer(anyString())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -230,6 +238,95 @@ class AssistantServiceTest {
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("Site posts"));
         assertTrue(prompt.contains("excerpt="));
+    }
+
+    @Test
+    void chat_appliesLlmMatchupClassification_whenEnabledAndParserConfidenceLow() throws Exception {
+        assistantProperties.setLlmMatchupClassificationEnabled(true);
+        assistantProperties.setLlmMatchupClassificationCacheSeconds(60);
+        assistantProperties.setLlmMatchupClassificationRateLimitPerMinute(10);
+
+        BoardListDTO tvp = new BoardListDTO();
+        tvp.setBoardTitle("tVsPBoard");
+        BoardListDTO free = new BoardListDTO();
+        free.setBoardTitle("FreeBoard");
+        when(boardMapper.getBoardList()).thenReturn(Arrays.asList(tvp, free));
+
+        BoardDTO tvpPost = new BoardDTO();
+        tvpPost.setPostNum(1);
+        tvpPost.setTitle("5팩 운영");
+        tvpPost.setContent("내용");
+        tvpPost.setRegDate(new Date(System.currentTimeMillis() - 1000));
+
+        BoardDTO freePost = new BoardDTO();
+        freePost.setPostNum(2);
+        freePost.setTitle("5팩 운영");
+        freePost.setContent("내용");
+        freePost.setRegDate(new Date());
+
+        doReturn(Collections.singletonList(tvpPost))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("tvspboard"), anyList(), anyInt());
+        doReturn(Collections.singletonList(freePost))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+
+        String classificationJson = "{\"intent\":\"guide\",\"playerRace\":\"T\",\"opponentRace\":\"P\",\"confidence\":0.9}";
+        when(geminiClient.generateAnswer(anyString())).thenReturn(classificationJson, "{\"answer\":\"답변입니다.\",\"citations\":[\"tvspboard:1\"]}");
+
+        AssistantChatResponseDTO response = assistantService.chat("5팩 운영", null);
+
+        assertEquals("답변입니다.", response.getAnswer());
+        // supporting 후보가 evidence와 제목이 동일하면(중복글) 다양성 규칙으로 제외될 수 있다.
+        assertEquals(1, response.getRelatedPosts().size());
+        assertEquals("tvspboard", response.getRelatedPosts().get(0).getBoardTitle());
+        assertTrue(response.getRelatedPostsNotice() == null || response.getRelatedPostsNotice().contains("관련 글"));
+        verify(geminiClient, times(2)).generateAnswer(anyString());
+    }
+
+    @Test
+    void chat_reranksCandidates_withLlm_andCachesOrder() throws Exception {
+        assistantProperties.setLlmRerankEnabled(true);
+        assistantProperties.setLlmRerankTopN(20);
+        assistantProperties.setLlmRerankCacheSeconds(60);
+        assistantProperties.setLlmRerankRateLimitPerMinute(10);
+
+        BoardListDTO free = new BoardListDTO();
+        free.setBoardTitle("FreeBoard");
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(free));
+
+        BoardDTO first = new BoardDTO();
+        first.setPostNum(1);
+        first.setTitle("5팩 운영 A");
+        first.setContent("내용");
+        first.setRegDate(new Date());
+
+        BoardDTO second = new BoardDTO();
+        second.setPostNum(2);
+        second.setTitle("5팩 운영 B");
+        second.setContent("내용");
+        second.setRegDate(new Date(System.currentTimeMillis() - 1000));
+
+        doReturn(Arrays.asList(first, second))
+                .when(boardMapper)
+                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+
+        when(geminiClient.generateAnswer(anyString())).thenReturn(
+                "[2,1]",
+                "{\"answer\":\"첫번째 답변\",\"citations\":[\"freeboard:2\"]}",
+                "{\"answer\":\"두번째 답변\",\"citations\":[\"freeboard:2\"]}"
+        );
+
+        AssistantChatResponseDTO firstCall = assistantService.chat("5팩 운영", null);
+        assertEquals("freeboard", firstCall.getRelatedPosts().get(0).getBoardTitle());
+        assertEquals(2, firstCall.getRelatedPosts().get(0).getPostNum());
+
+        AssistantChatResponseDTO secondCall = assistantService.chat("5팩 운영", null);
+        assertEquals("freeboard", secondCall.getRelatedPosts().get(0).getBoardTitle());
+        assertEquals(2, secondCall.getRelatedPosts().get(0).getPostNum());
+
+        // rerank 1회 + answer 2회
+        verify(geminiClient, times(3)).generateAnswer(anyString());
     }
 
     private AssistantQueryParseResult buildParseResult(String message) {
