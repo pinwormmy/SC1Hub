@@ -6,7 +6,6 @@ import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.dto.VisitorsDTO;
 import com.sc1hub.member.mapper.MemberMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,11 +15,13 @@ import java.util.UUID;
 @Slf4j
 public class MemberServiceImpl implements MemberService {
 
-    @Autowired
-    MemberMapper memberMapper;
+    private final MemberMapper memberMapper;
+    private final EmailService emailService;
 
-    @Autowired
-    EmailService emailService;
+    public MemberServiceImpl(MemberMapper memberMapper, EmailService emailService) {
+        this.memberMapper = memberMapper;
+        this.emailService = emailService;
+    }
 
     @Override
     public String isUniqueId(String id) throws Exception {

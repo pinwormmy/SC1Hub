@@ -72,7 +72,6 @@ public class AssistantSearchTermsService {
                     continue;
                 }
                 addParsedTerms(alias.getCanonicalTerms(), terms);
-                addParsedTerms(alias.getMatchupHint(), terms);
             }
         }
 

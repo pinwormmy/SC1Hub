@@ -96,16 +96,6 @@ public class AssistantQueryParser {
             if (alias == null) {
                 continue;
             }
-            if (StringUtils.hasText(alias.getMatchupHint()) && matchupInfo.matchupTag == null) {
-                MatchupInfo hinted = detectMatchup(alias.getMatchupHint());
-                if (StringUtils.hasText(hinted.matchupTag)) {
-                    matchupInfo = hinted;
-                    result.setMatchup(hinted.matchupTag);
-                    result.setPlayerRace(hinted.playerRace);
-                    result.setOpponentRace(hinted.opponentRace);
-                    confidence = Math.max(confidence, hinted.confidence * 0.8);
-                }
-            }
             for (String boardId : parseTerms(alias.getBoostBoardIds())) {
                 String normalized = normalizeBoardId(boardId);
                 if (!StringUtils.hasText(normalized)) {

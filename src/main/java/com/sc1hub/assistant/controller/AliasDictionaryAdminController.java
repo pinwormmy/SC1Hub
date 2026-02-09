@@ -131,15 +131,18 @@ public class AliasDictionaryAdminController {
                               String message) {
         List<AliasDictionaryDTO> aliases = aliasDictionaryAdminService.list(keyword);
         Map<Long, String> canonicalDisplay = new HashMap<>();
-        Map<Long, String> boostDisplay = new HashMap<>();
+        Map<Long, String> boardTargetDisplay = new HashMap<>();
         for (AliasDictionaryDTO alias : aliases) {
             canonicalDisplay.put(alias.getId(), aliasDictionaryAdminService.formatTermsForDisplay(alias.getCanonicalTerms()));
-            boostDisplay.put(alias.getId(), aliasDictionaryAdminService.formatTermsForDisplay(alias.getBoostBoardIds()));
+            boardTargetDisplay.put(alias.getId(), aliasDictionaryAdminService.formatBoardTargetsForDisplay(alias));
         }
+        String createBoardTargetsText = "";
+        String editBoardTargetsText = "";
+
         model.addAttribute("aliasList", aliases);
         model.addAttribute("keyword", keyword == null ? "" : keyword);
         model.addAttribute("canonicalDisplay", canonicalDisplay);
-        model.addAttribute("boostDisplay", boostDisplay);
+        model.addAttribute("boardTargetDisplay", boardTargetDisplay);
 
         if (editId != null) {
             AliasDictionaryDTO editItem = aliasDictionaryAdminService.findById(editId);
@@ -148,9 +151,9 @@ public class AliasDictionaryAdminController {
                 editForm.setId(editItem.getId());
                 editForm.setAlias(editItem.getAlias());
                 editForm.setCanonicalTerms(aliasDictionaryAdminService.formatTermsForInput(editItem.getCanonicalTerms()));
-                editForm.setMatchupHint(editItem.getMatchupHint());
-                editForm.setBoostBoardIds(aliasDictionaryAdminService.formatTermsForInput(editItem.getBoostBoardIds()));
+                editForm.setBoardTargets(aliasDictionaryAdminService.resolveBoardTargetsForForm(editItem));
                 model.addAttribute("editForm", editForm);
+                editBoardTargetsText = toBoardTargetsMarker(editForm);
             }
             model.addAttribute("editId", editId);
         }
@@ -158,10 +161,14 @@ public class AliasDictionaryAdminController {
         if (form != null) {
             if (editId != null) {
                 model.addAttribute("editForm", form);
+                editBoardTargetsText = toBoardTargetsMarker(form);
             } else {
                 model.addAttribute("createForm", form);
+                createBoardTargetsText = toBoardTargetsMarker(form);
             }
         }
+        model.addAttribute("createBoardTargetsText", createBoardTargetsText);
+        model.addAttribute("editBoardTargetsText", editBoardTargetsText);
 
         if (message != null) {
             model.addAttribute("message", message);
@@ -182,5 +189,19 @@ public class AliasDictionaryAdminController {
             return "canonical terms는 필수입니다.";
         }
         return null;
+    }
+
+    private static String toBoardTargetsMarker(AliasDictionaryFormDTO form) {
+        if (form == null || form.getBoardTargets() == null || form.getBoardTargets().isEmpty()) {
+            return "";
+        }
+        StringBuilder marker = new StringBuilder(",");
+        for (String boardTarget : form.getBoardTargets()) {
+            if (!StringUtils.hasText(boardTarget)) {
+                continue;
+            }
+            marker.append(boardTarget.trim()).append(",");
+        }
+        return marker.toString();
     }
 }

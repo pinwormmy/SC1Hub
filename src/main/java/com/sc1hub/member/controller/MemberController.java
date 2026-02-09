@@ -7,7 +7,6 @@ import com.sc1hub.member.dto.VerificationResponseDTO;
 import com.sc1hub.member.service.EmailService;
 import com.sc1hub.member.service.MemberService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,10 +22,13 @@ import java.util.Map;
 @Controller
 @Slf4j
 public class MemberController {
-    @Autowired
-    MemberService memberService;
-    @Autowired
-    EmailService emailService;
+    private final MemberService memberService;
+    private final EmailService emailService;
+
+    public MemberController(MemberService memberService, EmailService emailService) {
+        this.memberService = memberService;
+        this.emailService = emailService;
+    }
 
     @RequestMapping("/login")
     public String login(HttpServletRequest request) {

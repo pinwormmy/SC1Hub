@@ -6,7 +6,6 @@ import com.sc1hub.common.interceptor.CanonicalInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
 import com.sc1hub.visitor.service.VisitorCountService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -17,11 +16,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Slf4j
 public class WebConfig implements WebMvcConfigurer {
 
-    @Autowired
-    VisitorCountService visitorCountService;
-
-    @Autowired
-    private CanonicalInterceptor canonicalInterceptor;
+    private final VisitorCountService visitorCountService;
+    private final CanonicalInterceptor canonicalInterceptor;
 
     @Value("/img/**")
     private String connectPath;
@@ -29,6 +25,11 @@ public class WebConfig implements WebMvcConfigurer {
     // 로컬이랑 온라인 절대경로 차이 생김 '끝에 /'
     @Value("${path.upload.img}")
     private String uploadPath;
+
+    public WebConfig(VisitorCountService visitorCountService, CanonicalInterceptor canonicalInterceptor) {
+        this.visitorCountService = visitorCountService;
+        this.canonicalInterceptor = canonicalInterceptor;
+    }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {

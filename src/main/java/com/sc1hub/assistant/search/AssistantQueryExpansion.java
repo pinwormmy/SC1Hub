@@ -42,7 +42,6 @@ public class AssistantQueryExpansion {
                     continue;
                 }
                 addParsedTerms(expanded, alias.getCanonicalTerms());
-                addParsedTerms(expanded, alias.getMatchupHint());
             }
         }
 

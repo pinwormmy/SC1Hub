@@ -3,7 +3,6 @@ package com.sc1hub.visitor.service;
 import com.sc1hub.visitor.dto.VisitorCountDTO;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,8 +11,11 @@ import java.time.LocalDate;
 @Slf4j
 @Service
 public class VisitorCountServiceImpl implements VisitorCountService {
-    @Autowired
-    private VisitorCountMapper visitorCountMapper;
+    private final VisitorCountMapper visitorCountMapper;
+
+    public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
+        this.visitorCountMapper = visitorCountMapper;
+    }
 
     @Transactional
     public void incrementVisitorCount() {
