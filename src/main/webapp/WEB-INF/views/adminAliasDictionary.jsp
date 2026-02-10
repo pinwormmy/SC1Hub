@@ -261,6 +261,11 @@
                                                <c:if test="${fn:contains(createBoardTargetsText, ',tipboard,')}">checked</c:if>>
                                         꿀팁 게시판
                                     </label>
+                                    <label class="alias-checkbox-item">
+                                        <input type="checkbox" name="boardTargets" value="teamplayguideboard"
+                                               <c:if test="${fn:contains(createBoardTargetsText, ',teamplayguideboard,')}">checked</c:if>>
+                                        팀플 게시판
+                                    </label>
                                 </div>
                                 <div class="alias-help">VS 게시판은 개별 선택 가능하며, 하나만 선택하거나 여러 개를 함께 선택할 수 있습니다.</div>
                             </div>
@@ -334,6 +339,11 @@
                                             <input type="checkbox" name="boardTargets" value="tipboard"
                                                    <c:if test="${fn:contains(editBoardTargetsText, ',tipboard,')}">checked</c:if>>
                                             꿀팁 게시판
+                                        </label>
+                                        <label class="alias-checkbox-item">
+                                            <input type="checkbox" name="boardTargets" value="teamplayguideboard"
+                                                   <c:if test="${fn:contains(editBoardTargetsText, ',teamplayguideboard,')}">checked</c:if>>
+                                            팀플 게시판
                                         </label>
                                     </div>
                                     <div class="alias-help">VS 게시판은 개별 선택 가능하며, 하나만 선택하거나 여러 개를 함께 선택할 수 있습니다.</div>

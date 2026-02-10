@@ -26,6 +26,7 @@ import java.util.Set;
 public class AliasDictionaryAdminService {
 
     private static final String TIP_BOARD_ID = "tipboard";
+    private static final String TEAM_PLAY_GUIDE_BOARD_ID = "teamplayguideboard";
     private static final String LEGACY_TARGET_MATCHUP = "matchupboards";
     private static final List<String> MATCHUP_BOARD_IDS = Arrays.asList(
             "pvspboard", "pvstboard", "pvszboard",
@@ -36,7 +37,8 @@ public class AliasDictionaryAdminService {
             "pvspboard", "pvstboard", "pvszboard",
             "tvspboard", "tvstboard", "tvszboard",
             "zvspboard", "zvstboard", "zvszboard",
-            TIP_BOARD_ID
+            TIP_BOARD_ID,
+            TEAM_PLAY_GUIDE_BOARD_ID
     );
     private static final Set<String> SELECTABLE_BOARD_ID_SET = new LinkedHashSet<>(SELECTABLE_BOARD_IDS);
     private static final Map<String, String> BOARD_LABEL_BY_ID = createBoardLabelMap();
@@ -282,6 +284,7 @@ public class AliasDictionaryAdminService {
         labels.put("zvstboard", "저테전");
         labels.put("zvszboard", "저저전");
         labels.put(TIP_BOARD_ID, "꿀팁 게시판");
+        labels.put(TEAM_PLAY_GUIDE_BOARD_ID, "팀플 게시판");
         return labels;
     }
 
