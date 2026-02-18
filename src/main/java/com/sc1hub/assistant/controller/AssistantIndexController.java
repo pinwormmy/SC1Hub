@@ -84,7 +84,7 @@ public class AssistantIndexController {
             } catch (Exception e) {
                 ragSuccess = false;
                 log.error("RAG 인덱싱 실패", e);
-                ragResponse.setError("RAG 인덱싱 중 오류가 발생했습니다.");
+                ragResponse.setError(buildDetailedError("RAG 인덱싱 중 오류가 발생했습니다.", e));
             }
 
             AssistantSearchTermsReindexResponseDTO searchTermsResponse = new AssistantSearchTermsReindexResponseDTO();
@@ -160,7 +160,7 @@ public class AssistantIndexController {
             } catch (Exception e) {
                 ragSuccess = false;
                 log.error("RAG update 실패", e);
-                ragResponse.setError("RAG 업데이트 중 오류가 발생했습니다.");
+                ragResponse.setError(buildDetailedError("RAG 업데이트 중 오류가 발생했습니다.", e));
             }
 
             AssistantSearchTermsReindexResponseDTO searchTermsResponse = new AssistantSearchTermsReindexResponseDTO();
@@ -220,5 +220,35 @@ public class AssistantIndexController {
         }
         String adminId = assistantProperties.getAdminId();
         return adminId != null && adminId.equals(member.getId());
+    }
+
+    private String buildDetailedError(String baseMessage, Exception e) {
+        String detail = extractRootCauseMessage(e);
+        if (!StringUtils.hasText(detail)) {
+            return baseMessage;
+        }
+        return baseMessage + " (" + detail + ")";
+    }
+
+    private String extractRootCauseMessage(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        if (!StringUtils.hasText(message)) {
+            message = throwable.getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return null;
+        }
+        String normalized = message.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= 300) {
+            return normalized;
+        }
+        return normalized.substring(0, 300) + "...";
     }
 }

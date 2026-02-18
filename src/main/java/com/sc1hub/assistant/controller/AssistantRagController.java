@@ -9,6 +9,7 @@ import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -85,7 +86,7 @@ public class AssistantRagController {
                 return ResponseEntity.ok(response);
             } catch (Exception e) {
                 log.error("RAG 인덱스 생성 실패", e);
-                response.setError("RAG 인덱스 생성 중 오류가 발생했습니다.");
+                response.setError(buildDetailedError("RAG 인덱스 생성 중 오류가 발생했습니다.", e));
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             }
         }
@@ -125,7 +126,7 @@ public class AssistantRagController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             } catch (Exception e) {
                 log.error("RAG 인덱스 업데이트 실패", e);
-                response.setError("RAG 인덱스 업데이트 중 오류가 발생했습니다.");
+                response.setError(buildDetailedError("RAG 인덱스 업데이트 중 오류가 발생했습니다.", e));
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             }
         }
@@ -143,5 +144,35 @@ public class AssistantRagController {
         }
         String adminId = assistantProperties.getAdminId();
         return adminId != null && adminId.equals(member.getId());
+    }
+
+    private String buildDetailedError(String baseMessage, Exception e) {
+        String detail = extractRootCauseMessage(e);
+        if (!StringUtils.hasText(detail)) {
+            return baseMessage;
+        }
+        return baseMessage + " (" + detail + ")";
+    }
+
+    private String extractRootCauseMessage(Throwable throwable) {
+        if (throwable == null) {
+            return null;
+        }
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        if (!StringUtils.hasText(message)) {
+            message = throwable.getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return null;
+        }
+        String normalized = message.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= 300) {
+            return normalized;
+        }
+        return normalized.substring(0, 300) + "...";
     }
 }
