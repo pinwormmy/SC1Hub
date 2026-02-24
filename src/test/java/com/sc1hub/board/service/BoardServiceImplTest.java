@@ -1,5 +1,6 @@
 package com.sc1hub.board.service;
 
+import com.sc1hub.assistant.search.AssistantSearchTermsService;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -31,6 +32,12 @@ class BoardServiceImplTest {
 
     @Mock
     private BoardMapper boardMapper;
+
+    @Mock
+    private AssistantSearchTermsService searchTermsService;
+
+    @Mock
+    private UploadedImageDimensionInjector uploadedImageDimensionInjector;
 
     @InjectMocks
     private BoardServiceImpl boardService;
@@ -213,5 +220,39 @@ class BoardServiceImplTest {
         assertTrue(ex.getMessage().contains("이미 추천"));
 
         verify(boardMapper, never()).insertRecommendation(anyString(), any(RecommendDTO.class));
+    }
+
+    @Test
+    void submitPost_injectsImageDimensionsBeforeSaving() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setTitle("title");
+        post.setContent("<p><img src=\"/ckImgSubmit?uid=u1&fileName=a.jpg\"></p>");
+
+        String normalizedContent = "<p><img src=\"/ckImgSubmit?uid=u1&fileName=a.jpg\" width=\"800\" height=\"600\"></p>";
+        when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
+        when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms");
+
+        boardService.submitPost("FreeBoard", post);
+
+        assertEquals(normalizedContent, post.getContent());
+        assertEquals("terms", post.getSearchTerms());
+        verify(boardMapper).submitPost("freeboard", post);
+    }
+
+    @Test
+    void submitModifyPost_injectsImageDimensionsBeforeSaving() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setTitle("title");
+        post.setContent("<p><img src=\"/ckImgSubmit?uid=u1&fileName=b.jpg\"></p>");
+
+        String normalizedContent = "<p><img src=\"/ckImgSubmit?uid=u1&fileName=b.jpg\" width=\"1024\" height=\"768\"></p>";
+        when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
+        when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms2");
+
+        boardService.submitModifyPost("FreeBoard", post);
+
+        assertEquals(normalizedContent, post.getContent());
+        assertEquals("terms2", post.getSearchTerms());
+        verify(boardMapper).submitModifyPost("freeboard", post);
     }
 }

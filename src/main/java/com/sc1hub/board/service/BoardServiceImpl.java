@@ -24,10 +24,15 @@ public class BoardServiceImpl implements BoardService {
 
     private final BoardMapper boardMapper;
     private final AssistantSearchTermsService searchTermsService;
+    private final UploadedImageDimensionInjector uploadedImageDimensionInjector;
 
-    public BoardServiceImpl(BoardMapper boardMapper, AssistantSearchTermsService searchTermsService) {
+    public BoardServiceImpl(
+            BoardMapper boardMapper,
+            AssistantSearchTermsService searchTermsService,
+            UploadedImageDimensionInjector uploadedImageDimensionInjector) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
+        this.uploadedImageDimensionInjector = uploadedImageDimensionInjector;
     }
 
     @Override
@@ -41,6 +46,7 @@ public class BoardServiceImpl implements BoardService {
     public void submitPost(String boardTitle, BoardDTO board) throws Exception {
         boardTitle = boardTitle.toLowerCase();
         if (board != null) {
+            board.setContent(uploadedImageDimensionInjector.injectMissingDimensions(board.getContent()));
             board.setSearchTerms(searchTermsService.buildSearchTerms(board.getTitle(), board.getContent()));
         }
         boardMapper.submitPost(boardTitle, board);
@@ -49,13 +55,18 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public BoardDTO readPost(String boardTitle, int postNum) throws Exception {
         boardTitle = boardTitle.toLowerCase();
-        return boardMapper.readPost(boardTitle, postNum);
+        BoardDTO post = boardMapper.readPost(boardTitle, postNum);
+        if (post != null) {
+            post.setContent(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent()));
+        }
+        return post;
     }
 
     @Override
     public void submitModifyPost(String boardTitle, BoardDTO post) throws Exception {
         boardTitle = boardTitle.toLowerCase();
         if (post != null) {
+            post.setContent(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent()));
             post.setSearchTerms(searchTermsService.buildSearchTerms(post.getTitle(), post.getContent()));
         }
         boardMapper.submitModifyPost(boardTitle, post);

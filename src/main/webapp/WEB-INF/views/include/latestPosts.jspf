@@ -5,6 +5,7 @@
     margin-bottom: 10px;
     white-space: nowrap;
     overflow: hidden;
+    min-height: 1.5em;
 }
 
 </style>
@@ -39,11 +40,9 @@
     function render() {
         if (!Array.isArray(state.posts) || state.posts.length === 0) {
             containerEl.innerHTML = '';
-            containerEl.hidden = true;
             return;
         }
 
-        containerEl.hidden = false;
         const current = state.posts[state.index % state.posts.length];
         const url = getPostUrl(current);
         const title = String(current?.title ?? '');
@@ -107,7 +106,6 @@
             startRotation();
         } catch (error) {
             containerEl.innerHTML = '';
-            containerEl.hidden = true;
             console.error('최신글 로딩 에러: ', error);
         }
     }

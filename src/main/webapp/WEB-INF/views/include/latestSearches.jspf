@@ -4,6 +4,7 @@
     margin-bottom: 6px;
     white-space: nowrap;
     overflow: hidden;
+    min-height: 1.5em;
 }
 
 .latest-searches__button {
@@ -39,11 +40,9 @@
     function render() {
         if (!Array.isArray(state.items) || state.items.length === 0) {
             containerEl.innerHTML = '';
-            containerEl.hidden = true;
             return;
         }
 
-        containerEl.hidden = false;
         const current = state.items[state.index % state.items.length];
         const text = String(current?.message ?? '').trim();
         if (!text) {
@@ -112,7 +111,6 @@
             startRotation();
         } catch (error) {
             containerEl.innerHTML = '';
-            containerEl.hidden = true;
             console.error('최신 검색어 로딩 에러: ', error);
         }
     }
