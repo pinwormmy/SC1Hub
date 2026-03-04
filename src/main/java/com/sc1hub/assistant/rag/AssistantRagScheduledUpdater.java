@@ -1,7 +1,6 @@
 package com.sc1hub.assistant.rag;
 
 import com.sc1hub.assistant.config.AssistantRagProperties;
-import com.sc1hub.assistant.search.AssistantSearchTermsIndexService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -11,14 +10,11 @@ import org.springframework.stereotype.Component;
 public class AssistantRagScheduledUpdater {
 
     private final AssistantRagIndexService ragIndexService;
-    private final AssistantSearchTermsIndexService searchTermsIndexService;
     private final AssistantRagProperties ragProperties;
 
     public AssistantRagScheduledUpdater(AssistantRagIndexService ragIndexService,
-                                        AssistantSearchTermsIndexService searchTermsIndexService,
                                         AssistantRagProperties ragProperties) {
         this.ragIndexService = ragIndexService;
-        this.searchTermsIndexService = searchTermsIndexService;
         this.ragProperties = ragProperties;
     }
 
@@ -42,20 +38,6 @@ public class AssistantRagScheduledUpdater {
             }
         } catch (Exception e) {
             log.error("RAG 자동 업데이트 실패", e);
-        }
-
-        try {
-            AssistantSearchTermsIndexService.Status status = searchTermsIndexService.getStatus();
-            if (status != null && status.isRunning()) {
-                log.info("search_terms 자동 업데이트 스킵: 이미 실행 중");
-                return;
-            }
-
-            AssistantSearchTermsIndexService.ReindexResult result = searchTermsIndexService.reindexAllDefault();
-            log.info("search_terms 자동 업데이트 완료. boards={}, scannedPosts={}, updatedPosts={}, batchSize={}, failedBoards={}",
-                    result.getBoardCount(), result.getScannedPosts(), result.getUpdatedPosts(), result.getBatchSize(), result.getFailedBoards());
-        } catch (Exception e) {
-            log.error("search_terms 자동 업데이트 실패", e);
         }
     }
 }

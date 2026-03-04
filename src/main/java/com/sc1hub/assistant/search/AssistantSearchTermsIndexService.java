@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 @Service
@@ -24,6 +25,7 @@ public class AssistantSearchTermsIndexService {
 
     private final BoardMapper boardMapper;
     private final AssistantSearchTermsService searchTermsService;
+    private final ReentrantLock reindexLock = new ReentrantLock();
 
     private volatile boolean reindexRunning = false;
     private volatile Date lastReindexStartedAt;
@@ -41,22 +43,27 @@ public class AssistantSearchTermsIndexService {
     }
 
     public ReindexResult reindexAll(int batchSize) {
-        int resolvedBatchSize = Math.max(1, batchSize);
-        reindexRunning = true;
-        lastReindexStartedAt = new Date();
-        lastReindexFinishedAt = null;
-        lastReindexError = null;
-
+        reindexLock.lock();
         try {
-            ReindexResult result = doReindex(resolvedBatchSize);
-            lastReindexResult = result;
-            return result;
-        } catch (Exception e) {
-            lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
-            throw e;
+            int resolvedBatchSize = Math.max(1, batchSize);
+            reindexRunning = true;
+            lastReindexStartedAt = new Date();
+            lastReindexFinishedAt = null;
+            lastReindexError = null;
+
+            try {
+                ReindexResult result = doReindex(resolvedBatchSize);
+                lastReindexResult = result;
+                return result;
+            } catch (Exception e) {
+                lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
+                throw e;
+            } finally {
+                lastReindexFinishedAt = new Date();
+                reindexRunning = false;
+            }
         } finally {
-            lastReindexFinishedAt = new Date();
-            reindexRunning = false;
+            reindexLock.unlock();
         }
     }
 

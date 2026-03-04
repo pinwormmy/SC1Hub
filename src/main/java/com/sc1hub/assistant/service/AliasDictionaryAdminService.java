@@ -6,8 +6,11 @@ import com.sc1hub.assistant.dto.AliasDictionaryDTO;
 import com.sc1hub.assistant.dto.AliasDictionaryFormDTO;
 import com.sc1hub.assistant.mapper.AliasDictionaryMapper;
 import com.sc1hub.assistant.search.AssistantQueryParser;
+import com.sc1hub.assistant.search.AssistantSearchTermsIndexService;
 import com.sc1hub.assistant.search.AssistantSearchTermsService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -46,16 +49,22 @@ public class AliasDictionaryAdminService {
     private final AliasDictionaryMapper aliasDictionaryMapper;
     private final ObjectMapper objectMapper;
     private final AssistantSearchTermsService searchTermsService;
+    private final AssistantSearchTermsIndexService searchTermsIndexService;
     private final AssistantQueryParser queryParser;
+    private final TaskExecutor searchTermsReindexExecutor;
 
     public AliasDictionaryAdminService(AliasDictionaryMapper aliasDictionaryMapper,
                                        ObjectMapper objectMapper,
                                        AssistantSearchTermsService searchTermsService,
-                                       AssistantQueryParser queryParser) {
+                                       AssistantSearchTermsIndexService searchTermsIndexService,
+                                       AssistantQueryParser queryParser,
+                                       @Qualifier("searchTermsReindexExecutor") TaskExecutor searchTermsReindexExecutor) {
         this.aliasDictionaryMapper = aliasDictionaryMapper;
         this.objectMapper = objectMapper;
         this.searchTermsService = searchTermsService;
+        this.searchTermsIndexService = searchTermsIndexService;
         this.queryParser = queryParser;
+        this.searchTermsReindexExecutor = searchTermsReindexExecutor;
     }
 
     public List<AliasDictionaryDTO> list(String keyword) {
@@ -76,6 +85,7 @@ public class AliasDictionaryAdminService {
             log.warn("alias_dictionary insert 결과가 비정상입니다. count={}", inserted);
         }
         invalidateAliasCaches();
+        triggerSearchTermsReindex("create");
         return alias;
     }
 
@@ -84,6 +94,7 @@ public class AliasDictionaryAdminService {
         int updated = aliasDictionaryMapper.update(alias);
         if (updated > 0) {
             invalidateAliasCaches();
+            triggerSearchTermsReindex("update");
             return true;
         }
         return false;
@@ -93,6 +104,7 @@ public class AliasDictionaryAdminService {
         int deleted = aliasDictionaryMapper.delete(id);
         if (deleted > 0) {
             invalidateAliasCaches();
+            triggerSearchTermsReindex("delete");
             return true;
         }
         return false;
@@ -347,5 +359,21 @@ public class AliasDictionaryAdminService {
     private void invalidateAliasCaches() {
         searchTermsService.invalidateAliasCache();
         queryParser.invalidateAliasCache();
+    }
+
+    private void triggerSearchTermsReindex(String reason) {
+        try {
+            searchTermsReindexExecutor.execute(() -> {
+                try {
+                    AssistantSearchTermsIndexService.ReindexResult result = searchTermsIndexService.reindexAllDefault();
+                    log.info("alias_dictionary 변경 반영 search_terms 재인덱싱 완료. reason={}, boards={}, scannedPosts={}, updatedPosts={}, failedBoards={}",
+                            reason, result.getBoardCount(), result.getScannedPosts(), result.getUpdatedPosts(), result.getFailedBoards());
+                } catch (Exception e) {
+                    log.error("alias_dictionary 변경 반영 search_terms 재인덱싱 실패. reason={}", reason, e);
+                }
+            });
+        } catch (Exception e) {
+            log.error("alias_dictionary 변경 반영 search_terms 재인덱싱 작업 등록 실패. reason={}", reason, e);
+        }
     }
 }
