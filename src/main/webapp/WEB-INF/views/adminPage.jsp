@@ -424,7 +424,7 @@
                                 <button type="button" class="admin-btn" id="adminIndexReindexBtn" data-admin-indexing-action="true">reindex</button>
                                 <button type="button" class="admin-btn admin-btn--ghost" id="adminIndexUpdateBtn" data-admin-indexing-action="true">update</button>
                             </div>
-                            <div class="admin-indexing-hint">reindex: RAG reindex(비동기) + search_terms 재인덱싱. update: RAG update + search_terms 재인덱싱. alias_dictionary 변경 시 search_terms 재인덱싱은 즉시 백그라운드로 실행됩니다.</div>
+                            <div class="admin-indexing-hint">reindex: RAG reindex(비동기). update: RAG update. search_terms는 alias_dictionary 변경 시 즉시 백그라운드 재인덱싱됩니다. 필요 시 /api/assistant/search-terms/reindex 로 수동 재인덱싱할 수 있습니다.</div>
                         </div>
 
                         <div class="admin-indexing-section">

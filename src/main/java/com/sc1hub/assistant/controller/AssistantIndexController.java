@@ -47,7 +47,6 @@ public class AssistantIndexController {
         AssistantIndexStatusResponseDTO response = new AssistantIndexStatusResponseDTO();
         response.setSuccess(true);
         response.setRag(ragSearchService.getStatus());
-        response.setSearchTerms(searchTermsIndexService.getStatus());
         return ResponseEntity.ok(response);
     }
 

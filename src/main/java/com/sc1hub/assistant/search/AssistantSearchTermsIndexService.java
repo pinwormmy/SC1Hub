@@ -101,8 +101,8 @@ public class AssistantSearchTermsIndexService {
                         }
                         scannedPosts += 1;
                         String newTerms = searchTermsService.buildSearchTerms(post.getTitle(), post.getContent());
-                        String existingTerms = post.getSearchTerms();
-                        if (StringUtils.hasText(newTerms) && !newTerms.equals(existingTerms)) {
+                        String existingTerms = normalizeTermsForCompare(post.getSearchTerms());
+                        if (!newTerms.equals(existingTerms)) {
                             boardMapper.updateSearchTerms(boardTitle, post.getPostNum(), newTerms);
                             updatedPosts += 1;
                         }
@@ -133,6 +133,13 @@ public class AssistantSearchTermsIndexService {
 
     private static String normalizeBoardTitle(String boardTitle) {
         return boardTitle == null ? "" : boardTitle.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeTermsForCompare(String searchTerms) {
+        if (!StringUtils.hasText(searchTerms)) {
+            return "";
+        }
+        return searchTerms.trim();
     }
 
     @Getter

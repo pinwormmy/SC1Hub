@@ -2,11 +2,13 @@ package com.sc1hub.assistant.controller;
 
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantSearchTermsReindexResponseDTO;
+import com.sc1hub.assistant.dto.AssistantSearchTermsStatusResponseDTO;
 import com.sc1hub.assistant.search.AssistantSearchTermsIndexService;
 import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +27,20 @@ public class AssistantSearchTermsController {
                                           AssistantProperties assistantProperties) {
         this.indexService = indexService;
         this.assistantProperties = assistantProperties;
+    }
+
+    @GetMapping("/status")
+    public ResponseEntity<AssistantSearchTermsStatusResponseDTO> status(HttpSession session) {
+        AssistantSearchTermsStatusResponseDTO response = new AssistantSearchTermsStatusResponseDTO();
+        MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
+        if (!isAdmin(member)) {
+            response.setSuccess(false);
+            response.setError("관리자만 상태를 조회할 수 있습니다.");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        }
+        response.setSuccess(true);
+        response.setSearchTerms(indexService.getStatus());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/reindex")
