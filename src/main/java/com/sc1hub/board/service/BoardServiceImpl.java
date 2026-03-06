@@ -51,7 +51,6 @@ public class BoardServiceImpl implements BoardService {
 
     @Override
     public List<BoardDTO> showPostList(String boardTitle, PageDTO page) throws Exception {
-        // log.debug("showPostList 작동 테스트");
         boardTitle = normalizeBoardTitle(boardTitle);
         return boardMapper.showPostList(boardTitle, page);
     }
@@ -93,6 +92,16 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
+    public void deletePost(String boardTitle, int postNum) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
+        BoardDTO postToDelete = boardMapper.readPost(boardTitle, postNum);
+        if (postToDelete == null) {
+            throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
+        }
+        boardMapper.deletePost(boardTitle, postNum);
+    }
+
+    @Override
     public PageDTO pageSetting(String boardTitle, PageDTO page) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         page = PageUtils.normalize(page, DEFAULT_BOARD_SEARCH_TYPE);
@@ -124,24 +133,6 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
-    public void updateViews(String boardTitle, int postNum) throws Exception {
-        boardTitle = normalizeBoardTitle(boardTitle);
-        boardMapper.updateViews(boardTitle, postNum);
-    }
-
-    @Override
-    public int checkViewUserIp(String boardTitle, int postNum, String ip) throws Exception {
-        boardTitle = normalizeBoardTitle(boardTitle);
-        return boardMapper.checkViewUserIp(boardTitle, postNum, ip);
-    }
-
-    @Override
-    public void saveViewUserIp(String boardTitle, int postNum, String ip) throws Exception {
-        boardTitle = normalizeBoardTitle(boardTitle);
-        boardMapper.saveViewUserIp(boardTitle, postNum, ip);
-    }
-
-    @Override
     public List<BoardDTO> showSelfNoticeList(String boardTitle) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         return boardMapper.showSelfNoticeList(boardTitle);
@@ -169,12 +160,9 @@ public class BoardServiceImpl implements BoardService {
     @Transactional
     public void insertRecommendation(String boardTitle, RecommendDTO recommendDTO) {
         boardTitle = normalizeBoardTitle(boardTitle);
-        // 1. 사용자가 이미 해당 게시글을 추천했는지 확인
         int count = boardMapper.checkRecommendation(boardTitle, recommendDTO);
         if (count == 0) {
-            // 2. 추천하지 않았다면, 추천 테이블에 데이터를 추가
             boardMapper.insertRecommendation(boardTitle, recommendDTO);
-            // 3. 게시글의 총 추천 수를 갱신
             updateRecommendCount(boardTitle, recommendDTO.getPostNum());
         } else {
             throw new RuntimeException("이미 추천한 게시글입니다.");
@@ -185,14 +173,11 @@ public class BoardServiceImpl implements BoardService {
     @Transactional
     public void deleteRecommendation(String boardTitle, RecommendDTO recommendDTO) {
         boardTitle = normalizeBoardTitle(boardTitle);
-        // 1. 사용자가 이미 추천을 했는지 확인
         int recommendCount = boardMapper.checkRecommendation(boardTitle, recommendDTO);
         if (recommendCount == 0) {
             throw new RuntimeException("해당 게시글에 대한 추천이 없습니다.");
         }
-        // 2. 추천을 했다면, 해당 추천을 데이터베이스에서 삭제
         boardMapper.deleteRecommendation(boardTitle, recommendDTO);
-        // 3. 게시글의 총 추천 수를 갱신
         updateRecommendCount(boardTitle, recommendDTO.getPostNum());
     }
 
@@ -260,7 +245,6 @@ public class BoardServiceImpl implements BoardService {
         return boardMapper.selectPopularPosts(boardTitle, limit);
     }
 
-    // 나머지 유틸리티 메서드들
     private void preparePostForPersistence(BoardDTO post) {
         if (post == null) {
             return;
@@ -300,15 +284,13 @@ public class BoardServiceImpl implements BoardService {
         BoardDTO originalPost = readPost(boardTitle, postNum);
         String originalContent = originalPost.getContent();
 
-        // 1. 원본 게시글의 내용을 수정합니다.
         String newContent = "이 게시글은 " + getKoreanTitle(targetBoardTitle) + "으로 이동되었습니다.";
         originalPost.setContent(newContent);
         submitModifyPost(boardTitle, originalPost);
 
-        // 2. 새 게시판(targetBoardTitle)으로 게시글을 복사합니다.
         BoardDTO newPost = new BoardDTO();
         newPost.setTitle(originalPost.getTitle());
-        newPost.setContent(originalContent); // 원본 내용을 그대로 사용
+        newPost.setContent(originalContent);
         newPost.setWriter(originalPost.getWriter());
         newPost.setRegDate(originalPost.getRegDate());
         newPost.setViews(originalPost.getViews());

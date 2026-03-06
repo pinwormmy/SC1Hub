@@ -1,6 +1,7 @@
 package com.sc1hub.board.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.util.Date;
@@ -11,6 +12,8 @@ public class BoardDTO {
     private String title;
     private String content;
     private String writer;
+    @JsonIgnore
+    private String guestPassword;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date regDate;
     private int views;

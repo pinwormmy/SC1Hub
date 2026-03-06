@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 
 - `./gradlew clean build`: Compiles and packages the app (WAR enabled).
-- `./gradlew test`: Runs the JUnit 5 test suite.
+- `./gradlew test`: Runs the JUnit 5 test suite (reference only; the repository owner runs tests in their IDE).
 - `./gradlew bootRun`: Runs locally (port `8082` is set in `build.gradle`).
 
 If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line endings.
@@ -30,6 +30,7 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 - Frameworks: JUnit 5 (Jupiter) + Mockito (via Spring Boot test starter).
 - Keep tests unit-level by default (mock mappers/services); avoid requiring DB, SMTP, or external services.
 - Naming: `*Test` classes under the matching package (e.g., `com.sc1hub.board`).
+- When Codex is running in WSL, do not run tests automatically; the repository owner runs them directly in their IDE.
 
 ## Commit & Pull Request Guidelines
 
@@ -44,4 +45,4 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 
 ## Agent Notes (Codex/AI)
 
-- Do not run tests automatically. Write/adjust test code only; the repository owner runs tests in their IDE.
+- When working from WSL, do not run tests automatically. Write or adjust test code only, and leave all test execution to the repository owner in their IDE.

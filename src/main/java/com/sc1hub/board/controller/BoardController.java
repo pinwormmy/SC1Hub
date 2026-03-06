@@ -23,9 +23,12 @@ import javax.servlet.http.HttpSession;
 import java.nio.file.AccessDeniedException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Controller
 @Slf4j
@@ -33,6 +36,8 @@ import java.util.Objects;
 public class BoardController {
 
     private static final String ADMIN_ID = "admin";
+    private static final String GUEST_WRITABLE_BOARD = "funboard";
+    private static final String GUEST_POST_AUTH_SESSION_KEY = "authorizedGuestPostKeys";
 
     private final BoardService boardService;
 
@@ -101,18 +106,22 @@ public class BoardController {
         String koreanTitle = boardService.getKoreanTitle(boardTitle);
         model.addAttribute("koreanTitle", koreanTitle);
         model.addAttribute("boardTitle", boardTitle);
+        model.addAttribute("guestWritable", isGuestWritableBoard(boardTitle));
         return "board/writePost";
     }
 
     @RequestMapping(value = "/{boardTitle}/submitPost", method = RequestMethod.POST)
     public String submitPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model)
             throws Exception {
-        MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        if (!isSameWriterOrAdmin(post, member)) {
-            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member == null ? null : member.getNickName());
-            model.addAttribute("msg", "로그인 상태를 확인해주세요");
-            model.addAttribute("url", "/");
+        MemberDTO member = getMember(request.getSession());
+        if (!preparePostForSubmission(boardTitle, post, member)) {
+            model.addAttribute("msg", buildSubmitDeniedMessage(boardTitle));
+            model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
             return "alert";
+        }
+
+        if (!isAdmin(member)) {
+            post.setNotice(0);
         }
 
         boardService.submitPost(boardTitle, post);
@@ -122,16 +131,29 @@ public class BoardController {
     @RequestMapping(value = "/{boardTitle}/deletePost", method = RequestMethod.POST)
     public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             RedirectAttributes redirectAttributes) throws Exception {
-        MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        if (member == null) {
-            redirectAttributes.addFlashAttribute("msg", "로그인 정보가 없습니다.");
-            return "redirect:/";
+        HttpSession session = request.getSession();
+        MemberDTO member = getMember(session);
+        BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
+        if (existingPost == null) {
+            redirectAttributes.addFlashAttribute("msg", "존재하지 않는 게시글입니다.");
+            return "redirect:/boards/" + boardTitle;
         }
+
         try {
-            boardService.deletePost(boardTitle, post.getPostNum(), member);
+            if (!canDeletePost(boardTitle, existingPost, member, post.getGuestPassword())) {
+                redirectAttributes.addFlashAttribute("msg", buildDeleteDeniedMessage(existingPost));
+                return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + existingPost.getPostNum();
+            }
+
+            if (isGuestPost(existingPost) && !isAdmin(member)) {
+                boardService.deletePost(boardTitle, existingPost.getPostNum());
+            } else {
+                boardService.deletePost(boardTitle, existingPost.getPostNum(), member);
+            }
+            clearGuestPostAuthorization(session, boardTitle, existingPost.getPostNum());
             return "redirect:/boards/" + boardTitle;
         } catch (AccessDeniedException e) {
-            log.warn("삭제 권한 오류 발생 - 유저 ID: {}", member.getId());
+            log.warn("삭제 권한 오류 발생 - 유저 ID: {}", member == null ? null : member.getId());
             redirectAttributes.addFlashAttribute("msg", "삭제 권한이 없습니다.");
             return "redirect:/";
         } catch (IllegalArgumentException e) {
@@ -141,25 +163,58 @@ public class BoardController {
     }
 
     @RequestMapping(value = "/{boardTitle}/modifyPost")
-    public String modifyPost(@PathVariable String boardTitle, Model model, int postNum) throws Exception {
-        String koreanTitle = boardService.getKoreanTitle(boardTitle);
-        model.addAttribute("koreanTitle", koreanTitle);
-        model.addAttribute("boardTitle", boardTitle);
-        model.addAttribute("post", boardService.readPost(boardTitle, postNum));
-        return "board/modifyPost";
+    public String modifyPost(@PathVariable String boardTitle, Model model, int postNum,
+            @RequestParam(required = false) String guestPassword, HttpSession session) throws Exception {
+        BoardDTO post = boardService.readPost(boardTitle, postNum);
+        if (post == null) {
+            model.addAttribute("msg", "존재하지 않는 게시글입니다.");
+            model.addAttribute("url", "/boards/" + boardTitle);
+            return "alert";
+        }
+
+        authorizeGuestPostIfValid(boardTitle, post, guestPassword, session);
+
+        MemberDTO member = getMember(session);
+        if (hasManagePermission(boardTitle, post, member, session)) {
+            String koreanTitle = boardService.getKoreanTitle(boardTitle);
+            model.addAttribute("koreanTitle", koreanTitle);
+            model.addAttribute("boardTitle", boardTitle);
+            model.addAttribute("post", post);
+            return "board/modifyPost";
+        }
+
+        model.addAttribute("msg", buildManageDeniedMessage(post));
+        model.addAttribute("url", "/boards/" + boardTitle + "/readPost?postNum=" + postNum);
+        return "alert";
     }
 
     @RequestMapping(value = "/{boardTitle}/submitModifyPost", method = RequestMethod.POST)
     public String submitModifyPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             Model model) throws Exception {
-        MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        if (!isSameWriterOrAdmin(post, member)) {
-            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member == null ? null : member.getNickName());
-            model.addAttribute("msg", "로그인 정보를 확인해주세요");
-            model.addAttribute("url", "/");
+        HttpSession session = request.getSession();
+        MemberDTO member = getMember(session);
+        BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
+        if (existingPost == null) {
+            model.addAttribute("msg", "존재하지 않는 게시글입니다.");
+            model.addAttribute("url", "/boards/" + boardTitle);
             return "alert";
         }
+
+        if (!hasManagePermission(boardTitle, existingPost, member, session)) {
+            log.debug("게시글 수정 권한 확인 실패 - 게시글:{} / 회원:{}", post.getPostNum(), member == null ? null : member.getNickName());
+            model.addAttribute("msg", buildManageDeniedMessage(existingPost));
+            model.addAttribute("url", "/boards/" + boardTitle + "/readPost?postNum=" + post.getPostNum());
+            return "alert";
+        }
+
+        post.setWriter(existingPost.getWriter());
+        post.setGuestPassword(existingPost.getGuestPassword());
+        if (!isAdmin(member)) {
+            post.setNotice(existingPost.getNotice());
+        }
+
         boardService.submitModifyPost(boardTitle, post);
+        clearGuestPostAuthorization(session, boardTitle, post.getPostNum());
         return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + post.getPostNum();
     }
 
@@ -204,7 +259,7 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> addRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
         try {
-            MemberDTO member = (MemberDTO) session.getAttribute("member");
+            MemberDTO member = getMember(session);
             if (member == null || recommendDTO.getPostNum() == 0) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.BAD_REQUEST);
             }
@@ -226,7 +281,7 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> cancelRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
         try {
-            MemberDTO member = (MemberDTO) session.getAttribute("member");
+            MemberDTO member = getMember(session);
             if (member == null || recommendDTO.getPostNum() == 0) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.BAD_REQUEST);
             }
@@ -248,14 +303,14 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> checkRecommendation(@PathVariable String boardTitle, RecommendDTO recommendDTO,
             HttpSession session) {
         try {
-            MemberDTO member = (MemberDTO) session.getAttribute("member");
+            MemberDTO member = getMember(session);
             if (member == null) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.UNAUTHORIZED);
             }
             recommendDTO.setUserId(member.getId());
             int count = boardService.checkRecommendation(boardTitle, recommendDTO);
             boolean isRecommended = (count > 0);
-            log.debug("추천 확인 컨트롤러 작동여부 : " + isRecommended);
+            log.debug("추천 확인 컨트롤러 작동여부 : {}", isRecommended);
             recommendDTO.setCheckRecommend(isRecommended);
             return new ResponseEntity<>(recommendDTO, HttpStatus.OK);
         } catch (Exception e) {
@@ -269,9 +324,9 @@ public class BoardController {
     public ResponseEntity<Integer> getRecommendCount(@PathVariable String boardTitle,
             @RequestParam("postNum") int postNum) {
         try {
-            log.info("getRecommendCount 요청 받음. postNum: " + postNum);
+            log.info("getRecommendCount 요청 받음. postNum: {}", postNum);
             int recommendCount = boardService.getRecommendCount(boardTitle, postNum);
-            log.info("게시글 번호 " + postNum + "의 추천 수: " + recommendCount);
+            log.info("게시글 번호 {}의 추천 수: {}", postNum, recommendCount);
             return new ResponseEntity<>(recommendCount, HttpStatus.OK);
         } catch (Exception e) {
             log.error("추천 수 조회 중 오류 발생", e);
@@ -309,19 +364,172 @@ public class BoardController {
     }
 
     private boolean canWrite(String boardTitle, HttpSession session) {
+        if (isGuestWritableBoard(boardTitle)) {
+            return true;
+        }
         MemberDTO member = getMember(session);
         return member != null && boardService.canWrite(boardTitle, member);
     }
 
     private MemberDTO getMember(HttpSession session) {
-        return (MemberDTO) session.getAttribute("member");
+        return session == null ? null : (MemberDTO) session.getAttribute("member");
     }
 
-    private boolean isSameWriterOrAdmin(BoardDTO post, MemberDTO member) {
-        if (post == null || member == null) {
+    private boolean preparePostForSubmission(String boardTitle, BoardDTO post, MemberDTO member) {
+        if (post == null) {
             return false;
         }
-        return Objects.equals(post.getWriter(), member.getNickName()) || ADMIN_ID.equals(member.getId());
+        if (member != null) {
+            post.setWriter(member.getNickName());
+            post.setGuestPassword(null);
+            return true;
+        }
+        if (!isGuestWritableBoard(boardTitle)) {
+            return false;
+        }
+
+        post.setWriter(trimToNull(post.getWriter()));
+        post.setGuestPassword(trimToNull(post.getGuestPassword()));
+        return post.getWriter() != null && post.getGuestPassword() != null;
+    }
+
+    private boolean hasManagePermission(String boardTitle, BoardDTO post, MemberDTO member, HttpSession session) {
+        if (post == null) {
+            return false;
+        }
+        if (isAdmin(member)) {
+            return true;
+        }
+        if (isGuestPost(post)) {
+            return isGuestWritableBoard(boardTitle) && isGuestPostAuthorized(session, boardTitle, post.getPostNum());
+        }
+        return member != null && Objects.equals(post.getWriter(), member.getNickName());
+    }
+
+    private boolean canDeletePost(String boardTitle, BoardDTO post, MemberDTO member, String guestPassword) {
+        if (post == null) {
+            return false;
+        }
+        if (isAdmin(member)) {
+            return true;
+        }
+        if (isGuestPost(post)) {
+            return isGuestWritableBoard(boardTitle) && guestPasswordMatches(post, guestPassword);
+        }
+        return member != null && Objects.equals(post.getWriter(), member.getNickName());
+    }
+
+    private void authorizeGuestPostIfValid(String boardTitle, BoardDTO post, String guestPassword, HttpSession session) {
+        if (!isGuestPost(post) || !isGuestWritableBoard(boardTitle) || session == null) {
+            return;
+        }
+        if (guestPasswordMatches(post, guestPassword)) {
+            authorizeGuestPost(session, boardTitle, post.getPostNum());
+        }
+    }
+
+    private boolean guestPasswordMatches(BoardDTO post, String guestPassword) {
+        return Objects.equals(post.getGuestPassword(), trimToNull(guestPassword));
+    }
+
+    private boolean isGuestPost(BoardDTO post) {
+        return post != null && trimToNull(post.getGuestPassword()) != null;
+    }
+
+    private String buildSubmitDeniedMessage(String boardTitle) {
+        if (isGuestWritableBoard(boardTitle)) {
+            return "이름과 비밀번호를 확인해주세요";
+        }
+        return "로그인 상태를 확인해주세요";
+    }
+
+    private String buildSubmitDeniedUrl(String boardTitle) {
+        if (isGuestWritableBoard(boardTitle)) {
+            return "/boards/" + boardTitle + "/writePost";
+        }
+        return "/";
+    }
+
+    private String buildManageDeniedMessage(BoardDTO post) {
+        if (isGuestPost(post)) {
+            return "비밀번호를 확인해주세요";
+        }
+        return "로그인 정보를 확인해주세요";
+    }
+
+    private String buildDeleteDeniedMessage(BoardDTO post) {
+        if (isGuestPost(post)) {
+            return "비밀번호가 일치하지 않습니다.";
+        }
+        return "삭제 권한이 없습니다.";
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<String> getAuthorizedGuestPostKeys(HttpSession session) {
+        Object value = session.getAttribute(GUEST_POST_AUTH_SESSION_KEY);
+        if (value instanceof Set) {
+            return (Set<String>) value;
+        }
+        Set<String> keys = new HashSet<>();
+        session.setAttribute(GUEST_POST_AUTH_SESSION_KEY, keys);
+        return keys;
+    }
+
+    private void authorizeGuestPost(HttpSession session, String boardTitle, int postNum) {
+        getAuthorizedGuestPostKeys(session).add(buildGuestPostAuthKey(boardTitle, postNum));
+    }
+
+    private boolean isGuestPostAuthorized(HttpSession session, String boardTitle, int postNum) {
+        if (session == null) {
+            return false;
+        }
+        Object value = session.getAttribute(GUEST_POST_AUTH_SESSION_KEY);
+        if (!(value instanceof Set)) {
+            return false;
+        }
+        @SuppressWarnings("unchecked")
+        Set<String> keys = (Set<String>) value;
+        return keys.contains(buildGuestPostAuthKey(boardTitle, postNum));
+    }
+
+    private void clearGuestPostAuthorization(HttpSession session, String boardTitle, int postNum) {
+        if (session == null) {
+            return;
+        }
+        Object value = session.getAttribute(GUEST_POST_AUTH_SESSION_KEY);
+        if (!(value instanceof Set)) {
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        Set<String> keys = (Set<String>) value;
+        keys.remove(buildGuestPostAuthKey(boardTitle, postNum));
+    }
+
+    private String buildGuestPostAuthKey(String boardTitle, int postNum) {
+        return normalizeBoardTitle(boardTitle) + ":" + postNum;
+    }
+
+    private boolean isGuestWritableBoard(String boardTitle) {
+        return GUEST_WRITABLE_BOARD.equals(normalizeBoardTitle(boardTitle));
+    }
+
+    private boolean isAdmin(MemberDTO member) {
+        return member != null && ADMIN_ID.equals(member.getId());
+    }
+
+    private String normalizeBoardTitle(String boardTitle) {
+        if (boardTitle == null) {
+            return null;
+        }
+        return boardTitle.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private static String buildBoardMetaDescription(String koreanTitle) {

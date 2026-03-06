@@ -51,13 +51,15 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(canonicalInterceptor)
                 .addPathPatterns("/**"); // 모든 경로에 대해 적용
         registry.addInterceptor(new BoardLvInterceptor())
-                .addPathPatterns("/**/writePost", "/**/modifyPost/**", "/**/deletePost/**");
+                .addPathPatterns("/**/writePost", "/**/modifyPost/**", "/**/deletePost/**")
+                .excludePathPatterns("/boards/funBoard/**", "/boards/funboard/**");
         registry.addInterceptor(new AdminInterceptor())
                 .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
                         "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",
                         "/api/admin/alias-dictionary/**")
                 .excludePathPatterns("/boards/supportBoard/**", "/boards/videoLinkBoard/**", "/boards/promotionBoard/**",
-                        "/boards/freeBoard/**", "/boards/beginnerBoard/**", "/boards/funBoard/**", "/boards/userGuideBoard/**");
+                                                "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",
+                        "/boards/funBoard/**", "/boards/funboard/**", "/boards/userGuideBoard/**", "/boards/userguideboard/**");
     }
 
     private String normalizeResourceLocation(String path) {

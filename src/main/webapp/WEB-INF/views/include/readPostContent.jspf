@@ -1,5 +1,10 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8"	pageEncoding="UTF-8"%>
 
+<c:set var="isGuestPost" value="${not empty post.guestPassword}" />
+<c:set var="isAdminMember" value="${not empty member and member.grade == 3}" />
+<c:set var="canManageMemberPost" value="${isAdminMember or (not empty member and not isGuestPost and member.nickName == post.writer)}" />
+<c:set var="canManageGuestPost" value="${boardTitle eq 'funBoard' and isGuestPost and not isAdminMember}" />
+
 <div class="title-row">
     <div class="post-title">${post.title}</div>
 </div>
@@ -54,14 +59,27 @@
     </div><!--/#comments-->
     <div class="post-navigation "">
         <hr>
+        <c:if test="${canManageGuestPost}">
+            <div style="margin-bottom: 12px;">
+                <input type="password" id="guestPostPassword" class="form-control" placeholder="글 비밀번호 입력" style="max-width: 260px; display: inline-block;">
+            </div>
+        </c:if>
         <a class="pull btn btn-right cancel-btn" href="/boards/${boardTitle}" accesskey="l">목 록(L)</a>
-        <c:if test="${member.nickName == post.writer || member.grade == 3}">
+        <c:if test="${canManageMemberPost}">
             <form action="/boards/${boardTitle}/deletePost" method="post" onsubmit="return confirm('정말 이 글을 삭제할까요?');">
                 <input type="hidden" name="postNum" value="${post.postNum}">
                 <input type="hidden" name="writer" value="${post.writer}">
                 <button type="submit" class="pull btn btn-right cancel-btn" style="height:auto;">삭제</button>
             </form>
             <a class="pull btn btn-right cancel-btn" href="/boards/${boardTitle}/modifyPost?postNum=${post.postNum}">수정</a>
+        </c:if>
+        <c:if test="${canManageGuestPost}">
+            <form action="/boards/${boardTitle}/deletePost" method="post" onsubmit="return submitGuestPostDelete(this);">
+                <input type="hidden" name="postNum" value="${post.postNum}">
+                <input type="hidden" name="guestPassword" value="">
+                <button type="submit" class="pull btn btn-right cancel-btn" style="height:auto;">삭제</button>
+            </form>
+            <a class="pull btn btn-right cancel-btn" href="javascript:void(0);" onclick="return goGuestPostModify('${boardTitle}', ${post.postNum});">수정</a>
         </c:if>
         <c:if test="${member.grade == 3}"> <!-- 관리자만 볼 수 있도록 -->
             <select id="moveToBoard" name="moveToBoard" class="pull btn btn-left cancel-btn">
@@ -73,3 +91,42 @@
         <a class="pull btn btn-right cancel-btn" href="/" accesskey="n">초기화면(N)</a>
     </div>
 </div>
+
+<script type="text/javascript">
+function getGuestPostPassword() {
+    var passwordInput = document.getElementById('guestPostPassword');
+    if (!passwordInput) {
+        return null;
+    }
+
+    var guestPassword = passwordInput.value.trim();
+    if (!guestPassword) {
+        window.alert('비밀번호를 입력해주세요.');
+        passwordInput.focus();
+        return null;
+    }
+    return guestPassword;
+}
+
+function goGuestPostModify(boardTitle, postNum) {
+    var guestPassword = getGuestPostPassword();
+    if (!guestPassword) {
+        return false;
+    }
+
+    location.href = '/boards/' + encodeURIComponent(boardTitle)
+        + '/modifyPost?postNum=' + encodeURIComponent(postNum)
+        + '&guestPassword=' + encodeURIComponent(guestPassword);
+    return false;
+}
+
+function submitGuestPostDelete(form) {
+    var guestPassword = getGuestPostPassword();
+    if (!guestPassword) {
+        return false;
+    }
+
+    form.elements['guestPassword'].value = guestPassword;
+    return window.confirm('정말 이 글을 삭제할까요?');
+}
+</script>
