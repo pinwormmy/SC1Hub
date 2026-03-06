@@ -1,7 +1,7 @@
 package com.sc1hub.member.service;
 
 import com.sc1hub.common.dto.PageDTO;
-import com.sc1hub.common.util.PageService;
+import com.sc1hub.common.util.PageUtils;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.dto.VisitorsDTO;
 import com.sc1hub.member.mapper.MemberMapper;
@@ -14,6 +14,11 @@ import java.util.UUID;
 @Service
 @Slf4j
 public class MemberServiceImpl implements MemberService {
+
+    private static final String DEFAULT_MEMBER_SEARCH_TYPE = "id";
+    private static final int MEMBER_DISPLAY_POST_LIMIT = 10;
+    private static final int DEFAULT_PAGESET_LIMIT = 10;
+    private static final int TEMP_PASSWORD_LENGTH = 8;
 
     private final MemberMapper memberMapper;
     private final EmailService emailService;
@@ -60,8 +65,8 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public PageDTO pageSetting(PageDTO page) {
-        checkPageAndKeyword(page);
-        return utilLoadingForPage(page);
+        page = PageUtils.normalize(page, DEFAULT_MEMBER_SEARCH_TYPE);
+        return PageUtils.calculate(page, getTotalMemberCount(page), MEMBER_DISPLAY_POST_LIMIT, DEFAULT_PAGESET_LIMIT);
     }
 
     @Override
@@ -72,25 +77,6 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public List<MemberDTO> getMemberList(PageDTO page) {
         return memberMapper.getMemberList(page);
-    }
-
-    private void checkPageAndKeyword(PageDTO page) {
-        if (page.getRecentPage() < 1) {
-            page.setRecentPage(1);
-        }
-        if (page.getSearchType() == null) {
-            page.setSearchType("id");
-        }
-        if (page.getKeyword() == null) {
-            page.setKeyword("");
-        }
-    }
-
-    private PageDTO utilLoadingForPage(PageDTO page) {
-        log.debug("서비스단계에서 검색어 확인 : {}", page.getKeyword());
-        page.setTotalPostCount(getTotalMemberCount(page));
-        PageService util = initPageUtil();
-        return util.calculatePage(page);
     }
 
     @Override
@@ -110,11 +96,7 @@ public class MemberServiceImpl implements MemberService {
         }
 
         // 임시 비밀번호 생성
-        String tempPassword = UUID.randomUUID().toString().substring(0, 8);
-
-        // DB에 임시 비밀번호로 업데이트
-        member.setPw(tempPassword);
-        memberMapper.updatePassword(member);
+        issueTemporaryPassword(member);
 
         // 이메일로 아이디 및 임시 비밀번호 보내기
         try {
@@ -144,11 +126,7 @@ public class MemberServiceImpl implements MemberService {
         }
 
         // 임시 비밀번호 생성
-        String tempPassword = UUID.randomUUID().toString().substring(0, 8);
-
-        // DB에 임시 비밀번호로 업데이트
-        member.setPw(tempPassword);
-        memberMapper.updatePassword(member);
+        String tempPassword = issueTemporaryPassword(member);
 
         // 이메일로 임시 비밀번호 전송
         try {
@@ -165,11 +143,11 @@ public class MemberServiceImpl implements MemberService {
         memberMapper.deleteMember(id);
     }
 
-    private PageService initPageUtil() {
-        PageService util = new PageService();
-        util.setDISPLAY_POST_LIMIT(10);
-        util.setPAGESET_LIMIT(10);
-        return util;
+    private String issueTemporaryPassword(MemberDTO member) {
+        String tempPassword = UUID.randomUUID().toString().replace("-", "").substring(0, TEMP_PASSWORD_LENGTH);
+        member.setPw(tempPassword);
+        memberMapper.updatePassword(member);
+        return tempPassword;
     }
 
 }

@@ -23,8 +23,8 @@ public class AssistantRateLimiter {
     private final Clock clock;
     private final Map<String, DailyCounter> counters = new ConcurrentHashMap<>();
 
+
     @Autowired
-    @SuppressWarnings("unused")
     public AssistantRateLimiter(AssistantProperties assistantProperties) {
         this(assistantProperties, Clock.systemDefaultZone());
     }

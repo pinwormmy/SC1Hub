@@ -29,6 +29,7 @@ public class AssistantSearchLogService {
     private final AssistantProperties assistantProperties;
     private final Clock clock;
 
+
     @Autowired
     public AssistantSearchLogService(AssistantSearchLogMapper searchLogMapper,
                                      AssistantProperties assistantProperties) {

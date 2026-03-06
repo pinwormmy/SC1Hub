@@ -25,11 +25,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Controller
 @Slf4j
 @RequestMapping("/boards")
 public class BoardController {
+
+    private static final String ADMIN_ID = "admin";
 
     private final BoardService boardService;
 
@@ -48,13 +51,7 @@ public class BoardController {
         model.addAttribute("selfNoticeList", boardService.showSelfNoticeList(boardTitle));
         model.addAttribute("postList", boardService.showPostList(boardTitle, page));
 
-        // 글쓰기 권한 설정
-        boolean canWrite = false;
-        MemberDTO member = (MemberDTO) session.getAttribute("member");
-        if (member != null) {
-            canWrite = boardService.canWrite(boardTitle, member);
-        }
-        model.addAttribute("canWrite", canWrite);
+        model.addAttribute("canWrite", canWrite(boardTitle, session));
 
         return "board/postList";
     }
@@ -70,12 +67,7 @@ public class BoardController {
         response.setSelfNoticeList(boardService.showSelfNoticeList(boardTitle));
         response.setPostList(boardService.showPostList(boardTitle, page));
 
-        boolean canWrite = false;
-        MemberDTO member = (MemberDTO) session.getAttribute("member");
-        if (member != null) {
-            canWrite = boardService.canWrite(boardTitle, member);
-        }
-        response.setCanWrite(canWrite);
+        response.setCanWrite(canWrite(boardTitle, session));
 
         return response;
     }
@@ -116,8 +108,8 @@ public class BoardController {
     public String submitPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model)
             throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        if (!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")) {
-            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getNickName());
+        if (!isSameWriterOrAdmin(post, member)) {
+            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member == null ? null : member.getNickName());
             model.addAttribute("msg", "로그인 상태를 확인해주세요");
             model.addAttribute("url", "/");
             return "alert";
@@ -161,8 +153,8 @@ public class BoardController {
     public String submitModifyPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             Model model) throws Exception {
         MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
-        if (!post.getWriter().equals(member.getNickName()) && !member.getId().equals("admin")) {
-            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member.getNickName());
+        if (!isSameWriterOrAdmin(post, member)) {
+            log.debug("글작성자와 로그인정보 확인 - 작성:{} / 회원:{}", post.getWriter(), member == null ? null : member.getNickName());
             model.addAttribute("msg", "로그인 정보를 확인해주세요");
             model.addAttribute("url", "/");
             return "alert";
@@ -314,6 +306,22 @@ public class BoardController {
             log.error("최신글 조회 중 오류 발생", e);
             return Collections.emptyList();
         }
+    }
+
+    private boolean canWrite(String boardTitle, HttpSession session) {
+        MemberDTO member = getMember(session);
+        return member != null && boardService.canWrite(boardTitle, member);
+    }
+
+    private MemberDTO getMember(HttpSession session) {
+        return (MemberDTO) session.getAttribute("member");
+    }
+
+    private boolean isSameWriterOrAdmin(BoardDTO post, MemberDTO member) {
+        if (post == null || member == null) {
+            return false;
+        }
+        return Objects.equals(post.getWriter(), member.getNickName()) || ADMIN_ID.equals(member.getId());
     }
 
     private static String buildBoardMetaDescription(String koreanTitle) {
