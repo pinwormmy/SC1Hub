@@ -540,7 +540,16 @@
             body: JSON.stringify(payload),
         });
         if (!response.ok) {
-            throw new Error(`Failed to add comment: ${response.status}`);
+            let message = `Failed to add comment: ${response.status}`;
+            try {
+                const errorBody = await response.json();
+                if (errorBody?.message) {
+                    message = errorBody.message;
+                }
+            } catch (e) {
+                // ignore parse failure
+            }
+            throw new Error(message);
         }
         return response.json().catch(() => ({}));
     }
@@ -798,7 +807,7 @@
                         nicknameInputEl.value = '';
                         passwordInputEl.value = '';
                     } catch (e) {
-                        appendSystemMessage('댓글 작성 중 오류가 발생했습니다.');
+                        appendSystemMessage(e?.message || '댓글 작성 중 오류가 발생했습니다.');
                     }
                 })();
                 return;
@@ -815,7 +824,7 @@
                     }
                     commentTextareaEl.value = '';
                 } catch (e) {
-                    appendSystemMessage('댓글 작성 중 오류가 발생했습니다.');
+                    appendSystemMessage(e?.message || '댓글 작성 중 오류가 발생했습니다.');
                 }
             })();
         });

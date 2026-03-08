@@ -76,10 +76,21 @@ async function addComment() {
                 console.log("서버에서 받은 응답:", text);
             }
         } else {
-            console.error("댓글 추가 실패");
+            const errorMessage = await extractErrorMessage(response, "댓글 추가 실패");
+            alert(errorMessage);
         }
     } catch (error) {
         console.error("댓글 추가 중 오류 발생:", error);
+        alert(error.message || "댓글 추가 중 오류가 발생했습니다.");
+    }
+}
+
+async function extractErrorMessage(response, fallbackMessage) {
+    try {
+        const result = await response.json();
+        return result.message || fallbackMessage;
+    } catch (e) {
+        return fallbackMessage;
     }
 }
 
@@ -336,4 +347,3 @@ async function movePost(postNum) {
         alert('게시글 이동 중 오류가 발생했습니다.');
     }
 }
-

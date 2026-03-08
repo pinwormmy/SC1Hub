@@ -10,6 +10,7 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
+import com.sc1hub.member.service.MemberService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,11 +39,14 @@ public class BoardController {
     private static final String ADMIN_ID = "admin";
     private static final String GUEST_WRITABLE_BOARD = "funboard";
     private static final String GUEST_POST_AUTH_SESSION_KEY = "authorizedGuestPostKeys";
+    private static final String GUEST_NICKNAME_CONFLICT_MESSAGE = "기존 가입자 닉네임은 비회원이 사용할 수 없습니다.";
 
     private final BoardService boardService;
+    private final MemberService memberService;
 
-    public BoardController(BoardService boardService) {
+    public BoardController(BoardService boardService, MemberService memberService) {
         this.boardService = boardService;
+        this.memberService = memberService;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -86,6 +90,7 @@ public class BoardController {
         BoardDTO post = boardService.readPost(boardTitle, postNum);
         model.addAttribute("koreanTitle", koreanTitle);
         model.addAttribute("boardTitle", boardTitle);
+        model.addAttribute("guestWritable", isGuestWritableBoard(boardTitle));
         model.addAttribute("post", post);
         model.addAttribute("metaDescription", buildPostMetaDescription(koreanTitle, post));
         return "board/readPost";
@@ -116,6 +121,11 @@ public class BoardController {
         MemberDTO member = getMember(request.getSession());
         if (!preparePostForSubmission(boardTitle, post, member)) {
             model.addAttribute("msg", buildSubmitDeniedMessage(boardTitle));
+            model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
+            return "alert";
+        }
+        if (member == null && isRegisteredMemberNickname(post.getWriter())) {
+            model.addAttribute("msg", GUEST_NICKNAME_CONFLICT_MESSAGE);
             model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
             return "alert";
         }
@@ -160,6 +170,26 @@ public class BoardController {
             redirectAttributes.addFlashAttribute("msg", e.getMessage());
             return "redirect:/";
         }
+    }
+
+    @PostMapping("/{boardTitle}/verifyGuestPostPassword")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> verifyGuestPostPassword(@PathVariable String boardTitle,
+            @RequestParam int postNum, @RequestParam String guestPassword) throws Exception {
+        Map<String, Object> response = new HashMap<>();
+        BoardDTO post = boardService.readPost(boardTitle, postNum);
+        if (!isGuestWritableBoard(boardTitle) || !isGuestPost(post)) {
+            response.put("valid", false);
+            response.put("message", "존재하지 않는 게시글입니다.");
+            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+        }
+
+        boolean valid = guestPasswordMatches(post, guestPassword);
+        response.put("valid", valid);
+        if (!valid) {
+            response.put("message", "비밀번호가 일치하지 않습니다.");
+        }
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     @RequestMapping(value = "/{boardTitle}/modifyPost")
@@ -221,8 +251,17 @@ public class BoardController {
     @RequestMapping(value = "/{boardTitle}/addComment", method = RequestMethod.POST)
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle,
-            @RequestBody CommentDTO comment) throws Exception {
+            @RequestBody CommentDTO comment, HttpSession session) throws Exception {
         log.info("댓글 인수 확인(댓글내용) : {}", comment.getContent());
+        MemberDTO member = getMember(session);
+        if (member == null) {
+            comment.setNickname(trimToNull(comment.getNickname()));
+            if (isRegisteredMemberNickname(comment.getNickname())) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", GUEST_NICKNAME_CONFLICT_MESSAGE);
+                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+            }
+        }
         boardService.addComment(boardTitle, comment);
         Map<String, String> response = new HashMap<>();
         response.put("message", "댓글이 성공적으로 추가되었습니다.");
@@ -530,6 +569,15 @@ public class BoardController {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean isRegisteredMemberNickname(String nickname) {
+        String trimmedNickname = trimToNull(nickname);
+        if (trimmedNickname == null) {
+            return false;
+        }
+        String duplicateCount = trimToNull(memberService.isUniqueNickName(trimmedNickname));
+        return duplicateCount != null && !"0".equals(duplicateCount);
     }
 
     private static String buildBoardMetaDescription(String koreanTitle) {
