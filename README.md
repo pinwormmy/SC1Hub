@@ -25,6 +25,11 @@ sc1hub.assistant.adminUnlimited=true
 sc1hub.assistant.adminId=admin
 sc1hub.assistant.adminGrade=3
 
+# AI bot (optional)
+sc1hub.assistant.bot.enabled=true
+sc1hub.assistant.bot.publishGuestPassword=CHANGE_ME
+sc1hub.assistant.bot.autoPublishEnabled=false
+
 # RAG (벡터 검색, 로컬 파일 인덱스)
 sc1hub.assistant.rag.enabled=false
 sc1hub.assistant.rag.indexPath=data/assistant/rag-index.json
@@ -36,6 +41,37 @@ sc1hub.assistant.rag.autoUpdate.enabled=false
 sc1hub.assistant.rag.autoUpdate.cron=0 0 5 * * *
 # optional: empty = server timezone
 sc1hub.assistant.rag.autoUpdate.zone=
+```
+
+### AI bot 자동 발행 운영 권장값
+
+운영에서는 공용 `application.properties`를 직접 바꾸지 말고 `application-online.properties` 또는 환경 변수로만 켭니다.
+
+```properties
+sc1hub.assistant.bot.enabled=true
+sc1hub.assistant.bot.publishGuestPassword=CHANGE_ME_TO_A_STRONG_VALUE
+sc1hub.assistant.bot.autoPublishEnabled=true
+sc1hub.assistant.bot.autoPublishCron=0 * * * * *
+sc1hub.assistant.bot.autoPublishZone=Asia/Seoul
+sc1hub.assistant.bot.autoPublishPostDailyLimit=5
+sc1hub.assistant.bot.autoPublishCommentDailyLimit=10
+sc1hub.assistant.bot.autoPublishCommentCandidatePosts=6
+```
+
+- 권장값 기준으로 매분 발행 가능 여부를 체크하고, 하루 전체 24시간 안에서 게시글 5회와 댓글 10회의 무작위 슬롯이 각각 잡힙니다.
+- 운영시간 제한이나 최소 대기시간 없이, 일일 횟수 제한만 적용됩니다.
+- `publishGuestPassword`는 운영 전용 강한 값으로 별도 관리해야 합니다.
+
+배포 후 관리자 로그인 상태에서 수동 1회 점검:
+
+```js
+fetch('/api/admin/assistant-bot/auto-publish/run', {
+  method: 'POST',
+  credentials: 'include'
+})
+  .then(r => r.json())
+  .then(console.log)
+  .catch(console.error)
 ```
 
 ### RAG 적용 흐름

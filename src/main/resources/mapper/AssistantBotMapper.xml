@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sc1hub.assistant.mapper.AssistantBotMapper">
+
+    <insert id="insertHistory" useGeneratedKeys="true" keyProperty="history.id">
+        INSERT INTO assistant_bot_generation_history (
+            persona_name,
+            board_title,
+            generation_mode,
+            target_post_num,
+            topic,
+            draft_title,
+            draft_body,
+            raw_json,
+            status,
+            created_at
+        ) VALUES (
+            #{history.personaName},
+            #{history.boardTitle},
+            #{history.generationMode},
+            #{history.targetPostNum},
+            #{history.topic},
+            #{history.draftTitle},
+            #{history.draftBody},
+            #{history.rawJson},
+            #{history.status},
+            NOW()
+        )
+    </insert>
+
+    <select id="selectRecentHistory" resultType="com.sc1hub.assistant.dto.AssistantBotHistoryDTO">
+        SELECT id,
+               persona_name,
+               board_title,
+               generation_mode,
+               target_post_num,
+               topic,
+               draft_title,
+               draft_body,
+               raw_json,
+               status,
+               published_post_num,
+               created_at
+        FROM assistant_bot_generation_history
+        WHERE persona_name = #{personaName}
+          AND board_title = #{boardTitle}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectHistoryById" resultType="com.sc1hub.assistant.dto.AssistantBotHistoryDTO">
+        SELECT id,
+               persona_name,
+               board_title,
+               generation_mode,
+               target_post_num,
+               topic,
+               draft_title,
+               draft_body,
+               raw_json,
+               status,
+               published_post_num,
+               created_at
+        FROM assistant_bot_generation_history
+        WHERE id = #{id}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE assistant_bot_generation_history
+        SET status = #{status},
+            published_post_num = #{publishedPostNum}
+        WHERE id = #{id}
+    </update>
+
+    <select id="countPublishedSinceByMode" resultType="int">
+        SELECT count(*)
+        FROM assistant_bot_generation_history
+        WHERE board_title = #{boardTitle}
+          AND generation_mode = #{generationMode}
+          AND status = 'published'
+          AND created_at &gt;= #{since}
+    </select>
+</mapper>

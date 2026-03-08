@@ -5,6 +5,7 @@ import com.sc1hub.board.dto.BoardListDataDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.member.dto.MemberDTO;
+import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -35,6 +36,9 @@ class BoardControllerTest {
 
     @Mock
     private BoardService boardService;
+
+    @Mock
+    private MemberService memberService;
 
     @InjectMocks
     private BoardController boardController;

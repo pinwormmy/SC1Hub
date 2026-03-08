@@ -194,6 +194,33 @@
         limit #{limit}
     </select>
 
+    <select id="selectRecentPostsForBot" resultType="com.sc1hub.board.dto.BoardDTO">
+        select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice
+        from ${boardTitle}
+        where notice=0
+        order by reg_date desc, post_num desc
+        limit #{limit}
+    </select>
+
+    <select id="selectRecentCommentsForBot" resultType="com.sc1hub.board.dto.CommentDTO">
+        select c.post_num,
+               c.comment_num,
+               c.id,
+               c.reg_date,
+               c.content,
+               coalesce(m.nickname, c.nickname) as nickname
+        from ${boardTitle}_comment c
+        left join member m
+        on c.id = m.id
+        <where>
+            <if test="postNum != null">
+                c.post_num = #{postNum}
+            </if>
+        </where>
+        order by c.reg_date desc, c.comment_num desc
+        limit #{limit}
+    </select>
+
     <select id="searchPostsByKeywords" resultType="com.sc1hub.board.dto.BoardDTO">
         select post_num, title, content, writer, reg_date, views, comment_count, recommend_count, notice, search_terms
         from ${boardTitle}

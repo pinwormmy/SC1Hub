@@ -35,16 +35,22 @@ public class GeminiClient {
     }
 
     public String generateAnswer(String prompt, Integer maxOutputTokens) {
+        return generateAnswer(prompt, maxOutputTokens, null);
+    }
+
+    public String generateAnswer(String prompt, Integer maxOutputTokens, String modelOverride) {
         String apiKey = geminiProperties.getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             log.warn("Gemini API key가 설정되지 않았습니다.");
             throw new GeminiException("Gemini API key is not configured.");
         }
 
+        String model = StringUtils.hasText(modelOverride) ? modelOverride.trim() : geminiProperties.getModel();
+
         String url = String.format("%s/%s/models/%s:generateContent",
                 geminiProperties.getBaseUrl(),
                 geminiProperties.getApiVersion(),
-                geminiProperties.getModel()
+                model
         );
 
         HttpHeaders headers = new HttpHeaders();
@@ -65,18 +71,18 @@ public class GeminiClient {
                     return extractTextFromResponse(responseBody);
                 } catch (HttpStatusCodeException fallbackException) {
                     String body = safeShortBody(fallbackException);
-                    log.error("Gemini API 요청 실패. status={}, model={}, body={}", fallbackException.getStatusCode(), geminiProperties.getModel(), body);
+                    log.error("Gemini API 요청 실패. status={}, model={}, body={}", fallbackException.getStatusCode(), model, body);
                     throw new GeminiException("Gemini API request failed: " + fallbackException.getStatusCode() + (body == null ? "" : " " + body), fallbackException);
                 } catch (Exception fallbackException) {
-                    log.error("Gemini API 요청 중 예외 발생. model={}", geminiProperties.getModel(), fallbackException);
+                    log.error("Gemini API 요청 중 예외 발생. model={}", model, fallbackException);
                     throw new GeminiException("Gemini API request failed.", fallbackException);
                 }
             }
             String body = safeShortBody(e);
-            log.error("Gemini API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), geminiProperties.getModel(), body);
+            log.error("Gemini API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), model, body);
             throw new GeminiException("Gemini API request failed: " + e.getStatusCode() + (body == null ? "" : " " + body), e);
         } catch (Exception e) {
-            log.error("Gemini API 요청 중 예외 발생. model={}", geminiProperties.getModel(), e);
+            log.error("Gemini API 요청 중 예외 발생. model={}", model, e);
             throw new GeminiException("Gemini API request failed.", e);
         }
     }
