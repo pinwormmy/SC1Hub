@@ -78,7 +78,8 @@
     <select id="countPublishedSinceByMode" resultType="int">
         SELECT count(*)
         FROM assistant_bot_generation_history
-        WHERE board_title = #{boardTitle}
+        WHERE persona_name = #{personaName}
+          AND board_title = #{boardTitle}
           AND generation_mode = #{generationMode}
           AND status = 'published'
           AND created_at &gt;= #{since}

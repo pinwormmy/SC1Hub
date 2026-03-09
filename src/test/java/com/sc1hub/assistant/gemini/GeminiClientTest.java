@@ -11,9 +11,11 @@ import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,6 +31,7 @@ class GeminiClientTest {
     void setUp() {
         geminiProperties = new GeminiProperties();
         geminiProperties.setApiKey("test-key");
+        geminiProperties.setAllowLiveCalls(true);
         objectMapper = new ObjectMapper();
     }
 
@@ -48,5 +51,15 @@ class GeminiClientTest {
 
         assertEquals("hello world", client.generateAnswer("prompt"));
     }
-}
 
+    @Test
+    void generateAnswer_throws_whenLiveCallsDisabled() {
+        geminiProperties.setAllowLiveCalls(false);
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
+
+        GeminiException exception = assertThrows(GeminiException.class, () -> client.generateAnswer("prompt"));
+
+        assertEquals("Live Gemini API calls are disabled.", exception.getMessage());
+        verifyNoInteractions(restTemplate);
+    }
+}

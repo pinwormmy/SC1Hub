@@ -39,6 +39,10 @@ public class GeminiClient {
     }
 
     public String generateAnswer(String prompt, Integer maxOutputTokens, String modelOverride) {
+        if (!geminiProperties.isAllowLiveCalls()) {
+            throw new GeminiException("Live Gemini API calls are disabled.");
+        }
+
         String apiKey = geminiProperties.getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             log.warn("Gemini API key가 설정되지 않았습니다.");

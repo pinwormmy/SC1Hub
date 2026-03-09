@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class AssistantBotDraftRequestDTO {
+    private String personaName;
     private String mode;
     private String boardTitle;
     private Integer targetPostNum;

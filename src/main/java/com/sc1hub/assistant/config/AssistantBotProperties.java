@@ -7,8 +7,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Random;
+import org.springframework.util.StringUtils;
 
 @Data
 @ConfigurationProperties(prefix = "sc1hub.assistant.bot")
@@ -32,11 +34,21 @@ public class AssistantBotProperties {
     private boolean autoPublishEnabled = false;
     private String autoPublishCron = "0 * * * * *";
     private String autoPublishZone = "Asia/Seoul";
-    private int autoPublishPostDailyLimit = 5;
-    private int autoPublishCommentDailyLimit = 10;
-    private int autoPublishCommentCandidatePosts = 6;
+    private int autoPublishPostDailyLimit = 3;
+    private int autoPublishCommentDailyLimit = 5;
+    private int autoPublishCommentCandidatePosts = 10;
+    private double autoPublishCommentReplyPriorityProbability = 0.9;
+    private List<PersonaProperties> personas = new ArrayList<>();
 
     public List<Integer> buildDailyAutoPublishSlots(LocalDate date, String slotKey, int dailyLimit) {
+        return buildDailyAutoPublishSlots(date, slotKey, dailyLimit, boardTitle, personaName);
+    }
+
+    public List<Integer> buildDailyAutoPublishSlots(LocalDate date,
+                                                    String slotKey,
+                                                    int dailyLimit,
+                                                    String boardTitleSeed,
+                                                    String personaNameSeed) {
         if (date == null) {
             return Collections.emptyList();
         }
@@ -47,7 +59,7 @@ public class AssistantBotProperties {
         }
 
         List<Integer> shuffledMinutes = new ArrayList<>(candidateMinutes);
-        Collections.shuffle(shuffledMinutes, new Random(buildDailySeed(date, slotKey)));
+        Collections.shuffle(shuffledMinutes, new Random(buildDailySeed(date, slotKey, boardTitleSeed, personaNameSeed)));
 
         int safeDailyLimit = Math.max(0, dailyLimit);
         List<Integer> selectedMinutes = new ArrayList<>();
@@ -88,13 +100,80 @@ public class AssistantBotProperties {
         return minutes;
     }
 
-    private long buildDailySeed(LocalDate date, String slotKey) {
+    private long buildDailySeed(LocalDate date, String slotKey, String boardTitleSeed, String personaNameSeed) {
         long seed = date.toEpochDay();
-        seed = (seed * 31) + Objects.hashCode(boardTitle);
-        seed = (seed * 31) + Objects.hashCode(personaName);
+        seed = (seed * 31) + Objects.hashCode(boardTitleSeed);
+        seed = (seed * 31) + Objects.hashCode(personaNameSeed);
         seed = (seed * 31) + Objects.hashCode(slotKey);
         seed = (seed * 31) + autoPublishPostDailyLimit;
         seed = (seed * 31) + autoPublishCommentDailyLimit;
         return seed;
+    }
+
+    public PersonaProperties resolvePersona(String requestedPersonaName) {
+        List<PersonaProperties> configured = getEnabledPersonas();
+        if (configured.isEmpty()) {
+            return null;
+        }
+        if (!StringUtils.hasText(requestedPersonaName)) {
+            return configured.get(0);
+        }
+        String normalized = requestedPersonaName.trim().toLowerCase(Locale.ROOT);
+        for (PersonaProperties persona : configured) {
+            if (persona == null || !StringUtils.hasText(persona.getName())) {
+                continue;
+            }
+            if (normalized.equals(persona.getName().trim().toLowerCase(Locale.ROOT))) {
+                return persona;
+            }
+        }
+        return null;
+    }
+
+    public List<PersonaProperties> getEnabledPersonas() {
+        List<PersonaProperties> enabledPersonas = new ArrayList<>();
+        if (personas != null && !personas.isEmpty()) {
+            for (PersonaProperties persona : personas) {
+                PersonaProperties normalized = normalizePersona(persona);
+                if (normalized != null && normalized.isEnabled()) {
+                    enabledPersonas.add(normalized);
+                }
+            }
+        }
+        if (!enabledPersonas.isEmpty()) {
+            return enabledPersonas;
+        }
+
+        PersonaProperties legacy = new PersonaProperties();
+        legacy.setEnabled(true);
+        legacy.setName(personaName);
+        legacy.setBoardTitle(boardTitle);
+        PersonaProperties normalizedLegacy = normalizePersona(legacy);
+        if (normalizedLegacy != null) {
+            enabledPersonas.add(normalizedLegacy);
+        }
+        return enabledPersonas;
+    }
+
+    private PersonaProperties normalizePersona(PersonaProperties persona) {
+        if (persona == null) {
+            return null;
+        }
+        String resolvedName = StringUtils.hasText(persona.getName()) ? persona.getName().trim() : null;
+        if (!StringUtils.hasText(resolvedName)) {
+            return null;
+        }
+        PersonaProperties normalized = new PersonaProperties();
+        normalized.setEnabled(persona.isEnabled());
+        normalized.setName(resolvedName);
+        normalized.setBoardTitle(StringUtils.hasText(persona.getBoardTitle()) ? persona.getBoardTitle().trim() : boardTitle);
+        return normalized;
+    }
+
+    @Data
+    public static class PersonaProperties {
+        private boolean enabled = true;
+        private String name;
+        private String boardTitle;
     }
 }

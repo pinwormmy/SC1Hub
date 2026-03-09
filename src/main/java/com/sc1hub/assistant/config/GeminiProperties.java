@@ -13,4 +13,5 @@ public class GeminiProperties {
     private String apiVersion = "v1beta";
     private double temperature = 0.2;
     private int maxOutputTokens = 512;
+    private boolean allowLiveCalls = true;
 }

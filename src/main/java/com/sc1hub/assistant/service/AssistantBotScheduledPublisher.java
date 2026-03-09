@@ -29,12 +29,12 @@ public class AssistantBotScheduledPublisher {
         try {
             AssistantBotService.AutoPublishResult result = assistantBotService.autoPublishOnce();
             if ("published".equals(result.getOutcome())) {
-                log.info("봇 자동 발행 완료. mode={}, historyId={}, publishedPostNum={}, redirectUrl={}",
-                        result.getMode(), result.getHistoryId(), result.getPublishedPostNum(), result.getRedirectUrl());
+                log.info("봇 자동 발행 완료. personaName={}, mode={}, historyId={}, publishedPostNum={}, redirectUrl={}",
+                        result.getPersonaName(), result.getMode(), result.getHistoryId(), result.getPublishedPostNum(), result.getRedirectUrl());
             } else if ("failed".equals(result.getOutcome())) {
-                log.error("봇 자동 발행 실패. detail={}", result.getDetail());
+                log.error("봇 자동 발행 실패. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
             } else {
-                log.debug("봇 자동 발행 스킵. detail={}", result.getDetail());
+                log.debug("봇 자동 발행 스킵. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
             }
         } catch (Exception e) {
             log.error("봇 자동 발행 실행 실패", e);
