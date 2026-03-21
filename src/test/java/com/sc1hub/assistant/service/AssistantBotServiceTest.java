@@ -3,6 +3,8 @@ package com.sc1hub.assistant.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantBotProperties;
 import com.sc1hub.assistant.config.AssistantProperties;
+import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
+import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.mapper.AssistantBotMapper;
@@ -25,6 +27,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -160,6 +164,161 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void findDuplicateIssue_rejectsRepeatedTitleOpeningAgainstRecentPosts() {
+        BoardDTO recentPost = post(501, "다른유저", 0, "요즘 들어 자꾸 겜하다가 딴생각이 드네");
+
+        Object duplicateCheck = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "findDuplicateIssue",
+                "post",
+                "요즘 들어 자꾸 책상 위에 잡동사니가 쌓이네",
+                "오늘은 그냥 물건만 치우고 끝냈다",
+                Collections.singletonList(recentPost),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(duplicateCheck, "duplicate"));
+        assertEquals("최근 게시글 제목 첫머리 패턴이 겹칩니다.", ReflectionTestUtils.getField(duplicateCheck, "feedback"));
+    }
+
+    @Test
+    void buildPrompt_includesPersonaSpecificPostStyleAndOpeningHints() {
+        BoardDTO recentPostA = post(601, "테스터A", 0, "요즘 들어 자꾸 겜하다가 딴생각이 드네");
+        BoardDTO recentPostB = post(602, "테스터B", 0, "다들 래더 돌리기 전에 의자 높이는 제대로 맞추고 하냐?");
+        AssistantBotHistoryDTO recentHistory = history("post", "일상글", "오늘 점심에 먹은 김치찌개가 너무 짜서 뇌가 절여지는 줄 알았다", "점심 한 끼가 너무 셌다");
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("저묵묵봇"),
+                "post",
+                "funboard",
+                null,
+                Arrays.asList(recentPostA, recentPostB),
+                Collections.emptyList(),
+                Collections.singletonList(recentHistory),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("게시글 제목은 짧고 툭 끊겨야 한다."));
+        assertTrue(prompt.contains("최근 재사용 금지 오프닝 예시:"));
+        assertTrue(prompt.contains("analysis.post_strategy"));
+        assertTrue(prompt.contains("이번 추천 작성 전략:"));
+        assertTrue(prompt.contains("요즘 들어 자꾸"));
+    }
+
+    @Test
+    void validateCandidate_rejectsFreshPostWhenRecentTitleKeywordsRepeat() throws Exception {
+        BoardDTO latestPost = post(701, "테스터A", 0, "요즘 래더 보면 다들 너무 급하게 게임하는 거 같음");
+        String rawJson = "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"요즘 래더 보면 너무 급하게 하게 됨\",\"body\":\"오늘도 손만 먼저 나가더라\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.singletonList(latestPost),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.FALSE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertEquals("신규 글인데 최신글 제목 단어를 너무 많이 재사용했습니다.", ReflectionTestUtils.getField(candidate, "feedback"));
+    }
+
+    @Test
+    void buildPrompt_forZergPersonaIncludesZergPointOfViewForGameTalk() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("저묵묵봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.singletonList(post(801, "테스터A", 0, "래더에서 뮤탈 견제 막기 너무 빡세네")),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고"));
+    }
+
+    @Test
+    void buildCommentInteractionRule_forZergPersonaUsesZergLensOnGameTalk() {
+        BoardDTO targetPost = post(901, "테스터A", 0, "테란 배슬 뜨면 저그 너무 힘든 거 아니냐");
+        targetPost.setContent("운영 말리는 느낌이 심하다");
+
+        String rule = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildCommentInteractionRule",
+                persona("저묵묵봇"),
+                targetPost
+        );
+
+        assertTrue(rule.contains("저그 유저 시점"));
+        assertTrue(rule.contains("뮤탈"));
+    }
+
+    @Test
+    void buildPrompt_commentModeIncludesThreadFlowAndSelfLatestStopRule() {
+        BoardDTO targetPost = post(920, "일반유저", 2, "래더에서 운영 갈리면 멘탈도 같이 갈리네");
+        targetPost.setContent("방금도 한 판 말렸다");
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("프징징봇"),
+                "comment",
+                "funboard",
+                targetPost,
+                Collections.emptyList(),
+                Arrays.asList(comment("다른유저", 1, "이건 좀 서럽다"), comment("프징징봇", 2, "토스 입장에선 빡세지")),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("댓글 스레드 힌트:"));
+        assertTrue(prompt.contains("최신 댓글이 자기 댓글이면 should_reply=false"));
+    }
+
+    @Test
+    void generateDraft_skipsCommentWhenLatestCommentIsPersona() throws Exception {
+        AssistantBotDraftRequestDTO request = new AssistantBotDraftRequestDTO();
+        request.setPersonaName("프징징봇");
+        request.setBoardTitle("funboard");
+        request.setMode("comment");
+        request.setTargetPostNum(930);
+        request.setRecentPostLimit(5);
+        request.setRecentCommentLimit(5);
+
+        BoardDTO targetPost = post(930, "일반유저", 2, "토스전 흐름이 너무 답답하네");
+        targetPost.setContent("방금도 한 판 꼬였다");
+
+        when(boardMapper.selectRecentPostsForBot("funboard", 5)).thenReturn(Collections.singletonList(targetPost));
+        when(boardMapper.selectRecentCommentsForBot("funboard", 930, 5))
+                .thenReturn(Arrays.asList(comment("다른유저", 1, "그럴 수도 있지"), comment("프징징봇", 2, "토스 입장에선 서럽다")));
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.readPost("funboard", 930)).thenReturn(targetPost);
+
+        AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(request);
+
+        assertEquals("skipped", response.getStatus());
+        assertEquals(Boolean.FALSE, response.getResult().path("reply").path("should_reply").asBoolean(true));
+        verify(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
+    }
+
+    @Test
     void isPublishMinute_onlyReturnsTrueAtExactRandomMinute() {
         LocalDate date = LocalDate.of(2026, 3, 9);
         List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
@@ -208,10 +367,15 @@ class AssistantBotServiceTest {
     }
 
     private BoardDTO post(int postNum, String writer, int commentCount) {
+        return post(postNum, writer, commentCount, null);
+    }
+
+    private BoardDTO post(int postNum, String writer, int commentCount, String title) {
         BoardDTO post = new BoardDTO();
         post.setPostNum(postNum);
         post.setWriter(writer);
         post.setCommentCount(commentCount);
+        post.setTitle(title);
         return post;
     }
 
@@ -224,6 +388,12 @@ class AssistantBotServiceTest {
     private CommentDTO comment(String nickname, int commentNum) {
         CommentDTO comment = comment(nickname);
         comment.setCommentNum(commentNum);
+        return comment;
+    }
+
+    private CommentDTO comment(String nickname, int commentNum, String content) {
+        CommentDTO comment = comment(nickname, commentNum);
+        comment.setContent(content);
         return comment;
     }
 

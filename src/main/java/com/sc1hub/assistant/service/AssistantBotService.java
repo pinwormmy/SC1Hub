@@ -29,9 +29,11 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
@@ -45,10 +47,13 @@ public class AssistantBotService {
     private static final String MODE_POST = "post";
     private static final String MODE_COMMENT = "comment";
     private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^가-힣a-z0-9]");
+    private static final Pattern TITLE_COMMENT_COUNT_PATTERN = Pattern.compile("\\s*\\(\\s*\\d+\\s*\\)\\s*$");
     private static final String TOPIC_LANE_STAR_CHAT = "스타수다";
     private static final String TOPIC_LANE_DAILY_LIFE = "일상글";
     private static final String TOPIC_LANE_LIGHT_CHAT = "잡담/뻘글";
     private static final String TOPIC_LANE_WHIRING = "밸런스징징";
+    private static final String POST_STRATEGY_LINKED = "linked";
+    private static final String POST_STRATEGY_FRESH = "fresh";
 
     private final AssistantBotProperties botProperties;
     private final AssistantProperties assistantProperties;
@@ -143,6 +148,19 @@ public class AssistantBotService {
                 targetPost = boardMapper.readPost(boardTitle, targetPostNum);
                 if (targetPost == null) {
                     response.setError("대상 게시글을 찾지 못했습니다.");
+                    return response;
+                }
+                if (isLatestCommentByPersona(recentComments, persona)) {
+                    AssistantBotHistoryDTO skippedHistory = createSkippedCommentHistory(persona, boardTitle, targetPostNum,
+                            "latest_comment_is_self");
+                    assistantBotMapper.insertHistory(skippedHistory);
+
+                    response.setHistoryId(skippedHistory.getId());
+                    response.setStatus("skipped");
+                    response.setRecentPostCount(recentPosts.size());
+                    response.setRecentCommentCount(recentComments.size());
+                    response.setRecentHistoryCount(recentHistory.size());
+                    response.setResult(parseJson(skippedHistory.getRawJson()));
                     return response;
                 }
             }
@@ -480,6 +498,19 @@ public class AssistantBotService {
         return hasSlotAtMinute(slots, nowMinuteOfDay) && publishedToday <= pastSlotCount;
     }
 
+    private boolean isPublishMinute(List<Integer> slots,
+                                    Integer nowMinuteOfDay,
+                                    Integer publishedToday,
+                                    Integer publishedThisMinute,
+                                    Integer ignoredPublishedCount) {
+        return isPublishMinute(
+                slots,
+                nowMinuteOfDay == null ? -1 : nowMinuteOfDay,
+                publishedToday == null ? 0 : publishedToday,
+                publishedThisMinute == null ? 0 : publishedThisMinute
+        );
+    }
+
     private int countSlotsBeforeMinute(List<Integer> slots, int minuteOfDay) {
         int count = 0;
         for (Integer slot : slots) {
@@ -530,6 +561,11 @@ public class AssistantBotService {
             return CandidateDraft.rejected(selfReviewIssue);
         }
 
+        KeywordOverlapCheck keywordOverlapCheck = findRecentTitleKeywordIssue(mode, title, recentPosts, result);
+        if (keywordOverlapCheck.invalid) {
+            return CandidateDraft.rejected(keywordOverlapCheck.feedback);
+        }
+
         DuplicateCheck duplicateCheck = findDuplicateIssue(mode, title, body, recentPosts, recentComments, recentHistory);
         if (duplicateCheck.duplicate) {
             return CandidateDraft.rejected(duplicateCheck.feedback);
@@ -559,6 +595,9 @@ public class AssistantBotService {
         String recommendedTopicLane = MODE_POST.equals(mode)
                 ? recommendPostTopicLane(recentHistory, attempt)
                 : null;
+        String recommendedPostStrategy = MODE_POST.equals(mode)
+                ? recommendPostStrategy(persona, recentPosts, attempt)
+                : null;
         sb.append("너는 SC1Hub 꿀잼놀이터 게시판 전용 AI 유저 '")
                 .append(persona.getName())
                 .append("'의 글 작성 에이전트다.\n");
@@ -568,6 +607,9 @@ public class AssistantBotService {
 
         sb.append("페르소나 규칙:\n");
         appendLine(sb, "- " + buildPersonaPromptRule(persona));
+        if (MODE_POST.equals(mode)) {
+            appendLine(sb, "- " + buildPersonaPostStyleRule(persona));
+        }
         sb.append("\n");
 
         sb.append("목표:\n");
@@ -579,6 +621,7 @@ public class AssistantBotService {
         if (MODE_POST.equals(mode)) {
             sb.append("이번 게시글 주제 가이드:\n");
             sb.append("- 우선 추천 주제 결: ").append(recommendedTopicLane).append("\n");
+            sb.append("- 이번 추천 작성 전략: ").append(POST_STRATEGY_LINKED.equals(recommendedPostStrategy) ? "연계 글" : "신규 글").append("\n");
             sb.append("- 주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징' 네 축으로 고르게 순환한다.\n");
             sb.append("- 최근 ").append(persona.getName()).append(" 글이 징징 위주였다면 이번에는 스타 썰, 게임하다 생긴 일, 그냥 하루 있었던 일 같은 방향을 우선한다.\n");
             sb.append("- 스타 관련 글은 전략 강의체보다 썰, 관전평, 추억, 래더 한탄 아닌 소소한 수다를 더 자주 섞는다.\n");
@@ -595,7 +638,23 @@ public class AssistantBotService {
         sb.append("중복 회피 규칙:\n");
         sb.append("- 최근 ").append(persona.getName()).append(" 초안의 제목, 화제, 본문 전개를 재사용하지 않는다.\n");
         sb.append("- 최근 게시글 제목과 너무 비슷한 제목을 만들지 않는다.\n");
+        sb.append("- 최근 게시글과 제목 첫머리 두세 단어, 도입 리듬, 문장 골격까지 겹치지 않게 바꾼다.\n");
         sb.append("- 최근 댓글과 같은 결론, 어미, 첫 문장을 반복하지 않는다.\n\n");
+
+        if (MODE_POST.equals(mode)) {
+            sb.append("제목 오프닝 규칙:\n");
+            sb.append("- '요즘 들어', '다들', '오늘'처럼 익숙한 출발을 반복하지 말고 제목 시작 어휘를 매번 바꾼다.\n");
+            sb.append("- 최근 제목과 첫 2~3어절이 같거나 거의 같으면 실패로 간주하고 새로 쓴다.\n");
+            appendLine(sb, "- " + buildRecentTitleOpeningHint(recentPosts, recentHistory));
+            sb.append("\n");
+
+            sb.append("최신글 연계/신규 전략 규칙:\n");
+            sb.append("- analysis.post_strategy 에는 반드시 linked 또는 fresh 중 하나를 넣는다.\n");
+            sb.append("- linked: 최신글 화제를 옆으로 이어받는 반응글이다. 최신글 제목 단어는 최대 1개만 앵커로 재사용하고, 나머지 표현은 새로 바꾼다.\n");
+            sb.append("- fresh: 최신글 제목에서 많이 나온 단어와 화제를 피하고 다른 소재로 간다.\n");
+            appendLine(sb, "- " + buildRecentTitleKeywordHint(recentPosts, recommendedPostStrategy));
+            sb.append("\n");
+        }
 
         sb.append("인간스러움 규칙:\n");
         sb.append("- 완벽하게 정제된 문장보다 커뮤니티스러운 리듬을 우선한다.\n");
@@ -680,8 +739,13 @@ public class AssistantBotService {
             sb.append("\n최근 주제 균형 힌트:\n");
             appendLine(sb, "- " + buildTopicBalanceHint(persona, recentHistory));
         } else {
+            sb.append("\n댓글 스레드 힌트:\n");
+            appendLine(sb, "- " + buildCommentThreadHint(persona, targetPost, recentComments));
             sb.append("\n댓글 상호작용 규칙:\n");
             appendLine(sb, "- " + buildCommentInteractionRule(persona, targetPost));
+            sb.append("- 댓글은 반드시 대상 글 제목/본문이나 기존 댓글 흐름 중 하나 이상을 직접 이어받아야 한다.\n");
+            sb.append("- 최근 댓글 중 다른 유저나 다른 봇의 주장에 대해 동조 또는 반박을 분명히 선택한다.\n");
+            sb.append("- 최신 댓글이 자기 댓글이면 should_reply=false 로 두고 새 댓글을 더 쓰지 않는다.\n");
             sb.append("- 다른 봇 글에 댓글 달 때는 적당히 시비를 걸고, 너무 착하게 맞장구만 치지 않는다.\n");
             sb.append("- 특히 종족 징징이나 자랑글이면 자기 페르소나 관점을 유지하며 소소하게 받아친다.\n");
             sb.append("- 싸움을 키우기보다 커뮤니티식 티키타카 한두 마디로 끝내는 쪽을 선호한다.\n");
@@ -697,7 +761,7 @@ public class AssistantBotService {
 
         sb.append("출력은 반드시 JSON 하나만 반환한다.\n");
         if (MODE_POST.equals(mode)) {
-            sb.append("{\"analysis\":{\"memes\":[],\"topic\":\"\",\"risk_notes\":[]},");
+            sb.append("{\"analysis\":{\"memes\":[],\"topic\":\"\",\"post_strategy\":\"\",\"risk_notes\":[]},");
             sb.append("\"post\":{\"title\":\"\",\"body\":\"\"},");
             sb.append("\"self_review\":{\"naturalness\":0,\"novelty\":0,\"engagement\":0,\"needs_revision\":false}}\n");
         } else {
@@ -844,20 +908,32 @@ public class AssistantBotService {
         }
         int commentLimit = Math.max(10, Math.min(botProperties.getRecentCommentLimit(), 50));
         List<CommentDTO> comments = safeList(boardMapper.selectRecentCommentsForBot(boardTitle, post.getPostNum(), commentLimit));
-        int latestOwnCommentNum = -1;
-        int latestOtherCommentNum = -1;
-        for (CommentDTO comment : comments) {
+        CommentDTO latestOwnComment = null;
+        int latestOwnIndex = -1;
+        CommentDTO latestOtherComment = null;
+        int latestOtherIndex = -1;
+        for (int i = 0; i < comments.size(); i++) {
+            CommentDTO comment = comments.get(i);
             if (comment == null) {
                 continue;
             }
-            int commentNum = comment.getCommentNum();
             if (isBotIdentity(comment.getNickname(), persona)) {
-                latestOwnCommentNum = Math.max(latestOwnCommentNum, commentNum);
-            } else {
-                latestOtherCommentNum = Math.max(latestOtherCommentNum, commentNum);
+                if (isLaterComment(comment, i, latestOwnComment, latestOwnIndex)) {
+                    latestOwnComment = comment;
+                    latestOwnIndex = i;
+                }
+                continue;
+            }
+            if (isLaterComment(comment, i, latestOtherComment, latestOtherIndex)) {
+                latestOtherComment = comment;
+                latestOtherIndex = i;
             }
         }
-        return new ThreadCommentState(latestOwnCommentNum, latestOtherCommentNum);
+        boolean hasOwnComment = latestOwnComment != null;
+        boolean hasOtherComment = latestOtherComment != null;
+        boolean hasNewReplyAfterOwnComment = hasOtherComment
+                && (!hasOwnComment || isLaterComment(latestOtherComment, latestOtherIndex, latestOwnComment, latestOwnIndex));
+        return new ThreadCommentState(hasNewReplyAfterOwnComment, !hasOwnComment || hasNewReplyAfterOwnComment);
     }
 
     private boolean isBotIdentity(String nickname, PersonaProperties persona) {
@@ -865,6 +941,83 @@ public class AssistantBotService {
                 && persona != null
                 && StringUtils.hasText(persona.getName())
                 && persona.getName().trim().equals(nickname.trim());
+    }
+
+    private boolean isLatestCommentByPersona(List<CommentDTO> comments, PersonaProperties persona) {
+        CommentDTO latestComment = findLatestComment(comments);
+        return latestComment != null && isBotIdentity(latestComment.getNickname(), persona);
+    }
+
+    private CommentDTO findLatestComment(List<CommentDTO> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return null;
+        }
+        CommentDTO latest = null;
+        int latestIndex = -1;
+        for (int i = 0; i < comments.size(); i++) {
+            CommentDTO comment = comments.get(i);
+            if (comment == null) {
+                continue;
+            }
+            if (isLaterComment(comment, i, latest, latestIndex)) {
+                latest = comment;
+                latestIndex = i;
+            }
+        }
+        return latest;
+    }
+
+    private CommentDTO findLatestOtherComment(List<CommentDTO> comments, PersonaProperties persona) {
+        if (comments == null || comments.isEmpty()) {
+            return null;
+        }
+        CommentDTO latest = null;
+        int latestIndex = -1;
+        for (int i = 0; i < comments.size(); i++) {
+            CommentDTO comment = comments.get(i);
+            if (comment == null || isBotIdentity(comment.getNickname(), persona)) {
+                continue;
+            }
+            if (isLaterComment(comment, i, latest, latestIndex)) {
+                latest = comment;
+                latestIndex = i;
+            }
+        }
+        return latest;
+    }
+
+    private boolean isLaterComment(CommentDTO candidate, int candidateIndex, CommentDTO current, int currentIndex) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        int candidateCommentNum = candidate.getCommentNum();
+        int currentCommentNum = current.getCommentNum();
+        if (candidateCommentNum > 0 && currentCommentNum > 0 && candidateCommentNum != currentCommentNum) {
+            return candidateCommentNum > currentCommentNum;
+        }
+        return candidateIndex > currentIndex;
+    }
+
+    private AssistantBotHistoryDTO createSkippedCommentHistory(PersonaProperties persona,
+                                                               String boardTitle,
+                                                               Integer targetPostNum,
+                                                               String reason) {
+        AssistantBotHistoryDTO history = new AssistantBotHistoryDTO();
+        history.setPersonaName(persona.getName());
+        history.setBoardTitle(boardTitle);
+        history.setGenerationMode(MODE_COMMENT);
+        history.setTargetPostNum(targetPostNum);
+        history.setTopic("skip");
+        history.setDraftTitle(null);
+        history.setDraftBody("");
+        history.setRawJson("{\"analysis\":{\"comment_type\":\"skip\",\"tone_match\":\"\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
+                + "\"reply\":{\"should_reply\":false,\"body\":\"\"},"
+                + "\"self_review\":{\"naturalness\":100,\"context_fit\":100,\"conflict_risk\":0,\"needs_revision\":false}}");
+        history.setStatus("skipped");
+        return history;
     }
 
     private DuplicateCheck findDuplicateIssue(String mode,
@@ -883,6 +1036,9 @@ public class AssistantBotService {
             }
             String historyMode = normalizeMode(history.getGenerationMode());
             if (MODE_POST.equals(mode) && MODE_POST.equals(historyMode)) {
+                if (hasRepeatedTitleOpening(title, history.getDraftTitle())) {
+                    return DuplicateCheck.of("최근 봇 게시글 제목 첫머리 패턴이 겹칩니다.");
+                }
                 if (isTooSimilar(normalizedTitle, normalizeText(history.getDraftTitle()), threshold)) {
                     return DuplicateCheck.of("최근 봇 게시글 제목과 너무 비슷합니다.");
                 }
@@ -901,6 +1057,9 @@ public class AssistantBotService {
             for (BoardDTO post : recentPosts) {
                 if (post == null) {
                     continue;
+                }
+                if (hasRepeatedTitleOpening(title, post.getTitle())) {
+                    return DuplicateCheck.of("최근 게시글 제목 첫머리 패턴이 겹칩니다.");
                 }
                 if (isTooSimilar(normalizedTitle, normalizeText(post.getTitle()), threshold)) {
                     return DuplicateCheck.of("최근 게시글 제목과 너무 비슷합니다.");
@@ -1007,12 +1166,66 @@ public class AssistantBotService {
         return textOrNull(result.path("analysis").path("comment_type"));
     }
 
+    private String extractPostStrategy(String mode, JsonNode result) {
+        if (!MODE_POST.equals(mode) || result == null || result.isMissingNode() || result.isNull()) {
+            return null;
+        }
+        return normalizePostStrategy(textOrNull(result.path("analysis").path("post_strategy")));
+    }
+
     private boolean resolveShouldReply(String mode, JsonNode result) {
         if (!MODE_COMMENT.equals(normalizeMode(mode))) {
             return true;
         }
         JsonNode shouldReply = result.path("reply").path("should_reply");
         return shouldReply.isMissingNode() || shouldReply.isNull() || shouldReply.asBoolean(true);
+    }
+
+    private KeywordOverlapCheck findRecentTitleKeywordIssue(String mode,
+                                                            String title,
+                                                            List<BoardDTO> recentPosts,
+                                                            JsonNode result) {
+        if (!MODE_POST.equals(mode) || !StringUtils.hasText(title) || recentPosts == null || recentPosts.isEmpty()) {
+            return KeywordOverlapCheck.valid();
+        }
+
+        String strategy = extractPostStrategy(mode, result);
+        if (!StringUtils.hasText(strategy)) {
+            strategy = inferPostStrategy(title, recentPosts);
+        }
+
+        Set<String> generatedKeywords = extractTitleKeywords(title);
+        if (generatedKeywords.isEmpty()) {
+            return KeywordOverlapCheck.valid();
+        }
+
+        Set<String> latestKeywords = extractTitleKeywords(recentPosts.get(0) == null ? null : recentPosts.get(0).getTitle());
+        int latestOverlap = countOverlap(generatedKeywords, latestKeywords);
+        int maxOverlapWithRecentTitle = 0;
+        for (BoardDTO post : recentPosts) {
+            if (post == null) {
+                continue;
+            }
+            maxOverlapWithRecentTitle = Math.max(maxOverlapWithRecentTitle,
+                    countOverlap(generatedKeywords, extractTitleKeywords(post.getTitle())));
+        }
+
+        if (POST_STRATEGY_LINKED.equals(strategy)) {
+            if (latestOverlap <= 0) {
+                return KeywordOverlapCheck.of("연계 글인데 최신글 제목과 이어지는 핵심 단어가 없습니다.");
+            }
+            if (latestOverlap >= 2 || maxOverlapWithRecentTitle >= 3) {
+                return KeywordOverlapCheck.of("연계 글인데 최신글 제목 단어를 너무 많이 재사용했습니다.");
+            }
+            return KeywordOverlapCheck.valid();
+        }
+
+        Set<String> hotKeywords = collectFrequentRecentTitleKeywords(recentPosts, 8);
+        int hotOverlap = countOverlap(generatedKeywords, hotKeywords);
+        if (hotOverlap >= 2 || maxOverlapWithRecentTitle >= 2) {
+            return KeywordOverlapCheck.of("신규 글인데 최신글 제목 단어를 너무 많이 재사용했습니다.");
+        }
+        return KeywordOverlapCheck.valid();
     }
 
     private String findBlockedWord(String... texts) {
@@ -1082,6 +1295,24 @@ public class AssistantBotService {
             return true;
         }
         return trigramSimilarity(left, right) >= threshold;
+    }
+
+    private boolean hasRepeatedTitleOpening(String leftTitle, String rightTitle) {
+        String left = normalizeTitleForOpeningCompare(leftTitle);
+        String right = normalizeTitleForOpeningCompare(rightTitle);
+        if (!StringUtils.hasText(left) || !StringUtils.hasText(right)) {
+            return false;
+        }
+
+        String leftTokenPrefix = buildLeadingTokenKey(left, 2);
+        String rightTokenPrefix = buildLeadingTokenKey(right, 2);
+        if (StringUtils.hasText(leftTokenPrefix)
+                && Objects.equals(leftTokenPrefix, rightTokenPrefix)
+                && normalizeText(leftTokenPrefix).length() >= 4) {
+            return true;
+        }
+
+        return sharedPrefixLength(normalizeText(left), normalizeText(right)) >= 6;
     }
 
     private double trigramSimilarity(String left, String right) {
@@ -1245,6 +1476,28 @@ public class AssistantBotService {
         return NON_TEXT_PATTERN.matcher(lowered).replaceAll("");
     }
 
+    private static String normalizeTitleForOpeningCompare(String title) {
+        if (!StringUtils.hasText(title)) {
+            return "";
+        }
+        String trimmed = TITLE_COMMENT_COUNT_PATTERN.matcher(title.trim()).replaceAll("");
+        return trimmed.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String normalizePostStrategy(String strategy) {
+        if (!StringUtils.hasText(strategy)) {
+            return null;
+        }
+        String normalized = strategy.trim().toLowerCase(Locale.ROOT);
+        if ("linked".equals(normalized) || "연계".equals(normalized) || "연계글".equals(normalized)) {
+            return POST_STRATEGY_LINKED;
+        }
+        if ("fresh".equals(normalized) || "new".equals(normalized) || "신규".equals(normalized) || "새주제".equals(normalized)) {
+            return POST_STRATEGY_FRESH;
+        }
+        return null;
+    }
+
     private static double clampThreshold(double threshold) {
         return Math.max(0.45, Math.min(threshold, 0.95));
     }
@@ -1299,9 +1552,32 @@ public class AssistantBotService {
             return "테뻔뻔봇은 테란 유저 특유의 뻔뻔함과 잘난 척이 기본값이다. '테란이 사기가 아니라 내가 잘하는 거다' 같은 태도로 말하고, 밸런스 얘기를 해도 테란 쪽을 더 좋게 쳐주며 자신감 있게 우긴다.";
         }
         if ("저묵묵봇".equals(name)) {
-            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 문장을 짧고 무뚝뚝하게 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다.";
+            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 문장을 짧고 무뚝뚝하게 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다. 다만 게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고, 저그 운영/병력/상성 체감에서 출발해 말한다.";
         }
         return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이지만, 징징만 반복하지 말고 스타 수다, 일상글, 뻘글도 섞는 캐릭터다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다.";
+    }
+
+    private String buildPersonaPostStyleRule(PersonaProperties persona) {
+        String name = persona == null ? "" : String.valueOf(persona.getName());
+        if ("테뻔뻔봇".equals(name)) {
+            return "게시글 제목은 결론이나 허세를 먼저 던지는 쪽이 맞다. 일기체로 길게 풀지 말고, 잘난 척이나 얄미운 단정으로 출발하라.";
+        }
+        if ("저묵묵봇".equals(name)) {
+            return "게시글 제목은 짧고 툭 끊겨야 한다. '요즘 들어 자꾸...' 같은 긴 서술형 대신 무뚝뚝한 한마디, 짧은 관찰, 건조한 투덜거림으로 시작하라.";
+        }
+        return "게시글 제목은 억울함이나 과몰입 드립을 바로 드러내되, 매번 같은 징징 도입부로 풀지 마라. 감정은 살리되 시작 어휘와 문장 골격을 자주 바꿔라.";
+    }
+
+    private String recommendPostStrategy(PersonaProperties persona, List<BoardDTO> recentPosts, int attempt) {
+        if (recentPosts == null || recentPosts.isEmpty()) {
+            return POST_STRATEGY_FRESH;
+        }
+        int safeAttempt = Math.max(1, attempt);
+        long seed = LocalDate.now(clock).toEpochDay() + safeAttempt;
+        if (persona != null && StringUtils.hasText(persona.getName())) {
+            seed += persona.getName().hashCode();
+        }
+        return Math.floorMod(seed, 2) == 0 ? POST_STRATEGY_LINKED : POST_STRATEGY_FRESH;
     }
 
     private String buildCommentInteractionRule(PersonaProperties persona, BoardDTO targetPost) {
@@ -1313,6 +1589,7 @@ public class AssistantBotService {
         boolean targetIsBot = isKnownBotName(writer);
         boolean protossWhine = containsAny(titleAndBody, "프로토스", "토스", "프사기", "억까", "불리", "서럽", "힘들", "사기");
         boolean terranBrag = containsAny(titleAndBody, "테란", "테사기", "잘해서", "실력", "운영", "개잘", "뻔뻔");
+        boolean gameTalk = containsAny(titleAndBody, "저그", "테란", "프로토스", "토스", "스타", "래더", "빌드", "운영", "뮤탈", "히드라", "럴커", "저글링", "디파일러", "배슬", "탱크", "리버", "드라군", "질럿");
 
         if ("테뻔뻔봇".equals(personaName)) {
             if (targetIsBot || protossWhine) {
@@ -1321,8 +1598,11 @@ public class AssistantBotService {
             return "기본적으로 자신만만하고 약간 얄미운 톤으로 말하되, 테란 쪽이 손해라는 식이면 더 노골적으로 받아쳐라.";
         }
         if ("저묵묵봇".equals(personaName)) {
-            if (targetIsBot || terranBrag || protossWhine) {
-                return writer + " 글에는 짧고 무뚝뚝하게 툭 받아쳐라. 길게 설명하지 말고 경상도 느낌 한두 마디로 묵직하게 시비를 건다.";
+            if (gameTalk) {
+                if (targetIsBot || terranBrag || protossWhine) {
+                    return writer + " 글에는 저그 유저 시점으로 짧고 무뚝뚝하게 툭 받아쳐라. 뮤탈, 히드라, 저글링, 운영 말리는 체감 같은 저그 쪽 기준을 깔고 길게 설명하지 말고 경상도 느낌 한두 마디로 묵직하게 시비를 건다.";
+                }
+                return "게임 얘기면 저그 유저 시점으로 한두 마디만 던져라. 뮤탈, 히드라, 저글링, 운영 말리는 체감처럼 저그 쪽 기준을 깔되 괜히 과하게 친절하게 풀어주지 않는다.";
             }
             return "짧고 무뚝뚝한 경상도 톤으로 한두 마디만 던져라. 괜히 과하게 친절하게 풀어주지 않는다.";
         }
@@ -1330,6 +1610,34 @@ public class AssistantBotService {
             return "테뻔뻔봇이 잘난 척하면 곧이곧대로 받아주지 말고, 프로토스 입장에서 억울함 섞인 농담으로 받아쳐라.";
         }
         return "상대 글이 다른 봇 글이면 너무 순하게 동조하지 말고, 자기 종족 관점과 캐릭터성으로 한마디 받아쳐라.";
+    }
+
+    private String buildCommentThreadHint(PersonaProperties persona, BoardDTO targetPost, List<CommentDTO> recentComments) {
+        CommentDTO latestComment = findLatestComment(recentComments);
+        if (latestComment == null) {
+            return "아직 댓글이 거의 없으니 글 제목/본문을 직접 이어받아 첫 반응을 만든다.";
+        }
+
+        if (isBotIdentity(latestComment.getNickname(), persona)) {
+            return "최신 댓글이 이미 " + persona.getName() + " 본인 것이다. 새 댓글을 더 달지 말고 should_reply=false 로 끝낸다.";
+        }
+
+        String latestNickname = StringUtils.hasText(latestComment.getNickname()) ? latestComment.getNickname() : "익명";
+        String latestSummary = "[" + latestNickname + "] " + safeText(stripHtml(latestComment.getContent()), 80);
+        CommentDTO latestOtherComment = findLatestOtherComment(recentComments, persona);
+        if (latestOtherComment == null) {
+            return "최신 댓글 흐름은 " + latestSummary + " 이다. 대상 글 제목/본문과 이 댓글을 묶어서 짧게 반응한다.";
+        }
+
+        String latestOtherNickname = StringUtils.hasText(latestOtherComment.getNickname()) ? latestOtherComment.getNickname() : "익명";
+        String latestOtherSummary = "[" + latestOtherNickname + "] " + safeText(stripHtml(latestOtherComment.getContent()), 80);
+        if (latestComment == latestOtherComment) {
+            return "최신 댓글 흐름은 " + latestSummary + " 이다. 이 주장에 동조하거나 반박하되, 대상 글 제목/본문과도 연결해라.";
+        }
+
+        String postTitle = targetPost == null ? "" : safeText(targetPost.getTitle(), 60);
+        return "글 제목 '" + postTitle + "' 아래 최신 댓글은 " + latestSummary + " 이고, 가장 최근 타인 댓글 흐름은 " + latestOtherSummary
+                + " 이다. 둘 중 하나에 분명히 반응하면서 글 본문과도 이어라.";
     }
 
     private boolean isKnownBotName(String nickname) {
@@ -1395,6 +1703,177 @@ public class AssistantBotService {
         return false;
     }
 
+    private String buildRecentTitleOpeningHint(List<BoardDTO> recentPosts, List<AssistantBotHistoryDTO> recentHistory) {
+        LinkedHashSet<String> openings = new LinkedHashSet<>();
+        for (BoardDTO post : recentPosts) {
+            if (post == null) {
+                continue;
+            }
+            addTitleOpeningHint(openings, post.getTitle());
+            if (openings.size() >= 6) {
+                break;
+            }
+        }
+        if (openings.size() < 6) {
+            for (AssistantBotHistoryDTO history : recentHistory) {
+                if (history == null || !MODE_POST.equals(normalizeMode(history.getGenerationMode()))) {
+                    continue;
+                }
+                addTitleOpeningHint(openings, history.getDraftTitle());
+                if (openings.size() >= 6) {
+                    break;
+                }
+            }
+        }
+        if (openings.isEmpty()) {
+            return "최근 제목 오프닝 예시가 없으면, 이번 제목은 평소보다 더 다른 시작 어휘로 출발하라.";
+        }
+        return "최근 재사용 금지 오프닝 예시: " + String.join(" / ", openings);
+    }
+
+    private String buildRecentTitleKeywordHint(List<BoardDTO> recentPosts, String recommendedStrategy) {
+        Set<String> hotKeywords = collectFrequentRecentTitleKeywords(recentPosts, 8);
+        if (hotKeywords.isEmpty()) {
+            if (POST_STRATEGY_LINKED.equals(recommendedStrategy)) {
+                return "최신글 제목에서 핵심 단어 하나만 앵커로 잡고 나머지 제목 표현은 전부 새로 바꿔라.";
+            }
+            return "최신글 제목과 겹치는 단어를 되도록 피하고 다른 장면이나 화제로 이동하라.";
+        }
+        if (POST_STRATEGY_LINKED.equals(recommendedStrategy)) {
+            return "연계 글이면 다음 단어 중 하나만 앵커로 쓰고 나머지는 피하라: " + String.join(", ", hotKeywords);
+        }
+        return "신규 글이면 다음 단어들을 제목에서 되도록 피하라: " + String.join(", ", hotKeywords);
+    }
+
+    private void addTitleOpeningHint(Set<String> openings, String title) {
+        String opening = extractTitleOpeningHint(title);
+        if (StringUtils.hasText(opening)) {
+            openings.add(opening);
+        }
+    }
+
+    private String extractTitleOpeningHint(String title) {
+        String normalized = normalizeTitleForOpeningCompare(title);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        String[] tokens = normalized.split(" ");
+        if (tokens.length >= 3) {
+            return String.join(" ", tokens[0], tokens[1], tokens[2]);
+        }
+        if (tokens.length == 2) {
+            return String.join(" ", tokens[0], tokens[1]);
+        }
+        if (normalized.length() <= 12) {
+            return normalized;
+        }
+        return normalized.substring(0, 12).trim();
+    }
+
+    private String buildLeadingTokenKey(String text, int tokenCount) {
+        if (!StringUtils.hasText(text) || tokenCount <= 0) {
+            return "";
+        }
+        String[] tokens = text.trim().split("\\s+");
+        if (tokens.length < tokenCount) {
+            return "";
+        }
+        List<String> selected = new ArrayList<>();
+        for (int i = 0; i < tokenCount; i++) {
+            if (StringUtils.hasText(tokens[i])) {
+                selected.add(tokens[i]);
+            }
+        }
+        return String.join(" ", selected);
+    }
+
+    private int sharedPrefixLength(String left, String right) {
+        int max = Math.min(left.length(), right.length());
+        int matched = 0;
+        while (matched < max && left.charAt(matched) == right.charAt(matched)) {
+            matched++;
+        }
+        return matched;
+    }
+
+    private String inferPostStrategy(String title, List<BoardDTO> recentPosts) {
+        if (!StringUtils.hasText(title) || recentPosts == null || recentPosts.isEmpty()) {
+            return POST_STRATEGY_FRESH;
+        }
+        Set<String> generatedKeywords = extractTitleKeywords(title);
+        Set<String> latestKeywords = extractTitleKeywords(recentPosts.get(0) == null ? null : recentPosts.get(0).getTitle());
+        return countOverlap(generatedKeywords, latestKeywords) >= 1 ? POST_STRATEGY_LINKED : POST_STRATEGY_FRESH;
+    }
+
+    private Set<String> collectFrequentRecentTitleKeywords(List<BoardDTO> recentPosts, int limit) {
+        if (recentPosts == null || recentPosts.isEmpty() || limit <= 0) {
+            return Collections.emptySet();
+        }
+        Map<String, Integer> counts = new HashMap<>();
+        List<String> firstSeenOrder = new ArrayList<>();
+        for (BoardDTO post : recentPosts) {
+            if (post == null) {
+                continue;
+            }
+            for (String keyword : extractTitleKeywords(post.getTitle())) {
+                counts.put(keyword, counts.getOrDefault(keyword, 0) + 1);
+                if (counts.get(keyword) == 1) {
+                    firstSeenOrder.add(keyword);
+                }
+            }
+        }
+
+        LinkedHashSet<String> selected = new LinkedHashSet<>();
+        for (String keyword : firstSeenOrder) {
+            if (selected.size() >= limit) {
+                break;
+            }
+            if (counts.getOrDefault(keyword, 0) >= 2) {
+                selected.add(keyword);
+            }
+        }
+        if (!selected.isEmpty()) {
+            return selected;
+        }
+
+        for (String keyword : firstSeenOrder) {
+            if (selected.size() >= limit) {
+                break;
+            }
+            selected.add(keyword);
+        }
+        return selected;
+    }
+
+    private Set<String> extractTitleKeywords(String title) {
+        String normalized = normalizeTitleForOpeningCompare(title);
+        if (!StringUtils.hasText(normalized)) {
+            return Collections.emptySet();
+        }
+        LinkedHashSet<String> keywords = new LinkedHashSet<>();
+        for (String token : normalized.split("\\s+")) {
+            String cleaned = normalizeText(token);
+            if (!StringUtils.hasText(cleaned) || cleaned.length() < 2) {
+                continue;
+            }
+            keywords.add(cleaned);
+        }
+        return keywords;
+    }
+
+    private int countOverlap(Set<String> left, Set<String> right) {
+        if (left == null || right == null || left.isEmpty() || right.isEmpty()) {
+            return 0;
+        }
+        int overlap = 0;
+        for (String item : left) {
+            if (right.contains(item)) {
+                overlap++;
+            }
+        }
+        return overlap;
+    }
+
     private static final class CandidateDraft {
         private boolean accepted;
         private JsonNode result;
@@ -1430,6 +1909,24 @@ public class AssistantBotService {
         }
     }
 
+    private static final class KeywordOverlapCheck {
+        private final boolean invalid;
+        private final String feedback;
+
+        private KeywordOverlapCheck(boolean invalid, String feedback) {
+            this.invalid = invalid;
+            this.feedback = feedback;
+        }
+
+        static KeywordOverlapCheck of(String feedback) {
+            return new KeywordOverlapCheck(true, feedback);
+        }
+
+        static KeywordOverlapCheck valid() {
+            return new KeywordOverlapCheck(false, null);
+        }
+    }
+
     private static final class AutoPublishCandidate {
         private final String mode;
         private final int minuteOfDay;
@@ -1441,24 +1938,24 @@ public class AssistantBotService {
     }
 
     private static final class ThreadCommentState {
-        private final int latestOwnCommentNum;
-        private final int latestOtherCommentNum;
+        private final boolean prioritizeSelfPostReply;
+        private final boolean canAddCommentToOthersPost;
 
-        private ThreadCommentState(int latestOwnCommentNum, int latestOtherCommentNum) {
-            this.latestOwnCommentNum = latestOwnCommentNum;
-            this.latestOtherCommentNum = latestOtherCommentNum;
+        private ThreadCommentState(boolean prioritizeSelfPostReply, boolean canAddCommentToOthersPost) {
+            this.prioritizeSelfPostReply = prioritizeSelfPostReply;
+            this.canAddCommentToOthersPost = canAddCommentToOthersPost;
         }
 
         static ThreadCommentState empty() {
-            return new ThreadCommentState(-1, -1);
+            return new ThreadCommentState(false, true);
         }
 
         boolean shouldPrioritizeSelfPostReply() {
-            return latestOtherCommentNum > latestOwnCommentNum;
+            return prioritizeSelfPostReply;
         }
 
         boolean canAddCommentToOthersPost() {
-            return latestOwnCommentNum < 0 || latestOtherCommentNum > latestOwnCommentNum;
+            return canAddCommentToOthersPost;
         }
     }
 
