@@ -10,6 +10,7 @@ public class AssistantRagUpdateResponseDTO {
     private int updatedChunks;
     private int dimension;
     private String indexPath;
+    private int embeddingCalls;
+    private int reusedChunks;
     private String error;
 }
-

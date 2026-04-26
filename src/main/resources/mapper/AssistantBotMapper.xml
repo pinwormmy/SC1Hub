@@ -84,4 +84,14 @@
           AND status = 'published'
           AND created_at &gt;= #{since}
     </select>
+
+    <select id="countGeneratedSinceByMode" resultType="int">
+        SELECT count(*)
+        FROM assistant_bot_generation_history
+        WHERE persona_name = #{personaName}
+          AND board_title = #{boardTitle}
+          AND generation_mode = #{generationMode}
+          AND status IN ('draft', 'skipped', 'published')
+          AND created_at &gt;= #{since}
+    </select>
 </mapper>

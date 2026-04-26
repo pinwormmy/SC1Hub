@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AssistantService {
 
+    private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
     private static final Pattern SOURCE_ID_PATTERN = Pattern.compile("^([a-z0-9_]+):(\\d+)$");
     private static final Set<String> STOPWORDS = new HashSet<>(Arrays.asList(
@@ -91,7 +92,7 @@ public class AssistantService {
         AssistantChatResponseDTO response = new AssistantChatResponseDTO();
 
         if (!assistantProperties.isEnabled()) {
-            response.setError("AI 기능이 비활성화되어 있습니다.");
+            response.setError(ASSISTANT_MAINTENANCE_MESSAGE);
             return response;
         }
 

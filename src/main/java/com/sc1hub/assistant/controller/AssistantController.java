@@ -29,6 +29,8 @@ import java.util.List;
 @Slf4j
 public class AssistantController {
 
+    private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
+
     private final AssistantService assistantService;
     private final AssistantProperties assistantProperties;
     private final AssistantRateLimiter assistantRateLimiter;
@@ -51,7 +53,7 @@ public class AssistantController {
         AssistantChatResponseDTO response = new AssistantChatResponseDTO();
 
         if (!assistantProperties.isEnabled()) {
-            response.setError("AI 기능이 비활성화되어 있습니다.");
+            response.setError(ASSISTANT_MAINTENANCE_MESSAGE);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
         }
 

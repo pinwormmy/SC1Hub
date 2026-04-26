@@ -54,6 +54,8 @@ public class AssistantBotService {
     private static final String TOPIC_LANE_WHIRING = "밸런스징징";
     private static final String POST_STRATEGY_LINKED = "linked";
     private static final String POST_STRATEGY_FRESH = "fresh";
+    private static final String AUTO_DRAFT_SKIPPED_AFTER_GENERATION = "draft_skipped_after_generation:";
+    private static final String AUTO_DRAFT_BUDGET_EXCEEDED = "generate_call_budget_exceeded";
 
     private final AssistantBotProperties botProperties;
     private final AssistantProperties assistantProperties;
@@ -63,6 +65,8 @@ public class AssistantBotService {
     private final GeminiClient geminiClient;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private LocalDate generateCallBudgetDate;
+    private int generateCallBudgetUsed;
 
     @Autowired
     public AssistantBotService(AssistantBotProperties botProperties,
@@ -95,6 +99,12 @@ public class AssistantBotService {
     }
 
     public AssistantBotDraftResponseDTO generateDraft(AssistantBotDraftRequestDTO request) {
+        return generateDraftInternal(request, botProperties.getMaxGenerateAttempts(), false);
+    }
+
+    private AssistantBotDraftResponseDTO generateDraftInternal(AssistantBotDraftRequestDTO request,
+                                                               int requestedMaxAttempts,
+                                                               boolean autoPublish) {
         AssistantBotDraftResponseDTO response = new AssistantBotDraftResponseDTO();
 
         if (!botProperties.isEnabled()) {
@@ -135,7 +145,7 @@ public class AssistantBotService {
             int recentPostLimit = resolveLimit(request == null ? null : request.getRecentPostLimit(), botProperties.getRecentPostLimit());
             int recentCommentLimit = resolveLimit(request == null ? null : request.getRecentCommentLimit(), botProperties.getRecentCommentLimit());
             int recentHistoryLimit = Math.max(1, botProperties.getRecentHistoryLimit());
-            int maxAttempts = Math.max(1, botProperties.getMaxGenerateAttempts());
+            int maxAttempts = Math.max(1, requestedMaxAttempts);
 
             List<BoardDTO> recentPosts = safeList(boardMapper.selectRecentPostsForBot(boardTitle, recentPostLimit));
             List<CommentDTO> recentComments = safeList(boardMapper.selectRecentCommentsForBot(boardTitle, targetPostNum, recentCommentLimit));
@@ -168,6 +178,16 @@ public class AssistantBotService {
             CandidateDraft acceptedDraft = null;
             String retryFeedback = null;
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                GenerateCallBudgetResult budgetResult = tryConsumeGenerateCallBudget();
+                if (!budgetResult.isAllowed()) {
+                    if (autoPublish) {
+                        response.setStatus("skipped");
+                        response.setResult(parseJson("{\"skip_reason\":\"" + AUTO_DRAFT_BUDGET_EXCEEDED + "\"}"));
+                    } else {
+                        response.setError(budgetResult.getMessage());
+                    }
+                    return response;
+                }
                 String prompt = buildPrompt(persona, mode, boardTitle, targetPost, recentPosts, recentComments, recentHistory, retryFeedback, attempt, maxAttempts);
                 String rawJson = geminiClient.generateAnswer(
                         prompt,
@@ -220,6 +240,24 @@ public class AssistantBotService {
             response.setError("봇 초안 생성 중 오류가 발생했습니다.");
             return response;
         }
+    }
+
+    private synchronized GenerateCallBudgetResult tryConsumeGenerateCallBudget() {
+        int dailyLimit = Math.max(0, botProperties.getDailyGenerateCallLimit());
+        if (dailyLimit <= 0) {
+            return GenerateCallBudgetResult.allowed();
+        }
+
+        LocalDate today = LocalDate.now(clock);
+        if (!today.equals(generateCallBudgetDate)) {
+            generateCallBudgetDate = today;
+            generateCallBudgetUsed = 0;
+        }
+        if (generateCallBudgetUsed >= dailyLimit) {
+            return GenerateCallBudgetResult.blocked("봇 AI 생성 일일 호출 한도(" + dailyLimit + "회)를 초과했습니다.");
+        }
+        generateCallBudgetUsed += 1;
+        return GenerateCallBudgetResult.allowed();
     }
 
     public AssistantBotPublishResponseDTO publishDraft(long historyId) {
@@ -348,10 +386,19 @@ public class AssistantBotService {
             if (!"skipped".equals(result.getOutcome())) {
                 return result;
             }
+            if (isApiConsumingAutoPublishSkip(result.getDetail())) {
+                return result;
+            }
             lastSkippedDetail = result.getDetail();
         }
 
         return AutoPublishResult.skipped(lastSkippedDetail == null ? "no_due_candidate" : lastSkippedDetail);
+    }
+
+    private boolean isApiConsumingAutoPublishSkip(String detail) {
+        return StringUtils.hasText(detail)
+                && (detail.startsWith(AUTO_DRAFT_SKIPPED_AFTER_GENERATION)
+                || AUTO_DRAFT_BUDGET_EXCEEDED.equals(detail));
     }
 
     AutoPublishResult autoPublishOnce(String personaName) {
@@ -370,16 +417,16 @@ public class AssistantBotService {
         LocalDateTime since = today.atStartOfDay();
         LocalDateTime minuteStart = now.withSecond(0).withNano(0);
 
-        int publishedPostToday = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
-        int publishedCommentToday = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
-        int publishedPostThisMinute = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
-        int publishedCommentThisMinute = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, minuteStart);
+        int handledPostToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
+        int handledCommentToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
+        int handledPostThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
+        int handledCommentThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, minuteStart);
 
         List<AutoPublishCandidate> dueCandidates = resolveDueAutoPublishCandidates(persona, today, now.toLocalTime(),
-                publishedPostToday, publishedCommentToday, publishedPostThisMinute, publishedCommentThisMinute);
+                handledPostToday, handledCommentToday, handledPostThisMinute, handledCommentThisMinute);
         if (dueCandidates.isEmpty()) {
             return AutoPublishResult.skipped(persona.getName(),
-                    buildWaitingDetail(persona, today, now.toLocalTime(), publishedPostToday, publishedCommentToday));
+                    buildWaitingDetail(persona, today, now.toLocalTime(), handledPostToday, handledCommentToday));
         }
 
         String lastSkippedDetail = null;
@@ -390,16 +437,24 @@ public class AssistantBotService {
                 continue;
             }
 
-            AssistantBotDraftResponseDTO draft = generateDraft(request);
+            AssistantBotDraftResponseDTO draft = generateDraftInternal(request, botProperties.getAutoPublishMaxGenerateAttempts(), true);
             if (StringUtils.hasText(draft.getError())) {
                 return AutoPublishResult.failed(persona.getName(), "draft_error:" + draft.getError());
             }
+            if ("skipped".equals(draft.getStatus())) {
+                if (draft.getAttemptCount() != null && draft.getAttemptCount() > 0) {
+                    return AutoPublishResult.skipped(persona.getName(), AUTO_DRAFT_SKIPPED_AFTER_GENERATION + candidate.mode);
+                }
+                lastSkippedDetail = draft.getHistoryId() == null
+                        ? AUTO_DRAFT_BUDGET_EXCEEDED
+                        : "draft_skipped:" + candidate.mode;
+                if (draft.getHistoryId() == null) {
+                    return AutoPublishResult.skipped(persona.getName(), lastSkippedDetail);
+                }
+                continue;
+            }
             if (draft.getHistoryId() == null) {
                 return AutoPublishResult.failed(persona.getName(), "missing_history_id");
-            }
-            if ("skipped".equals(draft.getStatus())) {
-                lastSkippedDetail = "draft_skipped:" + candidate.mode;
-                continue;
             }
 
             AssistantBotPublishResponseDTO published = publishDraft(draft.getHistoryId());
@@ -415,22 +470,22 @@ public class AssistantBotService {
     private List<AutoPublishCandidate> resolveDueAutoPublishCandidates(PersonaProperties persona,
                                                                        LocalDate date,
                                                                        LocalTime now,
-                                                                       int publishedPostToday,
-                                                                       int publishedCommentToday,
-                                                                       int publishedPostThisMinute,
-                                                                       int publishedCommentThisMinute) {
+                                                                       int handledPostToday,
+                                                                       int handledCommentToday,
+                                                                       int handledPostThisMinute,
+                                                                       int handledCommentThisMinute) {
         List<AutoPublishCandidate> candidates = new ArrayList<>();
         int nowMinuteOfDay = toMinuteOfDay(now);
 
         List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, MODE_POST,
                 botProperties.getAutoPublishPostDailyLimit(), persona.getBoardTitle(), persona.getName());
-        if (isPublishMinute(postSlots, nowMinuteOfDay, publishedPostToday, publishedPostThisMinute)) {
+        if (isPublishMinute(postSlots, nowMinuteOfDay, handledPostToday, handledPostThisMinute)) {
             candidates.add(new AutoPublishCandidate(MODE_POST, nowMinuteOfDay));
         }
 
         List<Integer> commentSlots = botProperties.buildDailyAutoPublishSlots(date, MODE_COMMENT,
                 botProperties.getAutoPublishCommentDailyLimit(), persona.getBoardTitle(), persona.getName());
-        if (isPublishMinute(commentSlots, nowMinuteOfDay, publishedCommentToday, publishedCommentThisMinute)) {
+        if (isPublishMinute(commentSlots, nowMinuteOfDay, handledCommentToday, handledCommentThisMinute)) {
             candidates.add(new AutoPublishCandidate(MODE_COMMENT, nowMinuteOfDay));
         }
 
@@ -441,13 +496,13 @@ public class AssistantBotService {
     private String buildWaitingDetail(PersonaProperties persona,
                                       LocalDate date,
                                       LocalTime now,
-                                      int publishedPostToday,
-                                      int publishedCommentToday) {
+                                      int handledPostToday,
+                                      int handledCommentToday) {
         Integer nextPostSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, date, MODE_POST, now);
         Integer nextCommentSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, date, MODE_COMMENT, now);
         if (nextPostSlot == null && nextCommentSlot == null) {
-            return (publishedPostToday >= botProperties.getAutoPublishPostDailyLimit()
-                    && publishedCommentToday >= botProperties.getAutoPublishCommentDailyLimit())
+            return (handledPostToday >= botProperties.getAutoPublishPostDailyLimit()
+                    && handledCommentToday >= botProperties.getAutoPublishCommentDailyLimit())
                     ? "daily_limits_reached"
                     : "no_remaining_slot_today";
         }
@@ -494,8 +549,11 @@ public class AssistantBotService {
         if (slots == null || slots.isEmpty() || publishedThisMinute > 0) {
             return false;
         }
-        int pastSlotCount = countSlotsBeforeMinute(slots, nowMinuteOfDay);
-        return hasSlotAtMinute(slots, nowMinuteOfDay) && publishedToday <= pastSlotCount;
+        int dueSlotCount = countSlotsAtOrBeforeMinute(slots, nowMinuteOfDay);
+        if (botProperties.isAutoPublishCatchUpEnabled()) {
+            return dueSlotCount > 0 && publishedToday < dueSlotCount;
+        }
+        return hasSlotAtMinute(slots, nowMinuteOfDay) && publishedToday < dueSlotCount;
     }
 
     private boolean isPublishMinute(List<Integer> slots,
@@ -511,10 +569,10 @@ public class AssistantBotService {
         );
     }
 
-    private int countSlotsBeforeMinute(List<Integer> slots, int minuteOfDay) {
+    private int countSlotsAtOrBeforeMinute(List<Integer> slots, int minuteOfDay) {
         int count = 0;
         for (Integer slot : slots) {
-            if (slot != null && slot < minuteOfDay) {
+            if (slot != null && slot <= minuteOfDay) {
                 count++;
             }
         }
@@ -1934,6 +1992,32 @@ public class AssistantBotService {
         private AutoPublishCandidate(String mode, int minuteOfDay) {
             this.mode = mode;
             this.minuteOfDay = minuteOfDay;
+        }
+    }
+
+    private static final class GenerateCallBudgetResult {
+        private final boolean allowed;
+        private final String message;
+
+        private GenerateCallBudgetResult(boolean allowed, String message) {
+            this.allowed = allowed;
+            this.message = message;
+        }
+
+        private static GenerateCallBudgetResult allowed() {
+            return new GenerateCallBudgetResult(true, null);
+        }
+
+        private static GenerateCallBudgetResult blocked(String message) {
+            return new GenerateCallBudgetResult(false, message);
+        }
+
+        private boolean isAllowed() {
+            return allowed;
+        }
+
+        private String getMessage() {
+            return message;
         }
     }
 

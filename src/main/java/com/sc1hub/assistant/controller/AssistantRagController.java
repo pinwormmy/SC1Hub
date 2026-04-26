@@ -62,6 +62,8 @@ public class AssistantRagController {
                     response.setIndexedChunks(lastResult.getIndexedChunks());
                     response.setDimension(lastResult.getDimension());
                     response.setIndexPath(lastResult.getIndexPath());
+                    response.setEmbeddingCalls(lastResult.getEmbeddingCalls());
+                    response.setReusedChunks(lastResult.getReusedChunks());
                 }
 
                 if (!status.isEnabled()) {
@@ -70,6 +72,8 @@ public class AssistantRagController {
                 }
                 if (!status.isAccepted() && status.isRunning()) {
                     response.setError("RAG 인덱스 생성이 이미 진행 중입니다.");
+                } else if (!status.isAccepted() && StringUtils.hasText(status.getLastError())) {
+                    response.setError(status.getLastError());
                 }
                 return ResponseEntity.status(status.isAccepted() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(response);
             }
@@ -83,6 +87,8 @@ public class AssistantRagController {
                 response.setIndexedChunks(result.getIndexedChunks());
                 response.setDimension(result.getDimension());
                 response.setIndexPath(result.getIndexPath());
+                response.setEmbeddingCalls(result.getEmbeddingCalls());
+                response.setReusedChunks(result.getReusedChunks());
                 return ResponseEntity.ok(response);
             } catch (Exception e) {
                 log.error("RAG 인덱스 생성 실패", e);
@@ -109,6 +115,8 @@ public class AssistantRagController {
                 response.setUpdatedChunks(result.getUpdatedChunks());
                 response.setDimension(result.getDimension());
                 response.setIndexPath(result.getIndexPath());
+                response.setEmbeddingCalls(result.getEmbeddingCalls());
+                response.setReusedChunks(result.getReusedChunks());
 
                 if (!result.isEnabled()) {
                     response.setError("RAG 기능이 비활성화되어 있습니다.");

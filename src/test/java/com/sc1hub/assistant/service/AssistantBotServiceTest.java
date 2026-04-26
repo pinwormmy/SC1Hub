@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,6 +30,9 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -319,11 +323,65 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void isPublishMinute_onlyReturnsTrueAtExactRandomMinute() {
+    void generateDraft_blocksWhenDailyGenerateCallLimitExceeded() throws Exception {
+        botProperties.setDailyGenerateCallLimit(1);
+        botProperties.setMaxGenerateAttempts(1);
+        AssistantBotDraftRequestDTO request = postDraftRequest();
+
+        when(boardMapper.selectRecentPostsForBot("funboard", botProperties.getRecentPostLimit()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.selectRecentCommentsForBot("funboard", null, botProperties.getRecentCommentLimit()))
+                .thenReturn(Collections.emptyList());
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validPostDraftJson());
+
+        AssistantBotDraftResponseDTO first = assistantBotService.generateDraft(request);
+        AssistantBotDraftResponseDTO second = assistantBotService.generateDraft(request);
+
+        assertEquals("draft", first.getStatus());
+        assertTrue(second.getError().contains("일일 호출 한도"));
+        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void autoPublishDraftGeneration_usesSingleAttemptByDefault() throws Exception {
+        botProperties.setMaxGenerateAttempts(3);
+        botProperties.setAutoPublishMaxGenerateAttempts(1);
+        AssistantBotDraftRequestDTO request = postDraftRequest();
+
+        when(boardMapper.selectRecentPostsForBot("funboard", botProperties.getRecentPostLimit()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.selectRecentCommentsForBot("funboard", null, botProperties.getRecentCommentLimit()))
+                .thenReturn(Collections.emptyList());
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn("{invalid json");
+
+        AssistantBotDraftResponseDTO response = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "generateDraftInternal",
+                request,
+                botProperties.getAutoPublishMaxGenerateAttempts(),
+                true
+        );
+
+        assertTrue(response.getError().contains("초안 품질 기준"));
+        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void isPublishMinute_onlyReturnsTrueAtExactRandomMinuteByDefault() {
         LocalDate date = LocalDate.of(2026, 3, 9);
         List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
-        int firstPostSlot = postSlots.get(0);
-        int nonExactMinute = firstPostSlot == 1439 ? 1438 : firstPostSlot + 1;
+        int firstPostSlot = postSlots.stream()
+                .filter(slot -> slot != null && slot > 0)
+                .findFirst()
+                .orElse(postSlots.get(0));
+        int laterMinute = firstPostSlot == 1439 ? firstPostSlot : firstPostSlot + 1;
+        int beforeSlotMinute = Math.max(0, firstPostSlot - 1);
 
         Boolean exactMinute = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
@@ -334,17 +392,95 @@ class AssistantBotServiceTest {
                 0
         );
 
-        Boolean otherMinute = ReflectionTestUtils.invokeMethod(
+        Boolean catchUpMinute = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "isPublishMinute",
                 postSlots,
-                nonExactMinute,
+                laterMinute,
                 0,
                 0
         );
 
+        Boolean beforeSlot = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "isPublishMinute",
+                postSlots,
+                beforeSlotMinute,
+                0,
+                0
+        );
+
+        Boolean alreadyPublished = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "isPublishMinute",
+                postSlots,
+                laterMinute,
+                1,
+                0
+        );
+
         assertEquals(Boolean.TRUE, exactMinute);
-        assertEquals(Boolean.FALSE, otherMinute);
+        assertEquals(Boolean.FALSE, catchUpMinute);
+        assertEquals(Boolean.FALSE, beforeSlot);
+        assertEquals(Boolean.FALSE, alreadyPublished);
+    }
+
+    @Test
+    void isPublishMinute_catchesUpMissedSlotOnlyWhenEnabled() {
+        botProperties.setAutoPublishCatchUpEnabled(true);
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
+        int firstPostSlot = postSlots.stream()
+                .filter(slot -> slot != null && slot > 0)
+                .findFirst()
+                .orElse(postSlots.get(0));
+        int laterMinute = firstPostSlot == 1439 ? firstPostSlot : firstPostSlot + 1;
+
+        Boolean catchUpMinute = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "isPublishMinute",
+                postSlots,
+                laterMinute,
+                0,
+                0
+        );
+
+        assertEquals(Boolean.TRUE, catchUpMinute);
+    }
+
+    @Test
+    void resolveDueAutoPublishCandidates_usesHandledCountForCatchUp() {
+        botProperties.setAutoPublishCatchUpEnabled(true);
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        LocalDateTime endOfDay = date.atTime(23, 59);
+        AssistantBotProperties.PersonaProperties persona = persona("프징징봇");
+
+        List<?> alreadyHandled = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveDueAutoPublishCandidates",
+                persona,
+                date,
+                endOfDay.toLocalTime(),
+                botProperties.getAutoPublishPostDailyLimit(),
+                botProperties.getAutoPublishCommentDailyLimit(),
+                0,
+                0
+        );
+
+        List<?> missingOnePost = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveDueAutoPublishCandidates",
+                persona,
+                date,
+                endOfDay.toLocalTime(),
+                botProperties.getAutoPublishPostDailyLimit() - 1,
+                botProperties.getAutoPublishCommentDailyLimit(),
+                0,
+                0
+        );
+
+        assertTrue(alreadyHandled.isEmpty());
+        assertEquals(1, missingOnePost.size());
     }
 
     @Test
@@ -411,6 +547,22 @@ class AssistantBotServiceTest {
         persona.setName(name);
         persona.setBoardTitle("funboard");
         return persona;
+    }
+
+    private AssistantBotDraftRequestDTO postDraftRequest() {
+        AssistantBotDraftRequestDTO request = new AssistantBotDraftRequestDTO();
+        request.setPersonaName("프징징봇");
+        request.setBoardTitle("funboard");
+        request.setMode("post");
+        request.setRecentPostLimit(botProperties.getRecentPostLimit());
+        request.setRecentCommentLimit(botProperties.getRecentCommentLimit());
+        return request;
+    }
+
+    private String validPostDraftJson() {
+        return "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"오늘 래더 한 판만 더 해야지\",\"body\":\"말은 한 판인데 또 손이 간다\"},"
+                + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
     }
 
     private static final class FixedRandom extends Random {

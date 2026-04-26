@@ -28,12 +28,15 @@ public class AssistantBotProperties {
     private int maxPromptChars = 12000;
     private int maxOutputTokens = 1400;
     private int maxGenerateAttempts = 3;
+    private int autoPublishMaxGenerateAttempts = 1;
+    private int dailyGenerateCallLimit = 20;
     private double duplicateSimilarityThreshold = 0.72;
     private int selfReviewMinimumScore = 0;
     private String publishGuestPassword = "bot-approved";
     private boolean autoPublishEnabled = false;
     private String autoPublishCron = "0 * * * * *";
     private String autoPublishZone = "Asia/Seoul";
+    private boolean autoPublishCatchUpEnabled = false;
     private int autoPublishPostDailyLimit = 3;
     private int autoPublishCommentDailyLimit = 5;
     private int autoPublishCommentCandidatePosts = 10;

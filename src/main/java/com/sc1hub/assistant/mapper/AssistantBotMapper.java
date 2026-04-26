@@ -25,4 +25,9 @@ public interface AssistantBotMapper {
                                   @Param("boardTitle") String boardTitle,
                                   @Param("generationMode") String generationMode,
                                   @Param("since") LocalDateTime since);
+
+    int countGeneratedSinceByMode(@Param("personaName") String personaName,
+                                  @Param("boardTitle") String boardTitle,
+                                  @Param("generationMode") String generationMode,
+                                  @Param("since") LocalDateTime since);
 }

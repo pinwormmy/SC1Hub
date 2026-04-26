@@ -77,7 +77,7 @@ class AssistantServiceTest {
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 질문", null);
 
-        assertTrue(response.getError().contains("비활성화"));
+        assertTrue(response.getError().contains("점검중"));
     }
 
     @Test

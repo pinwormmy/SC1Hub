@@ -72,6 +72,10 @@ public class AssistantRagIndexService {
         if (!ragProperties.isEnabled()) {
             return ReindexJobStatus.disabled();
         }
+        ReindexJobStatus cooldownStatus = checkReindexCooldown();
+        if (cooldownStatus != null) {
+            return cooldownStatus;
+        }
         if (!reindexRunning.compareAndSet(false, true)) {
             return ReindexJobStatus.running(lastReindexStartedAt, lastReindexFinishedAt, lastReindexResult, lastReindexError);
         }
@@ -93,6 +97,25 @@ public class AssistantRagIndexService {
         });
 
         return ReindexJobStatus.accepted(lastReindexStartedAt, lastReindexResult);
+    }
+
+    private ReindexJobStatus checkReindexCooldown() {
+        int cooldownMinutes = Math.max(0, ragProperties.getMinReindexIntervalMinutes());
+        if (cooldownMinutes <= 0 || lastReindexFinishedAt == null) {
+            return null;
+        }
+        long elapsedMillis = System.currentTimeMillis() - lastReindexFinishedAt.getTime();
+        long cooldownMillis = cooldownMinutes * 60L * 1000L;
+        if (elapsedMillis >= cooldownMillis) {
+            return null;
+        }
+        long remainingMinutes = Math.max(1L, (cooldownMillis - elapsedMillis + 59999L) / 60000L);
+        return ReindexJobStatus.throttled(
+                lastReindexStartedAt,
+                lastReindexFinishedAt,
+                lastReindexResult,
+                "RAG 재인덱싱 쿨다운 중입니다. 약 " + remainingMinutes + "분 후 다시 실행할 수 있습니다."
+        );
     }
 
     @SuppressWarnings("unused")
@@ -118,16 +141,26 @@ public class AssistantRagIndexService {
         index.setCreatedAt(new Date());
         index.setUpdatedAt(null);
 
+        AssistantRagIndex reusableIndex = loadReusableIndex(embeddingModel);
+        if (reusableIndex != null && reusableIndex.getDimension() > 0) {
+            index.setDimension(reusableIndex.getDimension());
+        }
+        ReusableEmbeddingStore reusableEmbeddings = ReusableEmbeddingStore.from(reusableIndex);
         IndexingContext indexingContext = new IndexingContext(index);
         int indexedPosts = 0;
         int indexedChunks = 0;
         int chunkSize = ragProperties.getChunkSizeChars();
         int overlap = ragProperties.getChunkOverlapChars();
+        EmbeddingBudget embeddingBudget = EmbeddingBudget.limited(
+                ragProperties.getMaxEmbeddingCallsPerReindex(),
+                "RAG 재인덱싱"
+        );
 
         List<BoardListDTO> boards = loadIndexableBoards();
         if (boards == null || boards.isEmpty()) {
             finalizeIndex(index, boards);
-            return new ReindexResult(true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath());
+            return new ReindexResult(true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath(),
+                    embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
         }
 
         for (BoardListDTO board : boards) {
@@ -143,7 +176,7 @@ public class AssistantRagIndexService {
             }
 
             for (BoardDTO post : posts) {
-                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap);
+                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
                 if (!result.hasSourceChunks()) {
                     continue;
                 }
@@ -156,7 +189,8 @@ public class AssistantRagIndexService {
         }
 
         finalizeIndex(index, boards);
-        return new ReindexResult(true, indexedPosts, indexedChunks, indexingContext.getDimension(), ragProperties.getIndexPath());
+        return new ReindexResult(true, indexedPosts, indexedChunks, indexingContext.getDimension(), ragProperties.getIndexPath(),
+                embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
     }
 
     public synchronized UpdateResult update() throws IOException {
@@ -187,6 +221,7 @@ public class AssistantRagIndexService {
         if (index.getChunks() == null) {
             index.setChunks(new ArrayList<>());
         }
+        ReusableEmbeddingStore reusableEmbeddings = ReusableEmbeddingStore.from(index);
 
         Map<String, Integer> maxPostNumByBoard = buildMaxPostNumByBoard(index.getChunks());
         Map<String, Date> maxRegDateByBoard = buildMaxRegDateByBoard(index.getChunks());
@@ -197,6 +232,10 @@ public class AssistantRagIndexService {
         int updatedChunks = 0;
         int chunkSize = ragProperties.getChunkSizeChars();
         int overlap = ragProperties.getChunkOverlapChars();
+        EmbeddingBudget embeddingBudget = EmbeddingBudget.limited(
+                ragProperties.getMaxEmbeddingCallsPerUpdate(),
+                "RAG 업데이트"
+        );
 
         List<BoardListDTO> boards = loadIndexableBoards();
         Set<String> allowedBoards = buildIndexableBoardSet(boards);
@@ -204,7 +243,8 @@ public class AssistantRagIndexService {
 
         if (boards == null || boards.isEmpty()) {
             finalizeIndex(index, boards);
-            return new UpdateResult(true, true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath());
+            return new UpdateResult(true, true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath(),
+                    embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
         }
 
         for (BoardListDTO board : boards) {
@@ -237,7 +277,7 @@ public class AssistantRagIndexService {
                     continue;
                 }
 
-                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap);
+                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
 
                 if (!result.getChunks().isEmpty()) {
                     removeChunksForPost(index, boardTitle, postNum);
@@ -249,7 +289,29 @@ public class AssistantRagIndexService {
         }
 
         finalizeIndex(index, boards);
-        return new UpdateResult(true, true, updatedPosts, updatedChunks, indexingContext.getDimension(), ragProperties.getIndexPath());
+        return new UpdateResult(true, true, updatedPosts, updatedChunks, indexingContext.getDimension(), ragProperties.getIndexPath(),
+                embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
+    }
+
+    private AssistantRagIndex loadReusableIndex(String embeddingModel) {
+        Path indexPath = Paths.get(ragProperties.getIndexPath());
+        if (!Files.exists(indexPath)) {
+            return null;
+        }
+        try {
+            AssistantRagIndex existing = objectMapper.readValue(indexPath.toFile(), AssistantRagIndex.class);
+            if (existing == null || existing.getChunks() == null || existing.getChunks().isEmpty()) {
+                return null;
+            }
+            if (!StringUtils.hasText(existing.getEmbeddingModel()) || !existing.getEmbeddingModel().equals(embeddingModel)) {
+                log.info("기존 RAG 인덱스 임베딩 모델이 달라 벡터를 재사용하지 않습니다. path={}", indexPath);
+                return null;
+            }
+            return existing;
+        } catch (Exception e) {
+            log.warn("기존 RAG 인덱스 로드 실패. 벡터 재사용 없이 재인덱싱합니다. path={}", indexPath, e);
+            return null;
+        }
     }
 
     private void saveIndex(AssistantRagIndex index) throws IOException {
@@ -340,7 +402,9 @@ public class AssistantRagIndexService {
                                                BoardDTO post,
                                                IndexingContext context,
                                                int chunkSize,
-                                               int overlap) {
+                                               int overlap,
+                                               EmbeddingBudget embeddingBudget,
+                                               ReusableEmbeddingStore reusableEmbeddings) {
         if (post == null) {
             return PostChunkResult.empty();
         }
@@ -356,11 +420,36 @@ public class AssistantRagIndexService {
         List<AssistantRagChunk> newChunks = new ArrayList<>();
         int chunkIndex = 0;
         for (String chunk : chunks) {
-            float[] vector = embeddingClient.embedText(chunk);
+            AssistantRagChunk reusableChunk = reusableEmbeddings == null
+                    ? null
+                    : reusableEmbeddings.findExact(boardTitle, post.getPostNum(), chunkIndex, chunk, context.getDimension());
+            float[] vector = reusableChunk == null ? null : reusableChunk.getVector();
+            if (vector == null && reusableEmbeddings != null) {
+                vector = reusableEmbeddings.findByText(chunk, context.getDimension());
+            }
+            if (vector != null) {
+                if (!context.acceptVector(vector)) {
+                    continue;
+                }
+                if (embeddingBudget != null) {
+                    embeddingBudget.markReused();
+                }
+                newChunks.add(buildChunk(boardTitle, post, chunk, chunkIndex, vector,
+                        reusableChunk == null ? null : reusableChunk.getId()));
+                chunkIndex += 1;
+                continue;
+            }
+            if (embeddingBudget != null) {
+                embeddingBudget.beforeEmbeddingCall();
+            }
+            vector = embeddingClient.embedText(chunk);
             if (!context.acceptVector(vector)) {
                 continue;
             }
-            newChunks.add(buildChunk(boardTitle, post, chunk, chunkIndex, vector));
+            if (reusableEmbeddings != null) {
+                reusableEmbeddings.rememberTextVector(chunk, vector);
+            }
+            newChunks.add(buildChunk(boardTitle, post, chunk, chunkIndex, vector, null));
             chunkIndex += 1;
         }
 
@@ -371,9 +460,10 @@ public class AssistantRagIndexService {
                                                 BoardDTO post,
                                                 String chunk,
                                                 int chunkIndex,
-                                                float[] vector) {
+                                                float[] vector,
+                                                String reusableId) {
         AssistantRagChunk chunkDto = new AssistantRagChunk();
-        chunkDto.setId(generateChunkId(boardTitle, post.getPostNum(), chunkIndex));
+        chunkDto.setId(StringUtils.hasText(reusableId) ? reusableId : generateChunkId(boardTitle, post.getPostNum(), chunkIndex));
         chunkDto.setBoardTitle(boardTitle);
         chunkDto.setPostNum(post.getPostNum());
         chunkDto.setTitle(post.getTitle());
@@ -579,6 +669,99 @@ public class AssistantRagIndexService {
         }
     }
 
+    private static final class EmbeddingBudget {
+        private final int maxCalls;
+        private final String jobName;
+        private int usedCalls;
+        private int reusedChunks;
+
+        private EmbeddingBudget(int maxCalls, String jobName) {
+            this.maxCalls = maxCalls;
+            this.jobName = jobName;
+        }
+
+        private static EmbeddingBudget limited(int maxCalls, String jobName) {
+            return new EmbeddingBudget(Math.max(0, maxCalls), jobName);
+        }
+
+        private void beforeEmbeddingCall() {
+            if (maxCalls <= 0) {
+                usedCalls += 1;
+                return;
+            }
+            if (usedCalls >= maxCalls) {
+                throw new IllegalStateException(jobName + " 임베딩 호출 상한(" + maxCalls + "회)을 초과했습니다.");
+            }
+            usedCalls += 1;
+        }
+
+        private void markReused() {
+            reusedChunks += 1;
+        }
+
+        private int getEmbeddingCalls() {
+            return usedCalls;
+        }
+
+        private int getReusedChunks() {
+            return reusedChunks;
+        }
+    }
+
+    private static final class ReusableEmbeddingStore {
+        private final Map<String, AssistantRagChunk> exactChunks = new HashMap<>();
+        private final Map<String, float[]> vectorsByText = new HashMap<>();
+
+        private static ReusableEmbeddingStore from(AssistantRagIndex index) {
+            ReusableEmbeddingStore store = new ReusableEmbeddingStore();
+            if (index == null || index.getChunks() == null || index.getChunks().isEmpty()) {
+                return store;
+            }
+            for (AssistantRagChunk chunk : index.getChunks()) {
+                if (chunk == null || !StringUtils.hasText(chunk.getText()) || !hasVector(chunk.getVector())) {
+                    continue;
+                }
+                String text = chunk.getText();
+                store.exactChunks.put(exactChunkKey(chunk.getBoardTitle(), chunk.getPostNum(), chunk.getChunkIndex(), text), chunk);
+                store.vectorsByText.putIfAbsent(text, chunk.getVector());
+            }
+            return store;
+        }
+
+        private AssistantRagChunk findExact(String boardTitle, int postNum, int chunkIndex, String text, int expectedDimension) {
+            AssistantRagChunk chunk = exactChunks.get(exactChunkKey(boardTitle, postNum, chunkIndex, text));
+            if (chunk == null || !isReusableVector(chunk.getVector(), expectedDimension)) {
+                return null;
+            }
+            return chunk;
+        }
+
+        private float[] findByText(String text, int expectedDimension) {
+            float[] vector = vectorsByText.get(text);
+            return isReusableVector(vector, expectedDimension) ? vector : null;
+        }
+
+        private void rememberTextVector(String text, float[] vector) {
+            if (!StringUtils.hasText(text) || !hasVector(vector)) {
+                return;
+            }
+            vectorsByText.putIfAbsent(text, vector);
+        }
+
+        private static String exactChunkKey(String boardTitle, int postNum, int chunkIndex, String text) {
+            String normalizedText = text == null ? "" : text;
+            return postKey(boardTitle, postNum) + ":" + chunkIndex + ":" + normalizedText.length() + ":" + normalizedText;
+        }
+
+        private static boolean isReusableVector(float[] vector, int expectedDimension) {
+            return hasVector(vector) && (expectedDimension <= 0 || vector.length == expectedDimension);
+        }
+
+        private static boolean hasVector(float[] vector) {
+            return vector != null && vector.length > 0;
+        }
+    }
+
     private static final class PostChunkResult {
         private final boolean hasSourceChunks;
         private final List<AssistantRagChunk> chunks;
@@ -636,6 +819,10 @@ public class AssistantRagIndexService {
 
         public static ReindexJobStatus idle(Date startedAt, Date finishedAt, ReindexResult lastResult, String lastError) {
             return new ReindexJobStatus(true, false, false, startedAt, finishedAt, lastResult, lastError);
+        }
+
+        public static ReindexJobStatus throttled(Date startedAt, Date finishedAt, ReindexResult lastResult, String message) {
+            return new ReindexJobStatus(true, false, false, startedAt, finishedAt, lastResult, message);
         }
     }
 
@@ -751,17 +938,22 @@ public class AssistantRagIndexService {
         private final int indexedChunks;
         private final int dimension;
         private final String indexPath;
+        private final int embeddingCalls;
+        private final int reusedChunks;
 
-        private ReindexResult(boolean enabled, int indexedPosts, int indexedChunks, int dimension, String indexPath) {
+        private ReindexResult(boolean enabled, int indexedPosts, int indexedChunks, int dimension, String indexPath,
+                              int embeddingCalls, int reusedChunks) {
             this.enabled = enabled;
             this.indexedPosts = indexedPosts;
             this.indexedChunks = indexedChunks;
             this.dimension = dimension;
             this.indexPath = indexPath;
+            this.embeddingCalls = embeddingCalls;
+            this.reusedChunks = reusedChunks;
         }
 
         public static ReindexResult disabled() {
-            return new ReindexResult(false, 0, 0, 0, null);
+            return new ReindexResult(false, 0, 0, 0, null, 0, 0);
         }
     }
 
@@ -773,22 +965,27 @@ public class AssistantRagIndexService {
         private final int updatedChunks;
         private final int dimension;
         private final String indexPath;
+        private final int embeddingCalls;
+        private final int reusedChunks;
 
-        private UpdateResult(boolean enabled, boolean ready, int updatedPosts, int updatedChunks, int dimension, String indexPath) {
+        private UpdateResult(boolean enabled, boolean ready, int updatedPosts, int updatedChunks, int dimension, String indexPath,
+                             int embeddingCalls, int reusedChunks) {
             this.enabled = enabled;
             this.ready = ready;
             this.updatedPosts = updatedPosts;
             this.updatedChunks = updatedChunks;
             this.dimension = dimension;
             this.indexPath = indexPath;
+            this.embeddingCalls = embeddingCalls;
+            this.reusedChunks = reusedChunks;
         }
 
         public static UpdateResult disabled(String indexPath) {
-            return new UpdateResult(false, false, 0, 0, 0, indexPath);
+            return new UpdateResult(false, false, 0, 0, 0, indexPath, 0, 0);
         }
 
         public static UpdateResult notReady(String indexPath) {
-            return new UpdateResult(true, false, 0, 0, 0, indexPath);
+            return new UpdateResult(true, false, 0, 0, 0, indexPath, 0, 0);
         }
     }
 }

@@ -10,6 +10,9 @@ public class AssistantRagProperties {
     private String indexPath = "data/assistant/rag-index.json";
 
     private int maxPostsPerBoard = 1000;
+    private int maxEmbeddingCallsPerReindex = 300;
+    private int maxEmbeddingCallsPerUpdate = 50;
+    private int minReindexIntervalMinutes = 360;
 
     private int chunkSizeChars = 900;
     private int chunkOverlapChars = 150;

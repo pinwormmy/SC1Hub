@@ -73,12 +73,16 @@ public class AssistantIndexController {
                     ragResponse.setIndexedChunks(lastResult.getIndexedChunks());
                     ragResponse.setDimension(lastResult.getDimension());
                     ragResponse.setIndexPath(lastResult.getIndexPath());
+                    ragResponse.setEmbeddingCalls(lastResult.getEmbeddingCalls());
+                    ragResponse.setReusedChunks(lastResult.getReusedChunks());
                 }
 
                 if (!status.isEnabled()) {
                     ragResponse.setError("RAG 기능이 비활성화되어 있습니다.");
                 } else if (!status.isAccepted() && status.isRunning()) {
                     ragResponse.setError("RAG 인덱스 생성이 이미 진행 중입니다.");
+                } else if (!status.isAccepted() && StringUtils.hasText(status.getLastError())) {
+                    ragResponse.setError(status.getLastError());
                 }
             } catch (Exception e) {
                 ragSuccess = false;
@@ -150,6 +154,8 @@ public class AssistantIndexController {
                 ragResponse.setUpdatedChunks(result.getUpdatedChunks());
                 ragResponse.setDimension(result.getDimension());
                 ragResponse.setIndexPath(result.getIndexPath());
+                ragResponse.setEmbeddingCalls(result.getEmbeddingCalls());
+                ragResponse.setReusedChunks(result.getReusedChunks());
 
                 if (!result.isEnabled()) {
                     ragResponse.setError("RAG 기능이 비활성화되어 있습니다.");
