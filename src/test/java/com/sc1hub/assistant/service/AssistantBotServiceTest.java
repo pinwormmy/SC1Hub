@@ -64,7 +64,7 @@ class AssistantBotServiceTest {
         botProperties.setAutoPublishCommentCandidatePosts(10);
         botProperties.setRecentCommentLimit(24);
         botProperties.setAutoPublishCommentReplyPriorityProbability(0.9);
-        botProperties.setPersonas(Arrays.asList(persona("프징징봇"), persona("테뻔뻔봇"), persona("저묵묵봇")));
+        botProperties.setPersonas(Arrays.asList(persona("프징징봇"), persona("테뻔뻔봇"), persona("저묵묵봇"), persona("훈훈봇")));
 
         AssistantProperties assistantProperties = new AssistantProperties();
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul"));
@@ -269,6 +269,45 @@ class AssistantBotServiceTest {
 
         assertTrue(rule.contains("저그 유저 시점"));
         assertTrue(rule.contains("뮤탈"));
+    }
+
+    @Test
+    void buildPrompt_forWarmPersonaIncludesPositiveBlessingStyle() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("훈훈봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.singletonList(post(902, "테스터A", 0, "오늘 래더 한 판 이겨서 기분 좋다")),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("긍정적인 덕담"));
+        assertTrue(prompt.contains("다양한 주제"));
+        assertTrue(prompt.contains("과장된 미담체는 피하라"));
+    }
+
+    @Test
+    void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
+        BoardDTO targetPost = post(903, "테스터A", 0, "오늘 게임 좀 잘 풀렸다");
+        targetPost.setContent("오랜만에 연승해서 기분 좋네");
+
+        String rule = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildCommentInteractionRule",
+                persona("훈훈봇"),
+                targetPost
+        );
+
+        assertTrue(rule.contains("응원"));
+        assertTrue(rule.contains("긍정적인 덕담"));
+        assertTrue(rule.contains("설교"));
     }
 
     @Test
