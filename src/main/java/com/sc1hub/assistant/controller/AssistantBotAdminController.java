@@ -47,7 +47,7 @@ public class AssistantBotAdminController {
     @PostMapping(value = "/auto-publish/run", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AssistantBotService.AutoPublishResult> runAutoPublish() {
         AssistantBotService.AutoPublishResult result = assistantBotService.autoPublishOnce();
-        if ("failed".equals(result.getOutcome())) {
+        if (AssistantBotService.AutoPublishResult.OUTCOME_FAILED.equals(result.getOutcome())) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result);
         }
         return ResponseEntity.ok(result);

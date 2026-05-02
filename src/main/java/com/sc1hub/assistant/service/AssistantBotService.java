@@ -46,6 +46,10 @@ public class AssistantBotService {
 
     private static final String MODE_POST = "post";
     private static final String MODE_COMMENT = "comment";
+    private static final String STATUS_DRAFT = "draft";
+    private static final String STATUS_SKIPPED = "skipped";
+    private static final String STATUS_PUBLISHED = "published";
+    private static final String OUTCOME_FAILED = "failed";
     private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^가-힣a-z0-9]");
     private static final Pattern TITLE_COMMENT_COUNT_PATTERN = Pattern.compile("\\s*\\(\\s*\\d+\\s*\\)\\s*$");
     private static final String TOPIC_LANE_STAR_CHAT = "스타수다";
@@ -166,7 +170,7 @@ public class AssistantBotService {
                     assistantBotMapper.insertHistory(skippedHistory);
 
                     response.setHistoryId(skippedHistory.getId());
-                    response.setStatus("skipped");
+                    response.setStatus(STATUS_SKIPPED);
                     response.setRecentPostCount(recentPosts.size());
                     response.setRecentCommentCount(recentComments.size());
                     response.setRecentHistoryCount(recentHistory.size());
@@ -181,7 +185,7 @@ public class AssistantBotService {
                 GenerateCallBudgetResult budgetResult = tryConsumeGenerateCallBudget();
                 if (!budgetResult.isAllowed()) {
                     if (autoPublish) {
-                        response.setStatus("skipped");
+                        response.setStatus(STATUS_SKIPPED);
                         response.setResult(parseJson("{\"skip_reason\":\"" + AUTO_DRAFT_BUDGET_EXCEEDED + "\"}"));
                     } else {
                         response.setError(budgetResult.getMessage());
@@ -221,7 +225,7 @@ public class AssistantBotService {
             history.setDraftTitle(acceptedDraft.title);
             history.setDraftBody(acceptedDraft.body == null ? "" : acceptedDraft.body);
             history.setRawJson(acceptedDraft.result.toString());
-            history.setStatus(MODE_COMMENT.equals(mode) && !acceptedDraft.shouldReply ? "skipped" : "draft");
+            history.setStatus(MODE_COMMENT.equals(mode) && !acceptedDraft.shouldReply ? STATUS_SKIPPED : STATUS_DRAFT);
             assistantBotMapper.insertHistory(history);
 
             response.setHistoryId(history.getId());
@@ -281,21 +285,17 @@ public class AssistantBotService {
                 return response;
             }
 
-            response.setBoardTitle(history.getBoardTitle());
-            response.setMode(history.getGenerationMode());
-            response.setStatus(history.getStatus());
-            response.setTargetPostNum(history.getTargetPostNum());
-            response.setPublishedPostNum(history.getPublishedPostNum());
+            populatePublishResponse(response, history);
 
             if (resolveBoardTitle(history.getBoardTitle(), persona) == null) {
                 response.setError("현재는 설정된 대상 게시판의 초안만 발행할 수 있습니다.");
                 return response;
             }
-            if ("published".equals(history.getStatus())) {
+            if (STATUS_PUBLISHED.equals(history.getStatus())) {
                 response.setError("이미 발행된 초안입니다.");
                 return response;
             }
-            if (!"draft".equals(history.getStatus()) && !"skipped".equals(history.getStatus())) {
+            if (!isPublishableStatus(history.getStatus())) {
                 response.setError("발행 가능한 초안 상태가 아닙니다.");
                 return response;
             }
@@ -307,12 +307,7 @@ public class AssistantBotService {
             }
 
             if (MODE_POST.equals(normalizeMode(history.getGenerationMode()))) {
-                BoardDTO post = new BoardDTO();
-                post.setWriter(persona.getName());
-                post.setGuestPassword(botProperties.getPublishGuestPassword());
-                post.setTitle(safeTitleForPublish(textOrNull(result.path("post").path("title"))));
-                post.setContent(toHtmlBody(textOrNull(result.path("post").path("body"))));
-                post.setNotice(0);
+                BoardDTO post = buildPostForPublish(persona, result);
                 if (!StringUtils.hasText(post.getTitle()) || !StringUtils.hasText(post.getContent())) {
                     response.setError("발행할 게시글 제목 또는 본문이 비어 있습니다.");
                     return response;
@@ -320,21 +315,17 @@ public class AssistantBotService {
                 boardService.submitPost(history.getBoardTitle(), post);
                 BoardDTO created = findPublishedPost(history.getBoardTitle(), post.getTitle(), persona.getName());
                 Integer publishedPostNum = created == null ? null : created.getPostNum();
-                assistantBotMapper.updateStatus(historyId, "published", publishedPostNum);
-                response.setStatus("published");
-                response.setPublishedPostNum(publishedPostNum);
-                response.setRedirectUrl(publishedPostNum == null
-                        ? "/boards/" + history.getBoardTitle()
-                        : "/boards/" + history.getBoardTitle() + "/readPost?postNum=" + publishedPostNum);
+                markPublished(historyId, publishedPostNum);
+                populatePublishedResponse(response, publishedPostNum,
+                        buildPostRedirectUrl(history.getBoardTitle(), publishedPostNum));
                 return response;
             }
 
             boolean shouldReply = resolveShouldReply(history.getGenerationMode(), result);
             if (!shouldReply) {
-                assistantBotMapper.updateStatus(historyId, "published", history.getTargetPostNum());
-                response.setStatus("published");
-                response.setPublishedPostNum(history.getTargetPostNum());
-                response.setRedirectUrl("/boards/" + history.getBoardTitle() + "/readPost?postNum=" + history.getTargetPostNum());
+                markPublished(historyId, history.getTargetPostNum());
+                populatePublishedResponse(response, history.getTargetPostNum(),
+                        buildReadPostRedirectUrl(history.getBoardTitle(), history.getTargetPostNum()));
                 return response;
             }
             if (history.getTargetPostNum() == null || history.getTargetPostNum() <= 0) {
@@ -358,16 +349,60 @@ public class AssistantBotService {
             }
             boardService.addComment(history.getBoardTitle(), comment);
             boardService.updateCommentCount(history.getBoardTitle(), history.getTargetPostNum());
-            assistantBotMapper.updateStatus(historyId, "published", history.getTargetPostNum());
-            response.setStatus("published");
-            response.setPublishedPostNum(history.getTargetPostNum());
-            response.setRedirectUrl("/boards/" + history.getBoardTitle() + "/readPost?postNum=" + history.getTargetPostNum());
+            markPublished(historyId, history.getTargetPostNum());
+            populatePublishedResponse(response, history.getTargetPostNum(),
+                    buildReadPostRedirectUrl(history.getBoardTitle(), history.getTargetPostNum()));
             return response;
         } catch (Exception e) {
             log.error("봇 초안 발행 실패. historyId={}", historyId, e);
             response.setError("봇 초안 발행 중 오류가 발생했습니다.");
             return response;
         }
+    }
+
+    private void populatePublishResponse(AssistantBotPublishResponseDTO response, AssistantBotHistoryDTO history) {
+        response.setBoardTitle(history.getBoardTitle());
+        response.setMode(history.getGenerationMode());
+        response.setStatus(history.getStatus());
+        response.setTargetPostNum(history.getTargetPostNum());
+        response.setPublishedPostNum(history.getPublishedPostNum());
+    }
+
+    private boolean isPublishableStatus(String status) {
+        return STATUS_DRAFT.equals(status) || STATUS_SKIPPED.equals(status);
+    }
+
+    private BoardDTO buildPostForPublish(PersonaProperties persona, JsonNode result) {
+        BoardDTO post = new BoardDTO();
+        post.setWriter(persona.getName());
+        post.setGuestPassword(botProperties.getPublishGuestPassword());
+        post.setTitle(safeTitleForPublish(textOrNull(result.path("post").path("title"))));
+        post.setContent(toHtmlBody(textOrNull(result.path("post").path("body"))));
+        post.setNotice(0);
+        return post;
+    }
+
+    private void markPublished(long historyId, Integer publishedPostNum) {
+        assistantBotMapper.updateStatus(historyId, STATUS_PUBLISHED, publishedPostNum);
+    }
+
+    private void populatePublishedResponse(AssistantBotPublishResponseDTO response,
+                                           Integer publishedPostNum,
+                                           String redirectUrl) {
+        response.setStatus(STATUS_PUBLISHED);
+        response.setPublishedPostNum(publishedPostNum);
+        response.setRedirectUrl(redirectUrl);
+    }
+
+    private String buildPostRedirectUrl(String boardTitle, Integer postNum) {
+        if (postNum == null) {
+            return "/boards/" + boardTitle;
+        }
+        return buildReadPostRedirectUrl(boardTitle, postNum);
+    }
+
+    private String buildReadPostRedirectUrl(String boardTitle, Integer postNum) {
+        return "/boards/" + boardTitle + "/readPost?postNum=" + postNum;
     }
 
     public AutoPublishResult autoPublishOnce() {
@@ -383,7 +418,7 @@ public class AssistantBotService {
         String lastSkippedDetail = null;
         for (PersonaProperties persona : personas) {
             AutoPublishResult result = autoPublishOnce(persona.getName());
-            if (!"skipped".equals(result.getOutcome())) {
+            if (!STATUS_SKIPPED.equals(result.getOutcome())) {
                 return result;
             }
             if (isApiConsumingAutoPublishSkip(result.getDetail())) {
@@ -441,7 +476,7 @@ public class AssistantBotService {
             if (StringUtils.hasText(draft.getError())) {
                 return AutoPublishResult.failed(persona.getName(), "draft_error:" + draft.getError());
             }
-            if ("skipped".equals(draft.getStatus())) {
+            if (STATUS_SKIPPED.equals(draft.getStatus())) {
                 if (draft.getAttemptCount() != null && draft.getAttemptCount() > 0) {
                     return AutoPublishResult.skipped(persona.getName(), AUTO_DRAFT_SKIPPED_AFTER_GENERATION + candidate.mode);
                 }
@@ -1074,7 +1109,7 @@ public class AssistantBotService {
         history.setRawJson("{\"analysis\":{\"comment_type\":\"skip\",\"tone_match\":\"\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
                 + "\"reply\":{\"should_reply\":false,\"body\":\"\"},"
                 + "\"self_review\":{\"naturalness\":100,\"context_fit\":100,\"conflict_risk\":0,\"needs_revision\":false}}");
-        history.setStatus("skipped");
+        history.setStatus(STATUS_SKIPPED);
         return history;
     }
 
@@ -2044,6 +2079,10 @@ public class AssistantBotService {
     }
 
     public static final class AutoPublishResult {
+        public static final String OUTCOME_SKIPPED = STATUS_SKIPPED;
+        public static final String OUTCOME_FAILED = AssistantBotService.OUTCOME_FAILED;
+        public static final String OUTCOME_PUBLISHED = STATUS_PUBLISHED;
+
         private final String outcome;
         private final String personaName;
         private final String detail;
@@ -2067,7 +2106,7 @@ public class AssistantBotService {
         }
 
         public static AutoPublishResult skipped(String personaName, String detail) {
-            return new AutoPublishResult("skipped", personaName, detail, null, null, null, null);
+            return new AutoPublishResult(OUTCOME_SKIPPED, personaName, detail, null, null, null, null);
         }
 
         public static AutoPublishResult failed(String detail) {
@@ -2075,11 +2114,11 @@ public class AssistantBotService {
         }
 
         public static AutoPublishResult failed(String personaName, String detail) {
-            return new AutoPublishResult("failed", personaName, detail, null, null, null, null);
+            return new AutoPublishResult(OUTCOME_FAILED, personaName, detail, null, null, null, null);
         }
 
         public static AutoPublishResult published(String personaName, String mode, Long historyId, Integer publishedPostNum, String redirectUrl) {
-            return new AutoPublishResult("published", personaName, null, mode, historyId, publishedPostNum, redirectUrl);
+            return new AutoPublishResult(OUTCOME_PUBLISHED, personaName, null, mode, historyId, publishedPostNum, redirectUrl);
         }
 
         public String getOutcome() {
