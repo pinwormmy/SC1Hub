@@ -25,16 +25,16 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -155,24 +155,29 @@ class AssistantBotServiceTest {
 
     @Test
     void autoPublishOnce_checksEveryEnabledPersonaBeforeReturning() {
-        AssistantBotService spyService = spy(assistantBotService);
-        doReturn(AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"))
-                .when(spyService).autoPublishOnce("프징징봇");
-        doReturn(AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"))
-                .when(spyService).autoPublishOnce("테뻔뻔봇");
-        doReturn(AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"))
-                .when(spyService).autoPublishOnce("저묵묵봇");
-        doReturn(AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"))
-                .when(spyService).autoPublishOnce("훈훈봇");
+        Map<String, AssistantBotService.AutoPublishResult> resultsByPersona = new HashMap<>();
+        resultsByPersona.put("프징징봇", AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"));
+        resultsByPersona.put("테뻔뻔봇", AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"));
+        resultsByPersona.put("저묵묵봇", AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"));
+        resultsByPersona.put("훈훈봇", AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
 
-        AssistantBotService.AutoPublishResult result = spyService.autoPublishOnce();
+        RecordingAssistantBotService recordingService = new RecordingAssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
+                resultsByPersona
+        );
+
+        AssistantBotService.AutoPublishResult result = recordingService.autoPublishOnce();
 
         assertEquals("published", result.getOutcome());
         assertEquals("훈훈봇", result.getPersonaName());
-        verify(spyService).autoPublishOnce("프징징봇");
-        verify(spyService).autoPublishOnce("테뻔뻔봇");
-        verify(spyService).autoPublishOnce("저묵묵봇");
-        verify(spyService).autoPublishOnce("훈훈봇");
+        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "훈훈봇"), recordingService.getVisitedPersonas());
     }
 
     @Test
@@ -763,6 +768,37 @@ class AssistantBotServiceTest {
                 throw new IllegalArgumentException("bound must be positive");
             }
             return Math.floorMod(nextIntValue, bound);
+        }
+    }
+
+    private static final class RecordingAssistantBotService extends AssistantBotService {
+        private final Map<String, AssistantBotService.AutoPublishResult> resultsByPersona;
+        private final java.util.ArrayList<String> visitedPersonas = new java.util.ArrayList<>();
+
+        private RecordingAssistantBotService(AssistantBotProperties botProperties,
+                                             AssistantProperties assistantProperties,
+                                             BoardService boardService,
+                                             BoardMapper boardMapper,
+                                             AssistantBotMapper assistantBotMapper,
+                                             GeminiClient geminiClient,
+                                             ObjectMapper objectMapper,
+                                             Clock clock,
+                                             Map<String, AssistantBotService.AutoPublishResult> resultsByPersona) {
+            super(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper, geminiClient, objectMapper, clock);
+            this.resultsByPersona = resultsByPersona;
+        }
+
+        @Override
+        AssistantBotService.AutoPublishResult autoPublishOnce(String personaName) {
+            visitedPersonas.add(personaName);
+            AssistantBotService.AutoPublishResult result = resultsByPersona.get(personaName);
+            return result == null
+                    ? AssistantBotService.AutoPublishResult.skipped(personaName, "no_due_candidate")
+                    : result;
+        }
+
+        private List<String> getVisitedPersonas() {
+            return visitedPersonas;
         }
     }
 }
