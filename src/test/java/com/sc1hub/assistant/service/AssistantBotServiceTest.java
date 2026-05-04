@@ -63,6 +63,7 @@ class AssistantBotServiceTest {
         botProperties.setEnabled(true);
         botProperties.setBoardTitle("funboard");
         botProperties.setPersonaName("프징징봇");
+        botProperties.setAutoPublishEnabled(true);
         botProperties.setAutoPublishCommentCandidatePosts(10);
         botProperties.setRecentCommentLimit(24);
         botProperties.setAutoPublishCommentReplyPriorityProbability(0.9);
