@@ -342,7 +342,7 @@ public class AssistantBotService {
             comment.setPostNum(history.getTargetPostNum());
             comment.setNickname(persona.getName());
             comment.setPassword(botProperties.getPublishGuestPassword());
-            comment.setContent(safeCommentForPublish(textOrNull(result.path("reply").path("body"))));
+            comment.setContent(safeCommentForPublish(persona, textOrNull(result.path("reply").path("body"))));
             if (!StringUtils.hasText(comment.getContent())) {
                 response.setError("발행할 댓글 본문이 비어 있습니다.");
                 return response;
@@ -376,8 +376,8 @@ public class AssistantBotService {
         BoardDTO post = new BoardDTO();
         post.setWriter(persona.getName());
         post.setGuestPassword(botProperties.getPublishGuestPassword());
-        post.setTitle(safeTitleForPublish(textOrNull(result.path("post").path("title"))));
-        post.setContent(toHtmlBody(textOrNull(result.path("post").path("body"))));
+        post.setTitle(safeTitleForPublish(persona, textOrNull(result.path("post").path("title"))));
+        post.setContent(toHtmlBody(persona, textOrNull(result.path("post").path("body"))));
         post.setNotice(0);
         return post;
     }
@@ -415,25 +415,31 @@ public class AssistantBotService {
             return AutoPublishResult.skipped("no_enabled_persona");
         }
 
+        AutoPublishResult lastPublished = null;
         String lastSkippedDetail = null;
+        String lastFailureDetail = null;
+        String lastFailurePersonaName = null;
         for (PersonaProperties persona : personas) {
             AutoPublishResult result = autoPublishOnce(persona.getName());
-            if (!STATUS_SKIPPED.equals(result.getOutcome())) {
-                return result;
+            if (STATUS_PUBLISHED.equals(result.getOutcome())) {
+                lastPublished = result;
+                continue;
             }
-            if (isApiConsumingAutoPublishSkip(result.getDetail())) {
-                return result;
+            if (OUTCOME_FAILED.equals(result.getOutcome())) {
+                lastFailureDetail = result.getDetail();
+                lastFailurePersonaName = result.getPersonaName();
+                continue;
             }
             lastSkippedDetail = result.getDetail();
         }
 
+        if (lastPublished != null) {
+            return lastPublished;
+        }
+        if (lastFailureDetail != null) {
+            return AutoPublishResult.failed(lastFailurePersonaName, lastFailureDetail);
+        }
         return AutoPublishResult.skipped(lastSkippedDetail == null ? "no_due_candidate" : lastSkippedDetail);
-    }
-
-    private boolean isApiConsumingAutoPublishSkip(String detail) {
-        return StringUtils.hasText(detail)
-                && (detail.startsWith(AUTO_DRAFT_SKIPPED_AFTER_GENERATION)
-                || AUTO_DRAFT_BUDGET_EXCEEDED.equals(detail));
     }
 
     AutoPublishResult autoPublishOnce(String personaName) {
@@ -464,7 +470,9 @@ public class AssistantBotService {
                     buildWaitingDetail(persona, today, now.toLocalTime(), handledPostToday, handledCommentToday));
         }
 
+        AutoPublishResult lastPublished = null;
         String lastSkippedDetail = null;
+        String lastFailureDetail = null;
         for (AutoPublishCandidate candidate : dueCandidates) {
             AssistantBotDraftRequestDTO request = buildAutoDraftRequest(persona, boardTitle, candidate.mode);
             if (request == null) {
@@ -474,31 +482,41 @@ public class AssistantBotService {
 
             AssistantBotDraftResponseDTO draft = generateDraftInternal(request, botProperties.getAutoPublishMaxGenerateAttempts(), true);
             if (StringUtils.hasText(draft.getError())) {
-                return AutoPublishResult.failed(persona.getName(), "draft_error:" + draft.getError());
+                lastFailureDetail = "draft_error:" + draft.getError();
+                continue;
             }
             if (STATUS_SKIPPED.equals(draft.getStatus())) {
                 if (draft.getAttemptCount() != null && draft.getAttemptCount() > 0) {
-                    return AutoPublishResult.skipped(persona.getName(), AUTO_DRAFT_SKIPPED_AFTER_GENERATION + candidate.mode);
+                    lastSkippedDetail = AUTO_DRAFT_SKIPPED_AFTER_GENERATION + candidate.mode;
+                    continue;
                 }
                 lastSkippedDetail = draft.getHistoryId() == null
                         ? AUTO_DRAFT_BUDGET_EXCEEDED
                         : "draft_skipped:" + candidate.mode;
                 if (draft.getHistoryId() == null) {
-                    return AutoPublishResult.skipped(persona.getName(), lastSkippedDetail);
+                    continue;
                 }
                 continue;
             }
             if (draft.getHistoryId() == null) {
-                return AutoPublishResult.failed(persona.getName(), "missing_history_id");
+                lastFailureDetail = "missing_history_id";
+                continue;
             }
 
             AssistantBotPublishResponseDTO published = publishDraft(draft.getHistoryId());
             if (StringUtils.hasText(published.getError())) {
-                return AutoPublishResult.failed(persona.getName(), "publish_error:" + published.getError());
+                lastFailureDetail = "publish_error:" + published.getError();
+                continue;
             }
-            return AutoPublishResult.published(persona.getName(), request.getMode(), draft.getHistoryId(), published.getPublishedPostNum(), published.getRedirectUrl());
+            lastPublished = AutoPublishResult.published(persona.getName(), request.getMode(), draft.getHistoryId(), published.getPublishedPostNum(), published.getRedirectUrl());
         }
 
+        if (lastPublished != null) {
+            return lastPublished;
+        }
+        if (lastFailureDetail != null) {
+            return AutoPublishResult.failed(persona.getName(), lastFailureDetail);
+        }
         return AutoPublishResult.skipped(persona.getName(), lastSkippedDetail == null ? "no_due_candidate" : lastSkippedDetail);
     }
 
@@ -702,6 +720,9 @@ public class AssistantBotService {
         appendLine(sb, "- " + buildPersonaPromptRule(persona));
         if (MODE_POST.equals(mode)) {
             appendLine(sb, "- " + buildPersonaPostStyleRule(persona));
+        }
+        if ("저묵묵봇".equals(String.valueOf(persona.getName()))) {
+            appendLine(sb, "- 제목, 본문, 댓글 모두 한 문장만 쓴다. 줄바꿈도 쓰지 말고 짧고 건조하게 끝낸다.");
         }
         sb.append("\n");
 
@@ -1455,29 +1476,36 @@ public class AssistantBotService {
         return null;
     }
 
-    private String safeTitleForPublish(String title) {
-        if (!StringUtils.hasText(title)) {
+    private String safeTitleForPublish(PersonaProperties persona, String title) {
+        String normalized = normalizePublishText(persona, title);
+        if (!StringUtils.hasText(normalized)) {
             return null;
         }
-        return HtmlUtils.htmlEscape(title.trim());
+        return HtmlUtils.htmlEscape(normalized);
     }
 
-    private String toHtmlBody(String body) {
-        if (!StringUtils.hasText(body)) {
+    private String toHtmlBody(PersonaProperties persona, String body) {
+        String normalized = normalizePublishText(persona, body);
+        if (!StringUtils.hasText(normalized)) {
             return null;
         }
-        String escaped = HtmlUtils.htmlEscape(formatBodyForPublish(body));
+        String escaped = HtmlUtils.htmlEscape(formatBodyForPublish(normalized, sentenceLimitForPersona(persona, false)));
         return escaped.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "<br>");
     }
 
-    private String safeCommentForPublish(String body) {
-        if (!StringUtils.hasText(body)) {
+    private String safeCommentForPublish(PersonaProperties persona, String body) {
+        String normalized = normalizePublishText(persona, body);
+        if (!StringUtils.hasText(normalized)) {
             return null;
         }
-        return formatBodyForPublish(body);
+        return formatBodyForPublish(normalized, sentenceLimitForPersona(persona, true));
     }
 
     private String formatBodyForPublish(String body) {
+        return formatBodyForPublish(body, 0);
+    }
+
+    private String formatBodyForPublish(String body, int maxSentences) {
         if (!StringUtils.hasText(body)) {
             return "";
         }
@@ -1485,25 +1513,72 @@ public class AssistantBotService {
                 .replace("\r\n", "\n")
                 .replace('\r', '\n')
                 .replaceAll("[ \\t]+", " ");
-        String sentenceBroken = normalized
-                .replaceAll("([.!?。！？]+)\\s+", "$1\n")
-                .replaceAll("\\n{3,}", "\n\n");
-
-        String[] lines = sentenceBroken.split("\\n");
-        StringBuilder formatted = new StringBuilder();
-        for (String line : lines) {
-            if (!StringUtils.hasText(line)) {
-                if (formatted.length() > 0 && formatted.charAt(formatted.length() - 1) != '\n') {
-                    formatted.append('\n');
-                }
-                continue;
-            }
-            if (formatted.length() > 0 && formatted.charAt(formatted.length() - 1) != '\n') {
-                formatted.append('\n');
-            }
-            formatted.append(line.trim());
+        List<String> sentences = splitSentences(normalized);
+        if (maxSentences > 0 && sentences.size() > maxSentences) {
+            sentences = sentences.subList(0, maxSentences);
         }
-        return formatted.toString().trim();
+        if (sentences.isEmpty()) {
+            return normalized;
+        }
+        return String.join("\n", sentences).trim();
+    }
+
+    private String normalizePublishText(PersonaProperties persona, String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        String normalized = text.trim()
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replaceAll("[ \\t]+", " ");
+        return isSingleSentenceOnlyPersona(persona) ? firstSentenceOnly(normalized) : normalized;
+    }
+
+    private int sentenceLimitForPersona(PersonaProperties persona, boolean commentMode) {
+        if (persona == null || !StringUtils.hasText(persona.getName())) {
+            return 0;
+        }
+        String name = persona.getName();
+        if ("저묵묵봇".equals(name)) {
+            return 1;
+        }
+        if ("테뻔뻔봇".equals(name) || "프징징봇".equals(name)) {
+            return commentMode ? 2 : 5;
+        }
+        return 0;
+    }
+
+    private boolean isSingleSentenceOnlyPersona(PersonaProperties persona) {
+        return persona != null && "저묵묵봇".equals(persona.getName());
+    }
+
+    private List<String> splitSentences(String text) {
+        if (!StringUtils.hasText(text)) {
+            return Collections.emptyList();
+        }
+        String normalized = text.trim().replace('\n', ' ');
+        String[] parts = normalized.split("(?<=[.!?。！？])\\s+");
+        List<String> sentences = new ArrayList<>();
+        for (String part : parts) {
+            if (StringUtils.hasText(part)) {
+                sentences.add(part.trim());
+            }
+        }
+        if (sentences.isEmpty() && StringUtils.hasText(normalized)) {
+            sentences.add(normalized);
+        }
+        return sentences;
+    }
+
+    private String firstSentenceOnly(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        List<String> sentences = splitSentences(text);
+        if (!sentences.isEmpty()) {
+            return sentences.get(0);
+        }
+        return text.trim();
     }
 
     private static String textOrNull(JsonNode node) {
@@ -1642,24 +1717,24 @@ public class AssistantBotService {
     private String buildPersonaPromptRule(PersonaProperties persona) {
         String name = persona == null ? "" : String.valueOf(persona.getName());
         if ("테뻔뻔봇".equals(name)) {
-            return "테뻔뻔봇은 테란 유저 특유의 뻔뻔함과 잘난 척이 기본값이다. '테란이 사기가 아니라 내가 잘하는 거다' 같은 태도로 말하고, 밸런스 얘기를 해도 테란 쪽을 더 좋게 쳐주며 자신감 있게 우긴다.";
+            return "테뻔뻔봇은 테란 유저 특유의 뻔뻔함과 잘난 척이 기본값이다. '테란이 사기가 아니라 내가 잘하는 거다' 같은 태도로 말하고, 밸런스 얘기를 해도 테란 쪽을 더 좋게 쳐주며 자신감 있게 우긴다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
         }
         if ("저묵묵봇".equals(name)) {
-            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 문장을 짧고 무뚝뚝하게 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다. 다만 게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고, 저그 운영/병력/상성 체감에서 출발해 말한다.";
+            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 제목, 본문, 댓글 모두 한 문장만 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다. 다만 게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고, 저그 운영/병력/상성 체감에서 출발해 말한다.";
         }
         if ("훈훈봇".equals(name)) {
             return "훈훈봇은 다양한 주제에 긍정적인 덕담을 얹는 따뜻한 커뮤니티 유저다. 스타 수다, 일상글, 잡담, 댓글 반응을 골고루 쓰되 억지 감동문이나 설교체로 흐르지 말고, 상대가 기분 좋게 받아들일 만한 짧은 응원과 재치 있는 한마디를 섞는다.";
         }
-        return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이지만, 징징만 반복하지 말고 스타 수다, 일상글, 뻘글도 섞는 캐릭터다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다.";
+        return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이지만, 징징만 반복하지 말고 스타 수다, 일상글, 뻘글도 섞는 캐릭터다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
     }
 
     private String buildPersonaPostStyleRule(PersonaProperties persona) {
         String name = persona == null ? "" : String.valueOf(persona.getName());
         if ("테뻔뻔봇".equals(name)) {
-            return "게시글 제목은 결론이나 허세를 먼저 던지는 쪽이 맞다. 일기체로 길게 풀지 말고, 잘난 척이나 얄미운 단정으로 출발하라.";
+            return "게시글 제목은 결론이나 허세를 먼저 던지는 쪽이 맞다. 일기체로 길게 풀지 말고, 잘난 척이나 얄미운 단정으로 출발하라. 본문은 1~5문장, 댓글은 1~2문장으로 유지하라.";
         }
         if ("저묵묵봇".equals(name)) {
-            return "게시글 제목은 짧고 툭 끊겨야 한다. '요즘 들어 자꾸...' 같은 긴 서술형 대신 무뚝뚝한 한마디, 짧은 관찰, 건조한 투덜거림으로 시작하라.";
+            return "게시글 제목은 짧고 툭 끊겨야 한다. 제목도 한 문장만 쓰고 '요즘 들어 자꾸...' 같은 긴 서술형 대신 무뚝뚝한 한마디, 짧은 관찰, 건조한 투덜거림으로 시작하라.";
         }
         if ("훈훈봇".equals(name)) {
             return "게시글 제목은 부담스럽게 착한 말만 앞세우지 말고, 작은 관찰이나 일상 소재에서 자연스럽게 훈훈한 결론으로 이어지게 한다. 제목만 봐도 긍정적인 온도가 느껴지되 과장된 미담체는 피하라.";
@@ -1699,11 +1774,11 @@ public class AssistantBotService {
         if ("저묵묵봇".equals(personaName)) {
             if (gameTalk) {
                 if (targetIsBot || terranBrag || protossWhine) {
-                    return writer + " 글에는 저그 유저 시점으로 짧고 무뚝뚝하게 툭 받아쳐라. 뮤탈, 히드라, 저글링, 운영 말리는 체감 같은 저그 쪽 기준을 깔고 길게 설명하지 말고 경상도 느낌 한두 마디로 묵직하게 시비를 건다.";
+                    return writer + " 글에는 저그 유저 시점으로 짧고 무뚝뚝하게 툭 받아쳐라. 댓글도 한 문장만 쓰고, 뮤탈, 히드라, 저글링, 운영 말리는 체감 같은 저그 쪽 기준을 깔되 길게 설명하지 말고 경상도 느낌 한마디로 묵직하게 시비를 건다.";
                 }
-                return "게임 얘기면 저그 유저 시점으로 한두 마디만 던져라. 뮤탈, 히드라, 저글링, 운영 말리는 체감처럼 저그 쪽 기준을 깔되 괜히 과하게 친절하게 풀어주지 않는다.";
+                return "게임 얘기면 저그 유저 시점으로 한두 마디만 던져라. 댓글도 한 문장만 쓰고, 뮤탈, 히드라, 저글링, 운영 말리는 체감처럼 저그 쪽 기준을 깔되 괜히 과하게 친절하게 풀어주지 않는다.";
             }
-            return "짧고 무뚝뚝한 경상도 톤으로 한두 마디만 던져라. 괜히 과하게 친절하게 풀어주지 않는다.";
+            return "짧고 무뚝뚝한 경상도 톤으로 한두 마디만 던져라. 댓글도 한 문장만 쓰고, 괜히 과하게 친절하게 풀어주지 않는다.";
         }
         if ("훈훈봇".equals(personaName)) {
             if (targetIsBot) {
@@ -1714,7 +1789,7 @@ public class AssistantBotService {
         if (targetIsBot && "테뻔뻔봇".equals(writer)) {
             return "테뻔뻔봇이 잘난 척하면 곧이곧대로 받아주지 말고, 프로토스 입장에서 억울함 섞인 농담으로 받아쳐라.";
         }
-        return "상대 글이 다른 봇 글이면 너무 순하게 동조하지 말고, 자기 종족 관점과 캐릭터성으로 한마디 받아쳐라.";
+        return "상대 글이 다른 봇 글이면 너무 순하게 동조하지 말고, 자기 종족 관점과 캐릭터성으로 한마디 받아쳐라. 프징징봇은 게시글 1~5문장, 댓글 1~2문장으로 쓴다.";
     }
 
     private String buildCommentThreadHint(PersonaProperties persona, BoardDTO targetPost, List<CommentDTO> recentComments) {

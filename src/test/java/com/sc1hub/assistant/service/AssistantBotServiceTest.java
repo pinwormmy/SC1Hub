@@ -32,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -149,6 +151,28 @@ class AssistantBotServiceTest {
 
         assertEquals("테뻔뻔봇", persona.getName());
         assertEquals("funboard", persona.getBoardTitle());
+    }
+
+    @Test
+    void autoPublishOnce_checksEveryEnabledPersonaBeforeReturning() {
+        AssistantBotService spyService = spy(assistantBotService);
+        doReturn(AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"))
+                .when(spyService).autoPublishOnce("프징징봇");
+        doReturn(AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"))
+                .when(spyService).autoPublishOnce("테뻔뻔봇");
+        doReturn(AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"))
+                .when(spyService).autoPublishOnce("저묵묵봇");
+        doReturn(AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"))
+                .when(spyService).autoPublishOnce("훈훈봇");
+
+        AssistantBotService.AutoPublishResult result = spyService.autoPublishOnce();
+
+        assertEquals("published", result.getOutcome());
+        assertEquals("훈훈봇", result.getPersonaName());
+        verify(spyService).autoPublishOnce("프징징봇");
+        verify(spyService).autoPublishOnce("테뻔뻔봇");
+        verify(spyService).autoPublishOnce("저묵묵봇");
+        verify(spyService).autoPublishOnce("훈훈봇");
     }
 
     @Test
@@ -291,6 +315,121 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("긍정적인 덕담"));
         assertTrue(prompt.contains("다양한 주제"));
         assertTrue(prompt.contains("과장된 미담체는 피하라"));
+    }
+
+    @Test
+    void buildPrompt_forTebpeonPersonaIncludesSentenceRangeRule() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("테뻔뻔봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.singletonList(post(911, "테스터A", 0, "테란이 좀 잘하는 것 같긴 함")),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+    }
+
+    @Test
+    void buildPrompt_forPrzingPersonaIncludesSentenceRangeRule() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("프징징봇"),
+                "comment",
+                "funboard",
+                post(912, "테스터A", 0, "오늘은 좀 억까가 심하네"),
+                Collections.emptyList(),
+                Arrays.asList(comment("다른유저", 1, "그럴 수 있지")),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+    }
+
+    @Test
+    void buildPrompt_forMugmukPersonaAddsSingleSentenceRule() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("저묵묵봇"),
+                "comment",
+                "funboard",
+                post(910, "테스터A", 0, "오늘도 래더가 좀 답답하네"),
+                Collections.emptyList(),
+                Arrays.asList(comment("다른유저", 1, "그럴 수도 있지")),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("제목, 본문, 댓글 모두 한 문장만 쓴다."));
+    }
+
+    @Test
+    void buildPostForPublish_forMugmukPersonaKeepsOnlyFirstSentence() throws Exception {
+        String rawJson = "{\"post\":{\"title\":\"오늘은 짧게 간다. 두번째는 안 쓴다.\",\"body\":\"한 문장만 남긴다. 이건 잘라야 한다.\"}}";
+
+        BoardDTO post = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPostForPublish",
+                persona("저묵묵봇"),
+                new ObjectMapper().readTree(rawJson)
+        );
+
+        assertEquals("오늘은 짧게 간다.", post.getTitle());
+        assertEquals("한 문장만 남긴다.", post.getContent());
+    }
+
+    @Test
+    void buildPostForPublish_forTebpeonPersonaLimitsBodyToFiveSentences() throws Exception {
+        String rawJson = "{\"post\":{\"title\":\"오늘은 좀 길다.\",\"body\":\"첫째 문장이다. 둘째 문장이다. 셋째 문장이다. 넷째 문장이다. 다섯째 문장이다. 여섯째 문장이다.\"}}";
+
+        BoardDTO post = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPostForPublish",
+                persona("테뻔뻔봇"),
+                new ObjectMapper().readTree(rawJson)
+        );
+
+        assertTrue(post.getContent().contains("첫째 문장이다."));
+        assertTrue(post.getContent().contains("다섯째 문장이다."));
+        assertTrue(!post.getContent().contains("여섯째 문장이다."));
+    }
+
+    @Test
+    void safeCommentForPublish_forMugmukPersonaKeepsOnlyFirstSentence() {
+        String content = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "safeCommentForPublish",
+                persona("저묵묵봇"),
+                "댓글도 한 문장만. 두번째는 제거한다."
+        );
+
+        assertEquals("댓글도 한 문장만.", content);
+    }
+
+    @Test
+    void safeCommentForPublish_forPrzingPersonaLimitsToTwoSentences() {
+        String content = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "safeCommentForPublish",
+                persona("프징징봇"),
+                "첫 문장이다. 둘째 문장이다. 셋째 문장이다."
+        );
+
+        assertEquals("첫 문장이다.\n둘째 문장이다.", content);
     }
 
     @Test
