@@ -1,6 +1,7 @@
 package com.sc1hub.assistant.mapper;
 
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
+import com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -16,6 +17,11 @@ public interface AssistantBotMapper {
                                                      @Param("limit") int limit);
 
     AssistantBotHistoryDTO selectHistoryById(@Param("id") long id);
+
+    List<AssistantBotHistoryDTO> selectRecentHistorySince(@Param("since") LocalDateTime since,
+                                                          @Param("limit") int limit);
+
+    List<AssistantBotHistorySummaryDTO> selectHistorySummarySince(@Param("since") LocalDateTime since);
 
     void updateStatus(@Param("id") long id,
                       @Param("status") String status,

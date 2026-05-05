@@ -2,17 +2,23 @@ package com.sc1hub.assistant.controller;
 
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
+import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
+import com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO;
 import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
 import com.sc1hub.assistant.service.AssistantBotService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/assistant-bot")
@@ -51,5 +57,18 @@ public class AssistantBotAdminController {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result);
         }
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping(value = "/history", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<AssistantBotHistoryDTO>> getHistory(
+            @RequestParam(name = "days", defaultValue = "3") int days,
+            @RequestParam(name = "limit", defaultValue = "100") int limit) {
+        return ResponseEntity.ok(assistantBotService.getRecentHistory(days, limit));
+    }
+
+    @GetMapping(value = "/history/summary", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<AssistantBotHistorySummaryDTO>> getHistorySummary(
+            @RequestParam(name = "days", defaultValue = "3") int days) {
+        return ResponseEntity.ok(assistantBotService.getHistorySummary(days));
     }
 }

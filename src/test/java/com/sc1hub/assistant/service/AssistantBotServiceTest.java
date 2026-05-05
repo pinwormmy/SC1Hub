@@ -182,6 +182,36 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void autoPublishAllPersonas_returnsEveryPersonaResult() {
+        Map<String, AssistantBotService.AutoPublishResult> resultsByPersona = new HashMap<>();
+        resultsByPersona.put("프징징봇", AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"));
+        resultsByPersona.put("테뻔뻔봇", AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"));
+        resultsByPersona.put("저묵묵봇", AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"));
+        resultsByPersona.put("훈훈봇", AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
+
+        RecordingAssistantBotService recordingService = new RecordingAssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
+                resultsByPersona
+        );
+
+        List<AssistantBotService.AutoPublishResult> results = recordingService.autoPublishAllPersonas();
+
+        assertEquals(4, results.size());
+        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "훈훈봇"), recordingService.getVisitedPersonas());
+        assertEquals("프징징봇", results.get(0).getPersonaName());
+        assertEquals("테뻔뻔봇", results.get(1).getPersonaName());
+        assertEquals("저묵묵봇", results.get(2).getPersonaName());
+        assertEquals("훈훈봇", results.get(3).getPersonaName());
+    }
+
+    @Test
     void recommendPostTopicLane_prefersUnderrepresentedTopic() {
         AssistantBotHistoryDTO whiningA = history("post", "밸런스징징", "프로토스 또 억까당함", "이건 좀 너무한 거 아니냐");
         AssistantBotHistoryDTO whiningB = history("post", "밸런스징징", "테란 사기 같음", "오늘도 토스만 서럽다");

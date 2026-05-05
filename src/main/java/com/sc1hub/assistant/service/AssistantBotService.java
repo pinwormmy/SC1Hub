@@ -8,6 +8,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
+import com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO;
 import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.gemini.GeminiException;
@@ -360,6 +361,23 @@ public class AssistantBotService {
         }
     }
 
+    public List<AssistantBotHistoryDTO> getRecentHistory(int days, int limit) {
+        return safeList(assistantBotMapper.selectRecentHistorySince(resolveHistorySince(days), resolveHistoryLimit(limit)));
+    }
+
+    public List<AssistantBotHistorySummaryDTO> getHistorySummary(int days) {
+        return safeList(assistantBotMapper.selectHistorySummarySince(resolveHistorySince(days)));
+    }
+
+    private LocalDateTime resolveHistorySince(int days) {
+        int safeDays = Math.max(1, Math.min(days, 14));
+        return LocalDate.now(clock).minusDays(safeDays - 1L).atStartOfDay();
+    }
+
+    private int resolveHistoryLimit(int limit) {
+        return Math.max(1, Math.min(limit, 200));
+    }
+
     private void populatePublishResponse(AssistantBotPublishResponseDTO response, AssistantBotHistoryDTO history) {
         response.setBoardTitle(history.getBoardTitle());
         response.setMode(history.getGenerationMode());
@@ -406,21 +424,35 @@ public class AssistantBotService {
     }
 
     public AutoPublishResult autoPublishOnce() {
+        return summarizeAutoPublishResults(autoPublishAllPersonas());
+    }
+
+    public List<AutoPublishResult> autoPublishAllPersonas() {
         if (!botProperties.isEnabled() || !botProperties.isAutoPublishEnabled()) {
-            return AutoPublishResult.skipped("autoPublishEnabled=false");
+            return Collections.singletonList(AutoPublishResult.skipped("autoPublishEnabled=false"));
         }
 
         List<PersonaProperties> personas = botProperties.getEnabledPersonas();
         if (personas.isEmpty()) {
-            return AutoPublishResult.skipped("no_enabled_persona");
+            return Collections.singletonList(AutoPublishResult.skipped("no_enabled_persona"));
         }
 
+        List<AutoPublishResult> results = new ArrayList<>();
+        for (PersonaProperties persona : personas) {
+            results.add(autoPublishOnce(persona.getName()));
+        }
+        return results;
+    }
+
+    private AutoPublishResult summarizeAutoPublishResults(List<AutoPublishResult> results) {
         AutoPublishResult lastPublished = null;
         String lastSkippedDetail = null;
         String lastFailureDetail = null;
         String lastFailurePersonaName = null;
-        for (PersonaProperties persona : personas) {
-            AutoPublishResult result = autoPublishOnce(persona.getName());
+        for (AutoPublishResult result : safeList(results)) {
+            if (result == null) {
+                continue;
+            }
             if (STATUS_PUBLISHED.equals(result.getOutcome())) {
                 lastPublished = result;
                 continue;

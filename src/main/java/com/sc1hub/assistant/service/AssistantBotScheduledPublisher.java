@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @Slf4j
 public class AssistantBotScheduledPublisher {
@@ -27,17 +29,27 @@ public class AssistantBotScheduledPublisher {
         }
 
         try {
-            AssistantBotService.AutoPublishResult result = assistantBotService.autoPublishOnce();
-            if (AssistantBotService.AutoPublishResult.OUTCOME_PUBLISHED.equals(result.getOutcome())) {
-                log.info("봇 자동 발행 완료. personaName={}, mode={}, historyId={}, publishedPostNum={}, redirectUrl={}",
-                        result.getPersonaName(), result.getMode(), result.getHistoryId(), result.getPublishedPostNum(), result.getRedirectUrl());
-            } else if (AssistantBotService.AutoPublishResult.OUTCOME_FAILED.equals(result.getOutcome())) {
-                log.error("봇 자동 발행 실패. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
-            } else {
-                log.debug("봇 자동 발행 스킵. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
+            List<AssistantBotService.AutoPublishResult> results = assistantBotService.autoPublishAllPersonas();
+            for (AssistantBotService.AutoPublishResult result : results) {
+                logAutoPublishResult(result);
             }
         } catch (Exception e) {
             log.error("봇 자동 발행 실행 실패", e);
+        }
+    }
+
+    private void logAutoPublishResult(AssistantBotService.AutoPublishResult result) {
+        if (result == null) {
+            return;
+        }
+
+        if (AssistantBotService.AutoPublishResult.OUTCOME_PUBLISHED.equals(result.getOutcome())) {
+            log.info("봇 자동 발행 완료. personaName={}, mode={}, historyId={}, publishedPostNum={}, redirectUrl={}",
+                    result.getPersonaName(), result.getMode(), result.getHistoryId(), result.getPublishedPostNum(), result.getRedirectUrl());
+        } else if (AssistantBotService.AutoPublishResult.OUTCOME_FAILED.equals(result.getOutcome())) {
+            log.error("봇 자동 발행 실패. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
+        } else {
+            log.debug("봇 자동 발행 스킵. personaName={}, detail={}", result.getPersonaName(), result.getDetail());
         }
     }
 }

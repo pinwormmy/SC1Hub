@@ -68,6 +68,37 @@
         WHERE id = #{id}
     </select>
 
+    <select id="selectRecentHistorySince" resultType="com.sc1hub.assistant.dto.AssistantBotHistoryDTO">
+        SELECT id,
+               persona_name,
+               board_title,
+               generation_mode,
+               target_post_num,
+               topic,
+               draft_title,
+               draft_body,
+               status,
+               published_post_num,
+               created_at
+        FROM assistant_bot_generation_history
+        WHERE created_at &gt;= #{since}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectHistorySummarySince" resultType="com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO">
+        SELECT persona_name,
+               board_title,
+               generation_mode,
+               status,
+               count(*) AS count,
+               max(created_at) AS latest_created_at
+        FROM assistant_bot_generation_history
+        WHERE created_at &gt;= #{since}
+        GROUP BY persona_name, board_title, generation_mode, status
+        ORDER BY latest_created_at DESC, persona_name ASC, generation_mode ASC, status ASC
+    </select>
+
     <update id="updateStatus">
         UPDATE assistant_bot_generation_history
         SET status = #{status},

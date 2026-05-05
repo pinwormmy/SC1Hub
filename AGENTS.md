@@ -46,3 +46,8 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 ## Agent Notes (Codex/AI)
 
 - When working from WSL, do not run tests automatically. Write or adjust test code only, and leave all test execution to the repository owner in their IDE.
+- Assistant bot operations can be inspected with admin JSON APIs:
+  - `GET /api/admin/assistant-bot/history?days=3&limit=100`: recent bot generation history rows, excluding large `raw_json`.
+  - `GET /api/admin/assistant-bot/history/summary?days=3`: counts grouped by persona, board, mode, and status, with the latest timestamp.
+- For assistant bot activity issues, check the history APIs before speculating. Useful fields are `personaName`, `generationMode`, `status`, `publishedPostNum`, and `createdAt`.
+- `sc1hub.assistant.bot.autoPublishCatchUpEnabled=true` lets the scheduler process missed daily random slots later in the same day.
