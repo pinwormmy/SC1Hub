@@ -37,6 +37,8 @@ public class AssistantBotProperties {
     private String autoPublishCron = "0 * * * * *";
     private String autoPublishZone = "Asia/Seoul";
     private boolean autoPublishCatchUpEnabled = false;
+    private int autoPublishCatchUpPostRetrySlots = 2;
+    private int autoPublishCatchUpRecoveryCooldownMinutes = 60;
     private int autoPublishPostDailyLimit = 3;
     private int autoPublishCommentDailyLimit = 5;
     private int autoPublishCommentCandidatePosts = 10;
@@ -52,11 +54,33 @@ public class AssistantBotProperties {
                                                     int dailyLimit,
                                                     String boardTitleSeed,
                                                     String personaNameSeed) {
+        return buildDailyAutoPublishSlotsInRange(date,
+                slotKey,
+                dailyLimit,
+                boardTitleSeed,
+                personaNameSeed,
+                0,
+                (24 * 60) - 1);
+    }
+
+    public List<Integer> buildDailyAutoPublishSlotsInRange(LocalDate date,
+                                                           String slotKey,
+                                                           int dailyLimit,
+                                                           String boardTitleSeed,
+                                                           String personaNameSeed,
+                                                           int startMinute,
+                                                           int endMinute) {
         if (date == null) {
             return Collections.emptyList();
         }
 
-        List<Integer> candidateMinutes = buildCandidateMinutes();
+        int safeStartMinute = Math.max(0, startMinute);
+        int safeEndMinute = Math.min((24 * 60) - 1, endMinute);
+        if (safeStartMinute > safeEndMinute) {
+            return Collections.emptyList();
+        }
+
+        List<Integer> candidateMinutes = buildRange(safeStartMinute, safeEndMinute);
         if (candidateMinutes.isEmpty()) {
             return Collections.emptyList();
         }

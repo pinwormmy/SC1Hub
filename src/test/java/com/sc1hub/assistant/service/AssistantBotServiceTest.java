@@ -640,61 +640,151 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void isPublishMinute_catchesUpMissedSlotOnlyWhenEnabled() {
+    void isPublishMinute_reschedulesMissedPostToFutureCatchUpSlot() {
         botProperties.setAutoPublishCatchUpEnabled(true);
+        botProperties.setAutoPublishPostDailyLimit(1);
+        botProperties.setAutoPublishCatchUpPostRetrySlots(2);
         LocalDate date = LocalDate.of(2026, 3, 9);
-        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
-        int firstPostSlot = postSlots.stream()
-                .filter(slot -> slot != null && slot > 0)
-                .findFirst()
-                .orElse(postSlots.get(0));
-        int laterMinute = firstPostSlot == 1439 ? firstPostSlot : firstPostSlot + 1;
+        List<Integer> postSlots = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveAutoPublishSlots",
+                persona("프징징봇"),
+                date,
+                "post",
+                botProperties.getAutoPublishPostDailyLimit()
+        );
+        int firstPostSlot = postSlots.get(0);
+        int firstRetrySlot = postSlots.get(1);
+        int nonScheduledMinute = findNonSlotMinuteAfter(postSlots, firstPostSlot);
 
-        Boolean catchUpMinute = ReflectionTestUtils.invokeMethod(
+        Boolean immediateRetry = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "isPublishMinute",
                 postSlots,
-                laterMinute,
+                nonScheduledMinute,
                 0,
-                0
+                0,
+                botProperties.getAutoPublishPostDailyLimit()
         );
 
-        assertEquals(Boolean.TRUE, catchUpMinute);
+        Boolean retrySlot = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "isPublishMinute",
+                postSlots,
+                firstRetrySlot,
+                0,
+                0,
+                botProperties.getAutoPublishPostDailyLimit()
+        );
+
+        Boolean alreadyHandled = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "isPublishMinute",
+                postSlots,
+                firstRetrySlot,
+                1,
+                0,
+                botProperties.getAutoPublishPostDailyLimit()
+        );
+
+        assertEquals(Boolean.FALSE, immediateRetry);
+        assertEquals(Boolean.TRUE, retrySlot);
+        assertEquals(Boolean.FALSE, alreadyHandled);
     }
 
     @Test
-    void resolveDueAutoPublishCandidates_usesHandledCountForCatchUp() {
+    void resolveDueAutoPublishCandidates_picksRetrySlotForMissedPost() {
         botProperties.setAutoPublishCatchUpEnabled(true);
+        botProperties.setAutoPublishPostDailyLimit(1);
+        botProperties.setAutoPublishCatchUpPostRetrySlots(2);
         LocalDate date = LocalDate.of(2026, 3, 9);
-        LocalDateTime endOfDay = date.atTime(23, 59);
         AssistantBotProperties.PersonaProperties persona = persona("프징징봇");
+        List<Integer> postSlots = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveAutoPublishSlots",
+                persona,
+                date,
+                "post",
+                botProperties.getAutoPublishPostDailyLimit()
+        );
+        int firstRetrySlot = postSlots.get(1);
+
+        List<?> dueAtRetrySlot = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveDueAutoPublishCandidates",
+                persona,
+                date,
+                LocalDateTime.of(date, java.time.LocalTime.of(firstRetrySlot / 60, firstRetrySlot % 60)).toLocalTime(),
+                0,
+                botProperties.getAutoPublishCommentDailyLimit(),
+                0,
+                0,
+                0
+        );
 
         List<?> alreadyHandled = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "resolveDueAutoPublishCandidates",
                 persona,
                 date,
-                endOfDay.toLocalTime(),
-                botProperties.getAutoPublishPostDailyLimit(),
+                LocalDateTime.of(date, java.time.LocalTime.of(firstRetrySlot / 60, firstRetrySlot % 60)).toLocalTime(),
+                1,
                 botProperties.getAutoPublishCommentDailyLimit(),
+                0,
                 0,
                 0
         );
 
-        List<?> missingOnePost = ReflectionTestUtils.invokeMethod(
+        assertEquals(1, dueAtRetrySlot.size());
+        assertTrue(alreadyHandled.isEmpty());
+    }
+
+    @Test
+    void resolveDueAutoPublishCandidates_recoversOnceAfterLastPostSlotWhenCooldownClear() {
+        botProperties.setAutoPublishCatchUpEnabled(true);
+        botProperties.setAutoPublishPostDailyLimit(1);
+        botProperties.setAutoPublishCatchUpPostRetrySlots(2);
+        AssistantBotProperties.PersonaProperties persona = persona("프징징봇");
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> postSlots = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveAutoPublishSlots",
+                persona,
+                date,
+                "post",
+                botProperties.getAutoPublishPostDailyLimit()
+        );
+        int lastPostSlot = postSlots.get(postSlots.size() - 1);
+        java.time.LocalTime recoveryTime = java.time.LocalTime.of((lastPostSlot + 1) / 60, (lastPostSlot + 1) % 60);
+
+        List<?> recoveryDue = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "resolveDueAutoPublishCandidates",
                 persona,
                 date,
-                endOfDay.toLocalTime(),
-                botProperties.getAutoPublishPostDailyLimit() - 1,
+                recoveryTime,
+                0,
                 botProperties.getAutoPublishCommentDailyLimit(),
+                0,
                 0,
                 0
         );
 
-        assertTrue(alreadyHandled.isEmpty());
-        assertEquals(1, missingOnePost.size());
+        List<?> blockedByCooldown = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveDueAutoPublishCandidates",
+                persona,
+                date,
+                recoveryTime,
+                0,
+                botProperties.getAutoPublishCommentDailyLimit(),
+                0,
+                0,
+                1
+        );
+
+        assertEquals(1, recoveryDue.size());
+        assertTrue(blockedByCooldown.isEmpty());
     }
 
     @Test
@@ -777,6 +867,16 @@ class AssistantBotServiceTest {
         return "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
                 + "\"post\":{\"title\":\"오늘 래더 한 판만 더 해야지\",\"body\":\"말은 한 판인데 또 손이 간다\"},"
                 + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
+    }
+
+    private int findNonSlotMinuteAfter(List<Integer> slots, int startMinute) {
+        int endMinute = slots.get(slots.size() - 1);
+        for (int minute = startMinute + 1; minute < endMinute; minute++) {
+            if (!slots.contains(minute)) {
+                return minute;
+            }
+        }
+        throw new IllegalStateException("non-slot minute not found after " + startMinute);
     }
 
     private static final class FixedRandom extends Random {

@@ -494,9 +494,16 @@ public class AssistantBotService {
         int handledCommentToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
         int handledPostThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
         int handledCommentThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, minuteStart);
+        int handledPostRecoveryCooldown = assistantBotMapper.countGeneratedSinceByMode(
+                persona.getName(),
+                boardTitle,
+                MODE_POST,
+                now.minusMinutes(Math.max(1, botProperties.getAutoPublishCatchUpRecoveryCooldownMinutes()))
+        );
 
         List<AutoPublishCandidate> dueCandidates = resolveDueAutoPublishCandidates(persona, today, now.toLocalTime(),
-                handledPostToday, handledCommentToday, handledPostThisMinute, handledCommentThisMinute);
+                handledPostToday, handledCommentToday, handledPostThisMinute, handledCommentThisMinute,
+                handledPostRecoveryCooldown);
         if (dueCandidates.isEmpty()) {
             return AutoPublishResult.skipped(persona.getName(),
                     buildWaitingDetail(persona, today, now.toLocalTime(), handledPostToday, handledCommentToday));
@@ -508,12 +515,16 @@ public class AssistantBotService {
         for (AutoPublishCandidate candidate : dueCandidates) {
             AssistantBotDraftRequestDTO request = buildAutoDraftRequest(persona, boardTitle, candidate.mode);
             if (request == null) {
+                insertAutoPublishSkippedHistory(persona, boardTitle, candidate.mode, null,
+                        "no_target_for_mode:" + candidate.mode);
                 lastSkippedDetail = "no_target_for_mode:" + candidate.mode;
                 continue;
             }
 
             AssistantBotDraftResponseDTO draft = generateDraftInternal(request, botProperties.getAutoPublishMaxGenerateAttempts(), true);
             if (StringUtils.hasText(draft.getError())) {
+                insertAutoPublishSkippedHistory(persona, boardTitle, candidate.mode, request.getTargetPostNum(),
+                        "draft_error:" + draft.getError());
                 lastFailureDetail = "draft_error:" + draft.getError();
                 continue;
             }
@@ -526,17 +537,22 @@ public class AssistantBotService {
                         ? AUTO_DRAFT_BUDGET_EXCEEDED
                         : "draft_skipped:" + candidate.mode;
                 if (draft.getHistoryId() == null) {
+                    insertAutoPublishSkippedHistory(persona, boardTitle, candidate.mode, request.getTargetPostNum(),
+                            lastSkippedDetail);
                     continue;
                 }
                 continue;
             }
             if (draft.getHistoryId() == null) {
+                insertAutoPublishSkippedHistory(persona, boardTitle, candidate.mode, request.getTargetPostNum(),
+                        "missing_history_id");
                 lastFailureDetail = "missing_history_id";
                 continue;
             }
 
             AssistantBotPublishResponseDTO published = publishDraft(draft.getHistoryId());
             if (StringUtils.hasText(published.getError())) {
+                updateAutoPublishHistoryAsSkipped(draft.getHistoryId());
                 lastFailureDetail = "publish_error:" + published.getError();
                 continue;
             }
@@ -558,18 +574,21 @@ public class AssistantBotService {
                                                                        int handledPostToday,
                                                                        int handledCommentToday,
                                                                        int handledPostThisMinute,
-                                                                       int handledCommentThisMinute) {
+                                                                       int handledCommentThisMinute,
+                                                                       int handledPostRecoveryCooldown) {
         List<AutoPublishCandidate> candidates = new ArrayList<>();
         int nowMinuteOfDay = toMinuteOfDay(now);
 
-        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, MODE_POST,
-                botProperties.getAutoPublishPostDailyLimit(), persona.getBoardTitle(), persona.getName());
-        if (isPublishMinute(postSlots, nowMinuteOfDay, handledPostToday, handledPostThisMinute)) {
+        int postDailyLimit = Math.max(0, botProperties.getAutoPublishPostDailyLimit());
+        List<Integer> postSlots = resolveAutoPublishSlots(persona, date, MODE_POST, postDailyLimit);
+        if (isPublishMinute(postSlots, nowMinuteOfDay, handledPostToday, handledPostThisMinute, postDailyLimit)
+                || shouldRecoverMissedPostAfterLastSlot(postSlots, nowMinuteOfDay, handledPostToday,
+                handledPostThisMinute, handledPostRecoveryCooldown, postDailyLimit)) {
             candidates.add(new AutoPublishCandidate(MODE_POST, nowMinuteOfDay));
         }
 
-        List<Integer> commentSlots = botProperties.buildDailyAutoPublishSlots(date, MODE_COMMENT,
-                botProperties.getAutoPublishCommentDailyLimit(), persona.getBoardTitle(), persona.getName());
+        int commentDailyLimit = Math.max(0, botProperties.getAutoPublishCommentDailyLimit());
+        List<Integer> commentSlots = resolveAutoPublishSlots(persona, date, MODE_COMMENT, commentDailyLimit);
         if (isPublishMinute(commentSlots, nowMinuteOfDay, handledCommentToday, handledCommentThisMinute)) {
             candidates.add(new AutoPublishCandidate(MODE_COMMENT, nowMinuteOfDay));
         }
@@ -609,11 +628,12 @@ public class AssistantBotService {
                                                              LocalDate date,
                                                              String mode,
                                                              LocalTime now) {
-        List<Integer> slots = botProperties.buildDailyAutoPublishSlots(date,
+        List<Integer> slots = resolveAutoPublishSlots(
+                persona,
+                date,
                 mode,
-                MODE_POST.equals(mode) ? botProperties.getAutoPublishPostDailyLimit() : botProperties.getAutoPublishCommentDailyLimit(),
-                persona.getBoardTitle(),
-                persona.getName());
+                MODE_POST.equals(mode) ? botProperties.getAutoPublishPostDailyLimit() : botProperties.getAutoPublishCommentDailyLimit()
+        );
         int nowMinuteOfDay = toMinuteOfDay(now);
         for (Integer slot : slots) {
             if (slot != null && slot > nowMinuteOfDay) {
@@ -629,16 +649,32 @@ public class AssistantBotService {
 
     private boolean isPublishMinute(List<Integer> slots,
                                     int nowMinuteOfDay,
-                                    int publishedToday,
-                                    int publishedThisMinute) {
-        if (slots == null || slots.isEmpty() || publishedThisMinute > 0) {
+                                    int handledToday,
+                                    int handledThisMinute) {
+        if (slots == null || slots.isEmpty() || handledThisMinute > 0) {
             return false;
         }
         int dueSlotCount = countSlotsAtOrBeforeMinute(slots, nowMinuteOfDay);
         if (botProperties.isAutoPublishCatchUpEnabled()) {
-            return dueSlotCount > 0 && publishedToday < dueSlotCount;
+            return dueSlotCount > 0 && handledToday < dueSlotCount;
         }
-        return hasSlotAtMinute(slots, nowMinuteOfDay) && publishedToday < dueSlotCount;
+        return hasSlotAtMinute(slots, nowMinuteOfDay) && handledToday < dueSlotCount;
+    }
+
+    private boolean isPublishMinute(List<Integer> slots,
+                                    int nowMinuteOfDay,
+                                    int handledToday,
+                                    int handledThisMinute,
+                                    int dailyLimit) {
+        if (slots == null || slots.isEmpty() || dailyLimit <= 0 || handledThisMinute > 0) {
+            return false;
+        }
+        int dueSlotCount = countSlotsAtOrBeforeMinute(slots, nowMinuteOfDay);
+        if (botProperties.isAutoPublishCatchUpEnabled()) {
+            return hasSlotAtMinute(slots, nowMinuteOfDay)
+                    && handledToday < Math.min(Math.max(0, dailyLimit), dueSlotCount);
+        }
+        return hasSlotAtMinute(slots, nowMinuteOfDay) && handledToday < dueSlotCount;
     }
 
     private boolean isPublishMinute(List<Integer> slots,
@@ -671,6 +707,73 @@ public class AssistantBotService {
             }
         }
         return false;
+    }
+
+    private boolean shouldRecoverMissedPostAfterLastSlot(List<Integer> slots,
+                                                         int nowMinuteOfDay,
+                                                         int handledToday,
+                                                         int handledThisMinute,
+                                                         int handledRecoveryCooldown,
+                                                         int dailyLimit) {
+        if (!botProperties.isAutoPublishCatchUpEnabled()
+                || slots == null
+                || slots.isEmpty()
+                || dailyLimit <= 0
+                || handledThisMinute > 0
+                || handledToday >= dailyLimit
+                || handledRecoveryCooldown > 0) {
+            return false;
+        }
+        Integer lastSlot = slots.get(slots.size() - 1);
+        return lastSlot != null && nowMinuteOfDay > lastSlot;
+    }
+
+    private List<Integer> resolveAutoPublishSlots(PersonaProperties persona,
+                                                  LocalDate date,
+                                                  String mode,
+                                                  int dailyLimit) {
+        if (persona == null || date == null || !StringUtils.hasText(mode) || dailyLimit <= 0) {
+            return Collections.emptyList();
+        }
+
+        List<Integer> primarySlots = botProperties.buildDailyAutoPublishSlots(
+                date,
+                mode,
+                dailyLimit,
+                persona.getBoardTitle(),
+                persona.getName()
+        );
+        if (!MODE_POST.equals(mode) || !botProperties.isAutoPublishCatchUpEnabled()) {
+            return primarySlots;
+        }
+
+        int retrySlots = Math.max(0, botProperties.getAutoPublishCatchUpPostRetrySlots());
+        if (retrySlots <= 0 || primarySlots.isEmpty()) {
+            return primarySlots;
+        }
+
+        int lastPrimarySlot = primarySlots.get(primarySlots.size() - 1);
+        if (lastPrimarySlot >= (24 * 60) - 1) {
+            return primarySlots;
+        }
+
+        List<Integer> catchUpSlots = botProperties.buildDailyAutoPublishSlotsInRange(
+                date,
+                mode + "_catchup",
+                retrySlots,
+                persona.getBoardTitle(),
+                persona.getName(),
+                lastPrimarySlot + 1,
+                (24 * 60) - 1
+        );
+        if (catchUpSlots.isEmpty()) {
+            return primarySlots;
+        }
+
+        List<Integer> combinedSlots = new ArrayList<>(primarySlots);
+        combinedSlots.addAll(catchUpSlots);
+        Collections.sort(combinedSlots);
+        return combinedSlots;
     }
 
     private String formatMinuteOfDay(int minuteOfDay) {
@@ -1151,19 +1254,49 @@ public class AssistantBotService {
                                                                String boardTitle,
                                                                Integer targetPostNum,
                                                                String reason) {
+        return createSkippedAutoPublishHistory(persona, boardTitle, MODE_COMMENT, targetPostNum, reason);
+    }
+
+    private AssistantBotHistoryDTO createSkippedAutoPublishHistory(PersonaProperties persona,
+                                                                   String boardTitle,
+                                                                   String mode,
+                                                                   Integer targetPostNum,
+                                                                   String reason) {
         AssistantBotHistoryDTO history = new AssistantBotHistoryDTO();
         history.setPersonaName(persona.getName());
         history.setBoardTitle(boardTitle);
-        history.setGenerationMode(MODE_COMMENT);
+        history.setGenerationMode(mode);
         history.setTargetPostNum(targetPostNum);
         history.setTopic("skip");
         history.setDraftTitle(null);
         history.setDraftBody("");
-        history.setRawJson("{\"analysis\":{\"comment_type\":\"skip\",\"tone_match\":\"\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
-                + "\"reply\":{\"should_reply\":false,\"body\":\"\"},"
-                + "\"self_review\":{\"naturalness\":100,\"context_fit\":100,\"conflict_risk\":0,\"needs_revision\":false}}");
+        if (MODE_POST.equals(normalizeMode(mode))) {
+            history.setRawJson("{\"analysis\":{\"topic\":\"skip\",\"post_strategy\":\"fresh\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
+                    + "\"post\":{\"title\":\"\",\"body\":\"\"},"
+                    + "\"self_review\":{\"naturalness\":100,\"novelty\":100,\"engagement\":0,\"needs_revision\":false}}");
+        } else {
+            history.setRawJson("{\"analysis\":{\"comment_type\":\"skip\",\"tone_match\":\"\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
+                    + "\"reply\":{\"should_reply\":false,\"body\":\"\"},"
+                    + "\"self_review\":{\"naturalness\":100,\"context_fit\":100,\"conflict_risk\":0,\"needs_revision\":false}}");
+        }
         history.setStatus(STATUS_SKIPPED);
         return history;
+    }
+
+    private void insertAutoPublishSkippedHistory(PersonaProperties persona,
+                                                 String boardTitle,
+                                                 String mode,
+                                                 Integer targetPostNum,
+                                                 String reason) {
+        AssistantBotHistoryDTO history = createSkippedAutoPublishHistory(persona, boardTitle, mode, targetPostNum, reason);
+        assistantBotMapper.insertHistory(history);
+    }
+
+    private void updateAutoPublishHistoryAsSkipped(Long historyId) {
+        if (historyId == null) {
+            return;
+        }
+        assistantBotMapper.updateStatus(historyId, STATUS_SKIPPED, null);
     }
 
     private DuplicateCheck findDuplicateIssue(String mode,
