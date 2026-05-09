@@ -677,19 +677,6 @@ public class AssistantBotService {
         return hasSlotAtMinute(slots, nowMinuteOfDay) && handledToday < dueSlotCount;
     }
 
-    private boolean isPublishMinute(List<Integer> slots,
-                                    Integer nowMinuteOfDay,
-                                    Integer publishedToday,
-                                    Integer publishedThisMinute,
-                                    Integer ignoredPublishedCount) {
-        return isPublishMinute(
-                slots,
-                nowMinuteOfDay == null ? -1 : nowMinuteOfDay,
-                publishedToday == null ? 0 : publishedToday,
-                publishedThisMinute == null ? 0 : publishedThisMinute
-        );
-    }
-
     private int countSlotsAtOrBeforeMinute(List<Integer> slots, int minuteOfDay) {
         int count = 0;
         for (Integer slot : slots) {

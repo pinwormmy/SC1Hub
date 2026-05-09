@@ -25,9 +25,14 @@
                        <tr class="notice-tr">
                            <td class="post-num hide-on-mobile">${notice.postNum}&nbsp;</td>
                            <td class="title mobile-visible sc-title-cell">
-                               <a class="noticeTitle sc-title-clip" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">
-                                   <span class="sc-title-slide">[공지] ${notice.title}<c:if test="${notice.commentCount > 0}">( ${notice.commentCount} )</c:if></span>
-                               </a>
+                               <div class="sc-post-title-row">
+                                   <a class="noticeTitle sc-post-title-link" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">
+                                       <span class="sc-post-title-text">[공지] ${notice.title}</span>
+                                   </a>
+                                   <c:if test="${notice.commentCount > 0}">
+                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">( ${notice.commentCount} )</a>
+                                   </c:if>
+                               </div>
                            </td>
                            <td class="writer hide-on-mobile">${notice.writer}</td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${notice.regDate}"/></td>
@@ -40,9 +45,14 @@
                        <tr>
                            <td class="post-num hide-on-mobile">${post.postNum}&nbsp;</td>
                            <td class="title mobile-visible sc-title-cell">
-                               <a class="postTitle sc-title-clip" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">
-                                   <span class="sc-title-slide">${post.title}<c:if test="${post.commentCount > 0}">( ${post.commentCount} )</c:if></span>
-                               </a>
+                               <div class="sc-post-title-row">
+                                   <a class="postTitle sc-post-title-link" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">
+                                       <span class="sc-post-title-text">${post.title}</span>
+                                   </a>
+                                   <c:if test="${post.commentCount > 0}">
+                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">( ${post.commentCount} )</a>
+                                   </c:if>
+                               </div>
                            </td>
                            <td class="writer hide-on-mobile">${post.writer}</td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${post.regDate}"/></td>

@@ -25,10 +25,39 @@
     max-width: 470px;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: clip;
+    text-overflow: ellipsis;
 }
 .boardList .sc-title-cell {
-    text-overflow: clip;
+    text-overflow: ellipsis;
+}
+
+.boardList .sc-post-title-row {
+    display: flex;
+    align-items: baseline;
+    min-width: 0;
+    max-width: 100%;
+    gap: 4px;
+}
+
+.boardList .sc-post-title-link {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.boardList .sc-post-title-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.boardList .sc-comment-count {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .boardList .sc-title-clip,
