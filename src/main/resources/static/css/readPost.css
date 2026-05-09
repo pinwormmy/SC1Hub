@@ -1,14 +1,16 @@
 .post-title {
-    padding: 0.5rem 0.75rem;
-    font-size: 32px;
+    padding: 0.5rem 0.65rem;
+    font-size: clamp(1.35rem, 3.2vw, 1.8rem);
     font-weight: 400;
     border-color: #bbb;
+    line-height: 1.22;
+    overflow-wrap: anywhere;
 }
 .info-row {
-    padding: 0.35rem 0.75rem 0.3rem;
+    padding: 0.35rem 0.65rem 0.3rem;
     border-bottom: 1px solid;
     border-color: #bbb;
-    font-size: 20px;
+    font-size: 0.94rem;
     font-weight: 400;
     overflow: hidden;
 }
@@ -29,6 +31,7 @@
     font-weight: inherit !important;
     font-style: inherit !important;
     max-width: 100%;
+    overflow-wrap: anywhere;
 }
 .post-content img {
     max-width: 100% !important;
@@ -36,10 +39,27 @@
     display: block;
 }
 @media (max-width: 768px) {
+    .post-title {
+        padding-right: 0.25rem;
+        padding-left: 0.25rem;
+    }
+    .info-row {
+        padding-right: 0.25rem;
+        padding-left: 0.25rem;
+        line-height: 1.35;
+    }
     .post-content,
     .post-content * {
         max-width: 100% !important;
         box-sizing: border-box;
+    }
+    .btn-left,
+    .btn-right {
+        float: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        justify-content: flex-start;
     }
 }
 #commentContent {

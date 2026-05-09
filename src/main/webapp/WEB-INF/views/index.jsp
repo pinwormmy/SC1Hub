@@ -37,7 +37,7 @@
         <%@include file="./include/header.jspf" %>
     </head>
 
-    <body>
+    <body class="sc-home-page">
         <div class="section-inner">
             <div class="sc-container">
                 <div class="sc-row">

@@ -6,7 +6,7 @@
 body {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: inherit;
     line-height: 1.5;
 }
 
@@ -17,22 +17,22 @@ body {
     width: 100%;
     margin-right: auto;
     margin-left: auto;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: clamp(8px, 2.8vw, 18px);
+    padding-left: clamp(8px, 2.8vw, 18px);
 }
 
 /* Responsive Container Widths */
 @media (min-width: 576px) {
-    .sc-container { max-width: 540px; }
+    .sc-container { max-width: 94vw; }
 }
 @media (min-width: 768px) {
-    .sc-container { max-width: 720px; }
+    .sc-container { max-width: 94vw; }
 }
 @media (min-width: 992px) {
-    .sc-container { max-width: 960px; }
+    .sc-container { max-width: 1120px; }
 }
 @media (min-width: 1200px) {
-    .sc-container { max-width: 1140px; }
+    .sc-container { max-width: 1240px; }
 }
 
 /* Bootstrap Legacy Compatibility
@@ -43,43 +43,43 @@ body {
     width: 100%;
     margin-right: auto;
     margin-left: auto;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: clamp(8px, 2.8vw, 18px);
+    padding-left: clamp(8px, 2.8vw, 18px);
 }
 
 @media (min-width: 576px) {
-    .container { max-width: 540px; }
+    .container { max-width: 94vw; }
 }
 @media (min-width: 768px) {
-    .container { max-width: 720px; }
+    .container { max-width: 94vw; }
 }
 @media (min-width: 992px) {
-    .container { max-width: 960px; }
+    .container { max-width: 1120px; }
 }
 @media (min-width: 1200px) {
-    .container { max-width: 1140px; }
+    .container { max-width: 1240px; }
 }
 
 .row {
     display: flex;
     flex-wrap: wrap;
-    margin-right: -15px;
-    margin-left: -15px;
+    margin-right: -10px;
+    margin-left: -10px;
 }
 
 [class^="col-"],
 [class*=" col-"] {
     position: relative;
     width: 100%;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: 10px;
+    padding-left: 10px;
 }
 
 .row > :not([class^="col-"]):not([class*=" col-"]):not([class^="sc-col-"]):not([class*=" sc-col-"]) {
     flex: 0 0 100%;
     max-width: 100%;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: 10px;
+    padding-left: 10px;
 }
 
 .col-xs-12,
@@ -101,16 +101,17 @@ body {
 .sc-row {
     display: flex;
     flex-wrap: wrap;
-    margin-right: -15px;
-    margin-left: -15px;
+    margin-right: -10px;
+    margin-left: -10px;
+    row-gap: 16px;
 }
 
 /* Columns Base */
 [class^="sc-col-"] {
     position: relative;
     width: 100%;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-right: 10px;
+    padding-left: 10px;
 }
 
 /* Mobile First (Default 100%) - 이미 width: 100%가 기본임 */
@@ -152,6 +153,23 @@ body {
     .col-lg-9 {
         flex: 0 0 70%;
         max-width: 70%;
+    }
+}
+
+@media (max-width: 767px) {
+    .row,
+    .sc-row {
+        margin-right: -4px;
+        margin-left: -4px;
+        row-gap: 10px;
+    }
+
+    [class^="col-"],
+    [class*=" col-"],
+    [class^="sc-col-"],
+    .row > :not([class^="col-"]):not([class*=" col-"]):not([class^="sc-col-"]):not([class*=" sc-col-"]) {
+        padding-right: 4px;
+        padding-left: 4px;
     }
 }
 

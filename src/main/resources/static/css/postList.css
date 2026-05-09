@@ -2,6 +2,7 @@
     width: 100%;
     border-collapse: collapse;
     overflow: hidden;
+    font-size: 0.96rem;
 }
 
 .boardList th {
@@ -13,13 +14,13 @@
 }
 .boardList th,
 .boardList td {
-    padding: 2px;
+    padding: 0.22rem;
 }
 .boardList tr th {
-    padding: 5px;
+    padding: 0.32rem 0.22rem;
 }
 .post-heading {
-    border-bottom: 2px solid white;
+    border-bottom: 1px solid var(--sc-line-soft, rgba(255, 255, 255, 0.5));
 }
 .title {
     max-width: 470px;
@@ -82,8 +83,8 @@
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 8px;
-    margin-top: 10px;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
 }
 .sc-paging__pages {
     display: flex;
@@ -120,15 +121,32 @@
     }
     .boardList th,
     .boardList td {
-        padding-top: 5px;
-        padding-bottom: 5px;
-        padding-left: 1px;
-        padding-right: 1px;
+        padding-top: 0.38rem;
+        padding-bottom: 0.38rem;
+        padding-left: 0.08rem;
+        padding-right: 0.08rem;
     }
     .boardList .post-num {
         min-width: 55px;
     }
     .boardList .title {
+        max-width: 100%;
+    }
+    .boardList {
+        font-size: 0.95rem;
+    }
+    .sc-paging {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        gap: 0.35rem;
+    }
+    .sc-paging__pages,
+    .sc-paging__prev,
+    .sc-paging__next {
+        grid-column: auto;
+        justify-self: center;
+    }
+    .sc-paging__pages {
         max-width: 100%;
     }
 }
