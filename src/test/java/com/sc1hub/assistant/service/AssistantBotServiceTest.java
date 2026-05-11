@@ -351,6 +351,7 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("긍정적인 덕담"));
         assertTrue(prompt.contains("다양한 주제"));
         assertTrue(prompt.contains("과장된 미담체는 피하라"));
+        assertTrue(prompt.contains("전혀 무관한 일상 소재"));
     }
 
     @Test
@@ -470,8 +471,8 @@ class AssistantBotServiceTest {
 
     @Test
     void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
-        BoardDTO targetPost = post(903, "테스터A", 0, "오늘 게임 좀 잘 풀렸다");
-        targetPost.setContent("오랜만에 연승해서 기분 좋네");
+        BoardDTO targetPost = post(903, "테스터A", 0, "오늘 퇴근길에 비가 너무 많이 왔다");
+        targetPost.setContent("우산이 있었는데도 신발이 다 젖어서 좀 난감했다");
 
         String rule = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
@@ -483,6 +484,7 @@ class AssistantBotServiceTest {
         assertTrue(rule.contains("응원"));
         assertTrue(rule.contains("긍정적인 덕담"));
         assertTrue(rule.contains("설교"));
+        assertTrue(rule.contains("전혀 무관한 일상이든"));
     }
 
     @Test
