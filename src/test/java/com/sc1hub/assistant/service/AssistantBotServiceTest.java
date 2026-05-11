@@ -348,7 +348,7 @@ class AssistantBotServiceTest {
                 3
         );
 
-        assertTrue(prompt.contains("긍정적인 덕담"));
+        assertTrue(prompt.contains("짧은 응원"));
         assertTrue(prompt.contains("스타크래프트 얘기뿐 아니라"));
         assertTrue(prompt.contains("과장된 미담체는 피하라"));
         assertTrue(prompt.contains("전혀 무관한 일상 소재"));
