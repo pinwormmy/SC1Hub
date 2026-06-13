@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 
 - `./gradlew clean build`: Compiles and packages the app (WAR enabled).
-- `./gradlew test`: Runs the JUnit 5 test suite (reference only; the repository owner runs tests in their IDE).
+- `./gradlew test`: Runs the JUnit 5 test suite. Codex should run relevant tests whenever feasible after code changes.
 - `./gradlew bootRun`: Runs locally (port `8082` is set in `build.gradle`).
 
 If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line endings.
@@ -28,9 +28,11 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 ## Testing Guidelines
 
 - Frameworks: JUnit 5 (Jupiter) + Mockito (via Spring Boot test starter).
-- Keep tests unit-level by default (mock mappers/services); avoid requiring DB, SMTP, or external services.
-- Naming: `*Test` classes under the matching package (e.g., `com.sc1hub.board`).
-- When Codex is running in WSL, do not run tests automatically; the repository owner runs them directly in their IDE.
+- Keep tests unit-level by default; avoid requiring DB, SMTP, or external services.
+- Naming: `*Test` classes under the matching package.
+- Codex should run the narrowest useful verification after changes, such as targeted tests, `./gradlew test`, or `./gradlew clean build` when the scope justifies it.
+- If tests cannot be run because of sandboxing, missing local configuration, external services, or long runtime, Codex must state exactly what was not run and why.
+- Do not run tests that require production credentials, production databases, SMTP, or other external services unless explicitly requested and safely configured.
 
 ## Commit & Pull Request Guidelines
 
@@ -45,7 +47,7 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 
 ## Agent Notes (Codex/AI)
 
-- When working from WSL, do not run tests automatically. Write or adjust test code only, and leave all test execution to the repository owner in their IDE.
+- Final responses for code changes should include verification performed, commands run, and any remaining checks before deployment.
 - Assistant bot operations can be inspected with admin JSON APIs:
   - `GET /api/admin/assistant-bot/history?days=3&limit=100`: recent bot generation history rows, excluding large `raw_json`.
   - `GET /api/admin/assistant-bot/history/summary?days=3`: counts grouped by persona, board, mode, and status, with the latest timestamp.
