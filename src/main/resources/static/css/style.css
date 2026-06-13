@@ -343,13 +343,21 @@ textarea:focus-visible {
     min-height: calc(100svh - 190px);
 }
 .ad-banners {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 120px));
     justify-content: center;
-    flex-wrap: wrap;
+    max-height: 240px;
+    overflow: hidden;
     margin-top: 20px;
+}
+.ad-banners a {
+    display: block;
+    width: 120px;
 }
 .ad-banners img {
     display: block;
+    width: 120px;
+    height: auto;
 }
 .coupang-banner-text {
     width: 100%;
@@ -743,18 +751,6 @@ textarea.cke_source {
 @media screen and (max-width: 768px) {
     .sc-feed__ad .ad-banners {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(0, 120px));
-        gap: 0;
-        justify-content: center;
-    }
-    .sc-feed__ad .ad-banners a {
-        display: block;
-        width: 100%;
-    }
-    .sc-feed__ad .ad-banners img {
-        width: 100%;
-        max-width: 120px;
-        height: auto;
     }
 }
 
