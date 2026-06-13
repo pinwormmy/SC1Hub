@@ -1,6 +1,10 @@
 HELP.md
+.DS_Store
 .gradle
+.gradle/
 build/
+.local-data/
+.deploy.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -14,6 +18,8 @@ data/assistant/
 ### properties ###
 application-local.properties
 application-online.properties
+src/main/resources/application-local.properties
+src/main/resources/application-online.properties
 
 ### STS ###
 .apt_generated

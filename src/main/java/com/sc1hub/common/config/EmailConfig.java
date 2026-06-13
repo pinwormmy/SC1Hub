@@ -32,7 +32,6 @@ public class EmailConfig {
 
     @Bean
     public JavaMailSender javaMailService() {
-        log.debug("패스워드 확인: {}", password); // 확인하고 지워
         JavaMailSenderImpl javaMailSender = new JavaMailSenderImpl();
         javaMailSender.setHost("smtp.gmail.com");
         javaMailSender.setUsername(id);
