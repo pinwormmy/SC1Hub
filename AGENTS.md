@@ -39,6 +39,15 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 - Commits in this repo use short, descriptive messages (often Korean). Keep them concise and action-focused.
 - PRs should include: purpose, key changes, and any UI-impact screenshots (JSP/CSS/JS).
 
+## Branch Workflow
+
+- For each new implementation task, create a dedicated branch from the current main baseline using `codex/<task-name>`.
+- Do not work directly on `main` unless the user explicitly requests it.
+- If a session starts on `main` or detached HEAD, create or switch to a task branch before making code changes.
+- After implementation, run the narrowest useful tests. Commit changes when the user asked for a completed implementation or commit-ready work.
+- Do not push, create PRs, or merge into `main` unless the user explicitly asks.
+- When the user explicitly asks to push, create a PR, or merge, prepare the branch by committing first if needed, then confirm before the final merge into `main`.
+
 ## Security & Configuration Tips
 
 - Do not commit secrets. Local/online profiles should live in `application-local.properties` and
