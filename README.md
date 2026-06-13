@@ -2,6 +2,27 @@
 
 스타크래프트1 전문 공략사이트.
 
+## 운영 디스크 정리
+
+저용량 JSP/Tomcat 호스팅에서는 Tomcat 로그와 배포 WAR 백업이 누적되어 디스크를 채울 수 있습니다.
+`scripts/cleanup-hosting-storage.sh`는 Tomcat 디렉터리의 디스크 사용률이 기본 90% 이상일 때만 아래 항목을 정리합니다.
+
+- `$TOMCAT_DIR/logs`의 `*.log`, `*.out`, `*.txt` 파일 truncate
+- `$TOMCAT_DIR/webapps`의 오래된 `*.war.bak.*` 백업 삭제, 기본 최신 2개 보관
+- `$TOMCAT_DIR/temp`, `$TOMCAT_DIR/work` 하위 임시 파일 삭제
+
+운영 서버에서 예행 실행:
+
+```bash
+DRY_RUN=true TOMCAT_DIR=/home/hosting_users/sc1hub/tomcat bash scripts/cleanup-hosting-storage.sh
+```
+
+cron 예시, 10분마다 확인하고 90% 이상일 때만 정리:
+
+```cron
+*/10 * * * * TOMCAT_DIR=/home/hosting_users/sc1hub/tomcat THRESHOLD_PERCENT=90 bash /home/hosting_users/sc1hub/scripts/cleanup-hosting-storage.sh >> /home/hosting_users/sc1hub/storage-cleanup.log 2>&1
+```
+
 ## Terminal AI Assistant (Gemini)
 
 터미널에서 게시판 바로가기용 숫자 명령을 제외한 검색어 및 질문 프롬프트로, 사이트 게시물 기반의 간단한 답변과 관련 게시물 링크를 제공합니다.

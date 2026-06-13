@@ -12,6 +12,7 @@ fi
 DEPLOY_HOST="${DEPLOY_HOST:-sc1hub-prod}"
 DEPLOY_USER="${DEPLOY_USER:-}"
 REMOTE_TOMCAT_DIR="${REMOTE_TOMCAT_DIR:-/home/hosting_users/sc1hub/tomcat}"
+REMOTE_SCRIPT_DIR="${REMOTE_SCRIPT_DIR:-$(dirname "$REMOTE_TOMCAT_DIR")/scripts}"
 REMOTE_WAR_NAME="${REMOTE_WAR_NAME:-ROOT.war}"
 REMOTE_STOP_CMD="${REMOTE_STOP_CMD:-\$REMOTE_TOMCAT_DIR/bin/shutdown.sh}"
 REMOTE_START_CMD="${REMOTE_START_CMD:-\$REMOTE_TOMCAT_DIR/bin/startup.sh}"
@@ -30,6 +31,7 @@ REMOTE_WEBAPPS_DIR="$REMOTE_TOMCAT_DIR/webapps"
 REMOTE_WAR_PATH="$REMOTE_WEBAPPS_DIR/$REMOTE_WAR_NAME"
 REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
+REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 
 echo "Building bootWar..."
 ./gradlew clean bootWar </dev/null
@@ -52,6 +54,10 @@ esac
 echo "Uploading WAR..."
 scp "$WAR_FILE" "$REMOTE:$REMOTE_UPLOAD_PATH"
 
+echo "Uploading maintenance scripts..."
+ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
+scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
+
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
   ". ~/.bash_profile
@@ -62,6 +68,7 @@ ssh "$REMOTE" \
    if [ -f '$REMOTE_WAR_PATH' ]; then
      cp '$REMOTE_WAR_PATH' '$REMOTE_WAR_PATH.bak.'\"\$BACKUP_STAMP\"
    fi
+   chmod +x '$REMOTE_CLEANUP_SCRIPT'
    mv '$REMOTE_UPLOAD_PATH' '$REMOTE_WAR_PATH'
    rm -rf '$REMOTE_EXPLODED_DIR'
    $REMOTE_STOP_CMD || true
