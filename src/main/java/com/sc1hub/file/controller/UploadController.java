@@ -103,7 +103,7 @@ public class UploadController {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
-        String decodedFileName = decodeFileName(fileName);
+        String decodedFileName = decodeRequestParameter(request, "fileName", fileName);
         Path targetPath = null;
         for (Path candidateBase : basePaths) {
             targetPath = findUploadedFile(candidateBase, uid, decodedFileName);
@@ -157,6 +157,34 @@ public class UploadController {
             }
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         }
+    }
+
+    static String decodeRequestParameter(HttpServletRequest request, String parameterName, String fallbackValue) {
+        String rawQuery = request == null ? null : request.getQueryString();
+        String rawValue = findRawQueryValue(rawQuery, parameterName);
+        if (rawValue != null) {
+            return decodeFileName(rawValue);
+        }
+        return decodeFileName(fallbackValue);
+    }
+
+    private static String findRawQueryValue(String rawQuery, String parameterName) {
+        if (rawQuery == null || rawQuery.trim().isEmpty() || parameterName == null || parameterName.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = rawQuery.replace("&amp;", "&");
+        String expectedKey = parameterName.toLowerCase();
+        for (String token : normalized.split("&")) {
+            if (token == null || token.isEmpty()) {
+                continue;
+            }
+            String[] pair = token.split("=", 2);
+            String key = decodeFileName(pair[0]).toLowerCase();
+            if (expectedKey.equals(key)) {
+                return pair.length > 1 ? pair[1] : "";
+            }
+        }
+        return null;
     }
 
     private Path getPrimaryUploadBasePath() {
@@ -222,7 +250,7 @@ public class UploadController {
         return path.replaceFirst("^file:(//)?", "");
     }
 
-    private String decodeFileName(String fileName) {
+    private static String decodeFileName(String fileName) {
         if (fileName == null) {
             return "";
         }
