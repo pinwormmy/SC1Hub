@@ -32,6 +32,7 @@ REMOTE_WAR_PATH="$REMOTE_WEBAPPS_DIR/$REMOTE_WAR_NAME"
 REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
+REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
 
 echo "Building bootWar..."
 ./gradlew clean bootWar </dev/null
@@ -57,12 +58,14 @@ scp "$WAR_FILE" "$REMOTE:$REMOTE_UPLOAD_PATH"
 echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
+scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
   ". ~/.bash_profile
    set -e
    REMOTE_TOMCAT_DIR='$REMOTE_TOMCAT_DIR'
+   REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    SETENV_SH='$REMOTE_TOMCAT_DIR/bin/setenv.sh'
    touch \"\$SETENV_SH\"
@@ -78,6 +81,16 @@ ssh "$REMOTE" \
      cp '$REMOTE_WAR_PATH' '$REMOTE_WAR_PATH.bak.'\"\$BACKUP_STAMP\"
    fi
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
+   PROP=\"$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
+   DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
+   DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
+   DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
+   DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\\1#')
+   ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '\$DB_NAME' AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
+   if [ \"\$ONE_LINE_STRATEGY_TABLES\" != \"2\" ]; then
+     echo 'Applying one-line strategy schema...'
+     MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_SQL\"
+   fi
    mv '$REMOTE_UPLOAD_PATH' '$REMOTE_WAR_PATH'
    rm -rf '$REMOTE_EXPLODED_DIR'
    $REMOTE_STOP_CMD || true
