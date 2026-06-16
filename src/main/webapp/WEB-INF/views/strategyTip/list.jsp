@@ -19,31 +19,6 @@
                         <script>window.alert('${msg}');</script>
                     </c:if>
 
-                    <form class="strategy-tip-form" action="/strategy-tips" method="post">
-                        <div class="strategy-tip-form__meta">
-                            <select name="category" class="form-control" aria-label="한줄 공략 분류" required>
-                                <option value="">분류 선택</option>
-                                <c:forEach var="tipCategory" items="${categories}">
-                                    <option value="${tipCategory.code}">${tipCategory.name}</option>
-                                </c:forEach>
-                            </select>
-                            <c:choose>
-                                <c:when test="${not empty member}">
-                                    <span class="strategy-tip-form__writer">${member.nickName}</span>
-                                </c:when>
-                                <c:otherwise>
-                                    <input type="text" name="writer" class="form-control" placeholder="닉네임" required>
-                                    <input type="password" name="guestPassword" class="form-control" placeholder="비밀번호" required>
-                                </c:otherwise>
-                            </c:choose>
-                        </div>
-                        <div class="strategy-tip-form__body">
-                            <textarea name="content" class="form-control" rows="2" maxlength="160"
-                                      placeholder="한줄 공략을 입력하세요. 예) 테저전 3배럭 압박 뒤 엔베 타이밍을 늦추지 않기" required></textarea>
-                            <button type="submit" class="btn btn-theme">등록</button>
-                        </div>
-                    </form>
-
                     <div class="strategy-tip-tabs" aria-label="한줄 공략 분류">
                         <a class="strategy-tip-tab ${empty category ? 'is-active' : ''}" href="/strategy-tips">전체</a>
                         <c:forEach var="tipCategory" items="${categories}">
@@ -89,6 +64,31 @@
                             <p class="strategy-tip-empty">아직 등록된 한줄 공략이 없습니다.</p>
                         </c:if>
                     </div>
+
+                    <form class="strategy-tip-form" action="/strategy-tips" method="post">
+                        <div class="strategy-tip-form__meta">
+                            <select name="category" class="form-control" aria-label="한줄 공략 분류" required>
+                                <option value="">분류 선택</option>
+                                <c:forEach var="tipCategory" items="${categories}">
+                                    <option value="${tipCategory.code}">${tipCategory.name}</option>
+                                </c:forEach>
+                            </select>
+                            <c:choose>
+                                <c:when test="${not empty member}">
+                                    <span class="strategy-tip-form__writer">${member.nickName}</span>
+                                </c:when>
+                                <c:otherwise>
+                                    <input type="text" name="writer" class="form-control" placeholder="닉네임" required>
+                                    <input type="password" name="guestPassword" class="form-control" placeholder="비밀번호" required>
+                                </c:otherwise>
+                            </c:choose>
+                        </div>
+                        <div class="strategy-tip-form__body">
+                            <textarea name="content" class="form-control" rows="2" maxlength="160"
+                                      placeholder="한줄 공략을 입력하세요. 예) 테저전 3배럭 압박 뒤 엔베 타이밍을 늦추지 않기" required></textarea>
+                            <button type="submit" class="btn btn-theme">등록</button>
+                        </div>
+                    </form>
 
                     <div class="sc-paging strategy-tip-paging">
                         <c:if test="${page.prevPageSetPoint >= 1}">

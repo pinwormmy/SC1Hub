@@ -9,7 +9,7 @@ import org.springframework.boot.web.servlet.support.SpringBootServletInitializer
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @MapperScan(basePackages = {"com.sc1hub.board.mapper", "com.sc1hub.member.mapper", "com.sc1hub.visitor.mapper",
-        "com.sc1hub.assistant.mapper"},
+        "com.sc1hub.assistant.mapper", "com.sc1hub.strategytip.mapper"},
         annotationClass = Mapper.class)
 @SpringBootApplication
 @EnableScheduling
