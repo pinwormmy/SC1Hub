@@ -538,6 +538,32 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void resolveModel_usesPersonaModelWhenConfigured() {
+        AssistantBotProperties.PersonaProperties persona = persona("야옹봇");
+        persona.setModel("gemini-2.5-flash-lite");
+
+        String model = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveModel",
+                persona
+        );
+
+        assertEquals("gemini-2.5-flash-lite", model);
+    }
+
+    @Test
+    void safeCommentForPublish_forMeowPersonaLimitsToOneSentence() {
+        String content = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "safeCommentForPublish",
+                persona("야옹봇"),
+                "야옹 야~~옹~~~~. 야옹 야옹."
+        );
+
+        assertEquals("야옹 야~~옹~~~~.", content);
+    }
+
+    @Test
     void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
         BoardDTO targetPost = post(903, "테스터A", 0, "오늘 퇴근길에 비가 너무 많이 왔다");
         targetPost.setContent("우산이 있었는데도 신발이 다 젖어서 좀 난감했다");

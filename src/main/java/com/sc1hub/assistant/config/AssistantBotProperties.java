@@ -175,6 +175,7 @@ public class AssistantBotProperties {
         legacy.setEnabled(true);
         legacy.setName(personaName);
         legacy.setBoardTitle(boardTitle);
+        legacy.setModel(model);
         PersonaProperties normalizedLegacy = normalizePersona(legacy);
         if (normalizedLegacy != null) {
             enabledPersonas.add(normalizedLegacy);
@@ -194,6 +195,7 @@ public class AssistantBotProperties {
         normalized.setEnabled(persona.isEnabled());
         normalized.setName(resolvedName);
         normalized.setBoardTitle(StringUtils.hasText(persona.getBoardTitle()) ? persona.getBoardTitle().trim() : boardTitle);
+        normalized.setModel(StringUtils.hasText(persona.getModel()) ? persona.getModel().trim() : model);
         return normalized;
     }
 
@@ -202,5 +204,6 @@ public class AssistantBotProperties {
         private boolean enabled = true;
         private String name;
         private String boardTitle;
+        private String model;
     }
 }
