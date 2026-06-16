@@ -1,0 +1,124 @@
+.strategy-tip-form {
+    border: 1px solid var(--sc-line-soft, rgba(255, 255, 255, 0.35));
+    padding: 0.65rem;
+    margin-bottom: 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.strategy-tip-form__meta,
+.strategy-tip-form__body {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.strategy-tip-form__meta {
+    grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1fr);
+    margin-bottom: 0.5rem;
+}
+
+.strategy-tip-form__body {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+}
+
+.strategy-tip-form__writer {
+    align-self: center;
+    color: #75f94c;
+}
+
+.strategy-tip-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0 0 0.75rem;
+}
+
+.strategy-tip-tab {
+    border: 1px solid rgba(117, 249, 76, 0.42);
+    padding: 0.22rem 0.45rem;
+    color: inherit;
+}
+
+.strategy-tip-tab.is-active {
+    color: #75f94c;
+    border-color: #75f94c;
+}
+
+.strategy-tip-list {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.strategy-tip-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    align-items: center;
+    border-bottom: 1px solid var(--sc-line-soft, rgba(255, 255, 255, 0.25));
+    padding: 0.45rem 0;
+}
+
+.strategy-tip-item__main {
+    min-width: 0;
+}
+
+.strategy-tip-item__category {
+    display: inline-block;
+    color: #75f94c;
+    margin-bottom: 0.18rem;
+}
+
+.strategy-tip-item__content {
+    margin: 0;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.strategy-tip-item__meta {
+    display: flex;
+    gap: 0.55rem;
+    margin-top: 0.25rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.88rem;
+}
+
+.strategy-tip-item__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.strategy-tip-like,
+.strategy-tip-delete {
+    border: 1px solid rgba(117, 249, 76, 0.42);
+    background: rgba(0, 0, 0, 0.22);
+    color: inherit;
+    padding: 0.25rem 0.45rem;
+    white-space: nowrap;
+}
+
+.strategy-tip-like:hover,
+.strategy-tip-delete:hover {
+    color: #75f94c;
+    border-color: #75f94c;
+}
+
+.strategy-tip-empty {
+    padding: 1rem 0;
+}
+
+.strategy-tip-paging {
+    margin-bottom: 0.75rem;
+}
+
+@media screen and (max-width: 768px) {
+    .strategy-tip-form__meta,
+    .strategy-tip-form__body,
+    .strategy-tip-item {
+        grid-template-columns: 1fr;
+    }
+
+    .strategy-tip-item__actions {
+        justify-content: flex-end;
+    }
+}
