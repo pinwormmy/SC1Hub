@@ -490,7 +490,7 @@ public class AssistantBotService {
         LocalDateTime since = today.atStartOfDay();
         LocalDateTime minuteStart = now.withSecond(0).withNano(0);
 
-        int handledPostToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
+        int handledPostToday = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
         int handledCommentToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
         int handledPostThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
         int handledCommentThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, minuteStart);

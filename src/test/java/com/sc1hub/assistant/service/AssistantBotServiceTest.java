@@ -22,18 +22,23 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -209,6 +214,69 @@ class AssistantBotServiceTest {
         assertEquals("테뻔뻔봇", results.get(1).getPersonaName());
         assertEquals("저묵묵봇", results.get(2).getPersonaName());
         assertEquals("훈훈봇", results.get(3).getPersonaName());
+    }
+
+    @Test
+    void autoPublishPostDailyLimit_ignoresPreviousSkippedDrafts() throws Exception {
+        botProperties.setAutoPublishPostDailyLimit(3);
+        botProperties.setAutoPublishCommentDailyLimit(0);
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
+        while (postSlots.get(0) <= 60) {
+            date = date.plusDays(1);
+            postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
+        }
+        int firstPostSlot = postSlots.get(0);
+        LocalTime slotTime = LocalTime.of(firstPostSlot / 60, firstPostSlot % 60);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        Clock slotClock = Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                slotClock
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = LocalDateTime.of(date, slotTime);
+        LocalDateTime recoverySince = minuteStart.minusMinutes(botProperties.getAutoPublishCatchUpRecoveryCooldownMinutes());
+        AtomicReference<AssistantBotHistoryDTO> insertedHistory = new AtomicReference<>();
+        doAnswer(invocation -> {
+            AssistantBotHistoryDTO history = invocation.getArgument(0);
+            history.setId(77L);
+            insertedHistory.set(history);
+            return null;
+        }).when(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
+
+        when(assistantBotMapper.countPublishedSinceByMode("프징징봇", "funboard", "post", since)).thenReturn(0);
+        lenient().when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", since)).thenReturn(1);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", recoverySince)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "comment", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "comment", minuteStart)).thenReturn(0);
+        when(boardMapper.selectRecentPostsForBot("funboard", botProperties.getRecentPostLimit()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.selectRecentCommentsForBot("funboard", null, botProperties.getRecentCommentLimit()))
+                .thenReturn(Collections.emptyList());
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validPostDraftJson());
+        when(assistantBotMapper.selectHistoryById(77L)).thenAnswer(invocation -> insertedHistory.get());
+        when(boardMapper.selectRecentPostsForBot("funboard", 5))
+                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "오늘 래더 한 판만 더 해야지")));
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+
+        assertEquals("published", result.getOutcome());
+        assertEquals("post", result.getMode());
+        assertEquals(Integer.valueOf(701), result.getPublishedPostNum());
+        verify(assistantBotMapper).countPublishedSinceByMode("프징징봇", "funboard", "post", since);
+        verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString());
     }
 
     @Test
