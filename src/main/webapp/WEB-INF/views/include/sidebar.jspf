@@ -109,6 +109,7 @@
                     <li><a href="/boards/pVsPBoard" class="sc-menu-link sc-menu-link--protoss">18. 프프전 게시판</a></li>
                     <li><a href="/boards/teamPlayGuideBoard">19. 팀플 게시판</a></li>
                     <li><a href="/boards/tipBoard" accesskey="t">20. 꿀팁보급고(T)</a></li>
+                    <li><a href="/strategy-tips" accesskey="o">21. 한줄 공략(O)</a></li>
                 </ul>
             </div>
         </fieldset>
