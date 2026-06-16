@@ -1,5 +1,6 @@
 package com.sc1hub.board.service;
 
+import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -12,10 +13,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,7 +25,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -202,7 +202,7 @@ public class UploadedImageDimensionInjector {
         if (StringUtils.hasText(path) && path.contains("/ckImgSubmit")) {
             Map<String, String> query = parseQuery(uri.getRawQuery());
             String uid = query.get("uid");
-            String fileName = sanitizeFileName(normalizeFileName(query.get("filename")));
+            String fileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(query.get("filename"));
             if (StringUtils.hasText(uid) && StringUtils.hasText(fileName)) {
                 return new UploadedImageRef(uid.trim(), fileName);
             }
@@ -214,7 +214,7 @@ public class UploadedImageDimensionInjector {
                 int separator = rawToken.indexOf('_');
                 if (separator > 0 && separator < rawToken.length() - 1) {
                     String uid = rawToken.substring(0, separator).trim();
-                    String fileName = sanitizeFileName(normalizeFileName(rawToken.substring(separator + 1)));
+                    String fileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(rawToken.substring(separator + 1));
                     if (StringUtils.hasText(uid) && StringUtils.hasText(fileName)) {
                         return new UploadedImageRef(uid, fileName);
                     }
@@ -251,24 +251,6 @@ public class UploadedImageDimensionInjector {
         } catch (Exception e) {
             return value;
         }
-    }
-
-    private static String normalizeFileName(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-        String trimmed = fileName.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        return Normalizer.normalize(trimmed, Normalizer.Form.NFC);
-    }
-
-    private static String sanitizeFileName(String fileName) {
-        if (!StringUtils.hasText(fileName)) {
-            return "";
-        }
-        return fileName.trim().replace("/", "_").replace("\\", "_");
     }
 
     private ImageDimension readImageDimension(UploadedImageRef ref) {
@@ -372,30 +354,36 @@ public class UploadedImageDimensionInjector {
         if (basePath == null || !StringUtils.hasText(uid) || !StringUtils.hasText(fileName)) {
             return null;
         }
-        String normalizedName = normalizeFileName(fileName);
-        Path direct = basePath.resolve(uid + "_" + normalizedName);
-        if (Files.isRegularFile(direct)) {
-            return direct;
-        }
-        if (!Files.isDirectory(basePath)) {
-            return null;
-        }
-        String prefix = uid + "_";
-        try (Stream<Path> stream = Files.list(basePath)) {
-            for (Path candidate : (Iterable<Path>) stream::iterator) {
-                String name = candidate.getFileName().toString();
-                if (!name.startsWith(prefix)) {
-                    continue;
-                }
-                String actualName = name.substring(prefix.length());
-                if (normalizeFileName(actualName).equals(normalizedName)) {
-                    return candidate;
-                }
+        for (String candidateFileName : UploadedImageFileNameUtil.candidateFileNames(fileName)) {
+            Path targetPath = resolveUploadTarget(basePath, uid, candidateFileName);
+            if (targetPath == null) {
+                continue;
             }
-        } catch (IOException e) {
-            log.debug("Failed to scan upload directory. path={}", basePath, e);
+            try {
+                if (Files.isRegularFile(targetPath)) {
+                    return targetPath;
+                }
+            } catch (InvalidPathException e) {
+                log.debug("Skipping invalid uploaded image path. basePath={}, fileName={}", basePath, candidateFileName, e);
+            }
         }
         return null;
+    }
+
+    private Path resolveUploadTarget(Path basePath, String uid, String fileName) {
+        if (basePath == null || !StringUtils.hasText(uid) || !StringUtils.hasText(fileName)) {
+            return null;
+        }
+        String normalizedName = UploadedImageFileNameUtil.normalizeFileName(fileName);
+        if (!StringUtils.hasText(normalizedName)) {
+            return null;
+        }
+        try {
+            return basePath.resolve(uid + "_" + normalizedName);
+        } catch (InvalidPathException e) {
+            log.debug("Failed to resolve uploaded image path. basePath={}, fileName={}", basePath, normalizedName, e);
+            return null;
+        }
     }
 
     private static String upsertAttribute(String imgTag, String attributeName, String value) {

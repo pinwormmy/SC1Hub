@@ -1,18 +1,24 @@
 package com.sc1hub.file.controller;
 
+import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UploadControllerTest {
 
@@ -23,8 +29,9 @@ class UploadControllerTest {
     void ckSubmit_recoversUtf8FileNameFromRawQueryString() throws Exception {
         String uid = "81469f62-87c3-4b41-8832-eb089fa50414";
         String fileName = "ssb 사건.webp";
+        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
         byte[] imageBytes = new byte[] { 1, 2, 3, 4 };
-        Files.write(tempDir.resolve(uid + "_" + fileName), imageBytes);
+        Files.write(tempDir.resolve(uid + "_" + storedFileName), imageBytes);
 
         UploadController controller = new UploadController();
         ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
@@ -48,6 +55,34 @@ class UploadControllerTest {
         String result = UploadController.decodeRequestParameter(request, "fileName", "broken");
 
         assertEquals("간호사도 궁금해하는 럴커.jpg", result);
+    }
+
+    @Test
+    void imageUpload_storesAsciiSafeFileName() throws Exception {
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/imageUpload");
+        MockMultipartFile upload = new MockMultipartFile(
+                "upload",
+                "뮤탈과 바이오닉 심슨버전.jpg",
+                "image/jpeg",
+                new byte[] { 9, 8, 7 }
+        );
+
+        Map<String, Object> body = controller.imageUpload(request, upload).getBody();
+
+        assertNotNull(body);
+        assertTrue(body.get("fileName").toString().matches("[A-Za-z0-9_-]+\\.jpg"));
+        assertTrue(body.get("url").toString().contains("/ckImgSubmit?uid="));
+        try (Stream<Path> stream = Files.list(tempDir)) {
+            assertEquals(1L, stream.count());
+        }
+        try (Stream<Path> stream = Files.list(tempDir)) {
+            String savedName = stream.findFirst().get().getFileName().toString();
+            assertTrue(savedName.matches("[0-9a-f-]{36}_[A-Za-z0-9_-]+\\.jpg"));
+        }
     }
 
     private static String encode(String value) throws Exception {
