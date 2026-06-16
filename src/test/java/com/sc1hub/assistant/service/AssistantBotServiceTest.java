@@ -564,6 +564,18 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void toHtmlBody_forHealthPersonaLimitsToFiveSentencesWithDoubleBlankLines() {
+        String content = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "toHtmlBody",
+                persona("건강봇"),
+                "첫 문장입니다. 둘째 문장입니다. 셋째 문장입니다. 넷째 문장입니다. 다섯째 문장입니다. 여섯째 문장입니다."
+        );
+
+        assertEquals("첫 문장입니다.<br><br><br>둘째 문장입니다.<br><br><br>셋째 문장입니다.<br><br><br>넷째 문장입니다.<br><br><br>다섯째 문장입니다.", content);
+    }
+
+    @Test
     void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
         BoardDTO targetPost = post(903, "테스터A", 0, "오늘 퇴근길에 비가 너무 많이 왔다");
         targetPost.setContent("우산이 있었는데도 신발이 다 젖어서 좀 난감했다");

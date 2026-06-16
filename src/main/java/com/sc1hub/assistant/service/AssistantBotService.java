@@ -1648,7 +1648,9 @@ public class AssistantBotService {
         if (!StringUtils.hasText(normalized)) {
             return null;
         }
-        String escaped = HtmlUtils.htmlEscape(formatBodyForPublish(normalized, sentenceLimitForPersona(persona, false)));
+        String escaped = HtmlUtils.htmlEscape(formatBodyForPublish(normalized,
+                sentenceLimitForPersona(persona, false),
+                sentenceSeparatorForPersona(persona, false)));
         return escaped.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "<br>");
     }
 
@@ -1665,6 +1667,10 @@ public class AssistantBotService {
     }
 
     private String formatBodyForPublish(String body, int maxSentences) {
+        return formatBodyForPublish(body, maxSentences, "\n");
+    }
+
+    private String formatBodyForPublish(String body, int maxSentences, String sentenceSeparator) {
         if (!StringUtils.hasText(body)) {
             return "";
         }
@@ -1679,7 +1685,8 @@ public class AssistantBotService {
         if (sentences.isEmpty()) {
             return normalized;
         }
-        return String.join("\n", sentences).trim();
+        String separator = sentenceSeparator == null ? "\n" : sentenceSeparator;
+        return String.join(separator, sentences).trim();
     }
 
     private String normalizePublishText(PersonaProperties persona, String text) {
@@ -1701,6 +1708,9 @@ public class AssistantBotService {
         if ("야옹봇".equals(name)) {
             return commentMode ? 1 : 3;
         }
+        if ("건강봇".equals(name)) {
+            return commentMode ? 2 : 5;
+        }
         if ("저묵묵봇".equals(name)) {
             return 1;
         }
@@ -1708,6 +1718,13 @@ public class AssistantBotService {
             return commentMode ? 2 : 5;
         }
         return 0;
+    }
+
+    private String sentenceSeparatorForPersona(PersonaProperties persona, boolean commentMode) {
+        if (!commentMode && persona != null && "건강봇".equals(persona.getName())) {
+            return "\n\n\n";
+        }
+        return "\n";
     }
 
     private boolean isSingleSentenceOnlyPersona(PersonaProperties persona) {
@@ -1890,6 +1907,9 @@ public class AssistantBotService {
         if ("야옹봇".equals(name)) {
             return "야옹봇은 의미 있는 문장을 쓰지 않는다. 제목과 본문, 댓글 모두 '야옹', '야~~옹~~~~', '야옹 야~~옹~~~~' 같은 고양이 울음만 2~3차례 반복한다. 설명, 스타크래프트 분석, 사람 말투, 이모지, 해시태그, 괄호 설명은 절대 쓰지 않는다.";
         }
+        if ("건강봇".equals(name)) {
+            return "건강봇은 생활 속 건강상식을 알려주는 커뮤니티 유저다. 제목은 건강상식 하나를 한 문장으로 요약하고, 본문은 5문장 이내로 쓴다. 의료 진단이나 치료 지시처럼 단정하지 말고, 일반적인 생활 습관 팁 위주로 말한다. 본문 문장 사이에는 줄바꿈을 두 번씩 넣는 요상한 스타일을 반드시 유지한다.";
+        }
         return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이지만, 징징만 반복하지 말고 스타 수다, 일상글, 뻘글도 섞는 캐릭터다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
     }
 
@@ -1906,6 +1926,9 @@ public class AssistantBotService {
         }
         if ("야옹봇".equals(name)) {
             return "게시글 제목도 본문도 오직 고양이 울음 반복이어야 한다. 제목 예시는 '야옹 야~~옹~~~~'처럼 짧게 쓰고, 본문은 같은 결의 울음을 줄바꿈으로 2~3번만 반복한다.";
+        }
+        if ("건강봇".equals(name)) {
+            return "게시글 제목은 건강상식 하나를 한 문장으로 바로 말한다. 본문은 최대 5문장으로 제한하고, 각 문장 사이에 빈 줄이 두 줄 생기도록 줄바꿈을 두 번씩 넣는다.";
         }
         return "게시글 제목은 억울함이나 과몰입 드립을 바로 드러내되, 매번 같은 징징 도입부로 풀지 마라. 감정은 살리되 시작 어휘와 문장 골격을 자주 바꿔라.";
     }
@@ -1956,6 +1979,9 @@ public class AssistantBotService {
         }
         if ("야옹봇".equals(personaName)) {
             return "댓글도 오직 '야옹', '야~~옹~~~~', '야옹 야~~옹~~~~' 같은 고양이 울음만 2~3차례 반복한다. 상대 글에 대한 해석이나 설명을 붙이지 않는다.";
+        }
+        if ("건강봇".equals(personaName)) {
+            return "상대 글에 맞춰 짧은 건강상식이나 생활 습관 팁을 덧붙인다. 댓글은 1~2문장으로 쓰고, 진단이나 치료 지시처럼 단정하지 않는다.";
         }
         if (targetIsBot && "테뻔뻔봇".equals(writer)) {
             return "테뻔뻔봇이 잘난 척하면 곧이곧대로 받아주지 말고, 프로토스 입장에서 억울함 섞인 농담으로 받아쳐라.";
