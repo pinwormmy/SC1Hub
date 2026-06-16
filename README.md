@@ -27,6 +27,28 @@ cron 예시, 10분마다 확인하고 90% 이상일 때만 정리:
 
 터미널에서 게시판 바로가기용 숫자 명령을 제외한 검색어 및 질문 프롬프트로, 사이트 게시물 기반의 간단한 답변과 관련 게시물 링크를 제공합니다.
 
+## 로컬 실행 테스트
+
+`run-local.sh`는 로컬 화면 확인과 스크린샷 촬영용 안전 실행 경로입니다. 기본 설정의 `online` 프로필을 제외하고, 마지막 오버라이드 파일로 Gemini 라이브 호출, assistant bot, 자동 발행, RAG 자동 업데이트를 강제로 끕니다.
+
+1. 로컬 설정 파일을 만듭니다.
+
+```bash
+cp src/main/resources/application-local.example.properties src/main/resources/application-local.properties
+```
+
+2. `application-local.properties`의 `spring.datasource.*`를 로컬 MySQL DB로 수정합니다.
+
+`run-local.sh`는 기본적으로 `localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0` MySQL URL만 허용합니다. 외부 테스트 DB가 꼭 필요할 때만 `SC1HUB_ALLOW_NONLOCAL_DB=true`를 명시합니다.
+
+3. 필요한 SQL을 로컬 DB에 먼저 적용한 뒤 실행합니다.
+
+```bash
+./run-local.sh
+```
+
+서버는 `http://localhost:8082`에서 실행됩니다.
+
 ### 설정
 
 `application-local.properties` 또는 `application-online.properties`에 아래 값을 추가합니다.
