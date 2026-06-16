@@ -36,7 +36,7 @@ body {
         radial-gradient(circle at 18% 0%, rgba(0, 255, 255, 0.13), transparent 26rem),
         radial-gradient(circle at 82% 18%, rgba(117, 249, 76, 0.12), transparent 24rem),
         linear-gradient(rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.9)),
-        url("https://sc1hub.cdn1.cafe24.com/star_full.jpg");
+        url("/images/home-wallpaper-dark.png");
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
