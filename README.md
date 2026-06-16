@@ -51,6 +51,22 @@ cp src/main/resources/application-local.example.properties src/main/resources/ap
 
 운영 배포는 `deploy.sh`가 Tomcat `setenv.sh`에 `SPRING_PROFILES_ACTIVE=online` 기본값을 보장합니다. 로컬/운영 전환을 위해 `application.properties` 마지막 줄을 수동으로 바꾸지 않습니다.
 
+### 로컬 샘플 데이터
+
+운영 DB 전체를 로컬 더미데이터로 복제하지 않습니다. 공략게시판 테스트 데이터가 필요하면 스키마를 먼저 맞춘 뒤 공개 공략게시판 게시글 샘플만 가져옵니다.
+
+```bash
+./sync-local-db-schema.sh
+POST_LIMIT=20 ./sync-local-sample-data.sh
+```
+
+`sync-local-sample-data.sh` 기본 동작:
+
+- 대상: 공략게시판 게시글 테이블, `teamplayguideboard`, `tipboard`, `board_list`
+- 제외: `member`, 조회 IP 테이블, 추천 사용자 테이블, assistant bot history, 운영 설정
+- 로컬 적재 후 게시글 `writer`는 `SC1Hub`로 치환
+- 댓글은 기본 제외. 필요할 때만 `INCLUDE_COMMENTS=true`를 주며, 적재 후 `id`, `nickname`, `password`를 로컬용 값으로 익명화
+
 ### 설정
 
 `application-local.properties` 또는 `application-online.properties`에 아래 값을 추가합니다.
