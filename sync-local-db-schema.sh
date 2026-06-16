@@ -43,4 +43,13 @@ MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" "$LOCAL_DB_NAME" < "$ROOT_D
 MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" "$LOCAL_DB_NAME" \
   -e "INSERT INTO total_visitor_count (total_count) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM total_visitor_count);"
 
+ONE_LINE_STRATEGY_TABLES=$(
+  MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" -N -s -e \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '$LOCAL_DB_NAME' AND table_name IN ('one_line_strategy', 'one_line_strategy_category');"
+)
+if [[ "$ONE_LINE_STRATEGY_TABLES" != "2" ]]; then
+  echo "Applying one-line strategy schema..."
+  MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" "$LOCAL_DB_NAME" < "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql"
+fi
+
 echo "Local DB schema is ready."
