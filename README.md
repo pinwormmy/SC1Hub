@@ -27,6 +27,46 @@ cron 예시, 10분마다 확인하고 90% 이상일 때만 정리:
 
 터미널에서 게시판 바로가기용 숫자 명령을 제외한 검색어 및 질문 프롬프트로, 사이트 게시물 기반의 간단한 답변과 관련 게시물 링크를 제공합니다.
 
+## 로컬 실행 테스트
+
+`run-local.sh`는 로컬 화면 확인과 스크린샷 촬영용 안전 실행 경로입니다. 공용 `application.properties`를 수정하지 않고 `local` 프로필을 명시하며, 마지막 오버라이드 파일로 Gemini 라이브 호출, assistant bot, 자동 발행, RAG 자동 업데이트를 강제로 끕니다.
+
+1. 로컬 설정 파일을 만듭니다.
+
+```bash
+cp src/main/resources/application-local.example.properties src/main/resources/application-local.properties
+```
+
+2. `application-local.properties`의 `spring.datasource.*`를 로컬 MySQL DB로 수정합니다.
+
+`run-local.sh`는 기본적으로 `localhost`, `127.0.0.1`, `[::1]`, `0.0.0.0` MySQL URL만 허용합니다. 외부 테스트 DB가 꼭 필요할 때만 `SC1HUB_ALLOW_NONLOCAL_DB=true`를 명시합니다.
+
+3. 필요한 SQL을 로컬 DB에 먼저 적용한 뒤 실행합니다.
+
+```bash
+./run-local.sh
+```
+
+서버는 `http://localhost:8082`에서 실행됩니다.
+
+운영 배포는 `deploy.sh`가 Tomcat `setenv.sh`에 `SPRING_PROFILES_ACTIVE=online` 기본값을 보장합니다. 로컬/운영 전환을 위해 `application.properties` 마지막 줄을 수동으로 바꾸지 않습니다.
+
+### 로컬 샘플 데이터
+
+운영 DB 전체를 로컬 더미데이터로 복제하지 않습니다. 공략게시판 테스트 데이터가 필요하면 스키마를 먼저 맞춘 뒤 공개 공략게시판 게시글 샘플만 가져옵니다.
+
+```bash
+./sync-local-db-schema.sh
+POST_LIMIT=20 ./sync-local-sample-data.sh
+```
+
+`sync-local-sample-data.sh` 기본 동작:
+
+- 대상: 공략게시판 게시글 테이블, `teamplayguideboard`, `tipboard`, `board_list`
+- 제외: `member`, 조회 IP 테이블, 추천 사용자 테이블, assistant bot history, 운영 설정
+- 로컬 적재 후 게시글 `writer`는 `SC1Hub`로 치환
+- 댓글은 기본 제외. 필요할 때만 `INCLUDE_COMMENTS=true`를 주며, 적재 후 `id`, `nickname`, `password`를 로컬용 값으로 익명화
+
 ### 설정
 
 `application-local.properties` 또는 `application-online.properties`에 아래 값을 추가합니다.
