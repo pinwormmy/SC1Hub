@@ -12,7 +12,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
@@ -54,7 +60,7 @@ public class MemberController {
         return memberService.isUniqueId(id);
     }
 
-    @RequestMapping(value = "/submitSignUp", method = RequestMethod.POST)
+    @PostMapping("/submitSignUp")
     public String submitSignUp(MemberDTO memberDTO, HttpSession httpSession) throws Exception {
         memberService.submitSignUp(memberDTO);
         httpSession.setAttribute("member", memberService.checkLoginData(memberDTO)); // 로그인도 해줌
@@ -62,7 +68,7 @@ public class MemberController {
         return "redirect:/";
     }
 
-    @RequestMapping(value = "/submitLogin", method = RequestMethod.POST)
+    @PostMapping("/submitLogin")
     public String submitLogin(HttpSession session, MemberDTO memberDTO, Model model) throws Exception {
         MemberDTO loginData = memberService.checkLoginData(memberDTO);
         if (loginData == null) {
@@ -90,7 +96,7 @@ public class MemberController {
         return "modifyMyInfo";
     }
 
-    @RequestMapping(value = "/submitModifyMyInfo", method = RequestMethod.POST)
+    @PostMapping("/submitModifyMyInfo")
     public String submitModifyMyInfo(MemberDTO member, HttpSession session) throws Exception {
         memberService.submitModifyMyInfo(member);
         session.setAttribute("member", memberService.checkLoginData(member)); // 재로그인해서 회원정보갱신
@@ -161,7 +167,7 @@ public class MemberController {
         return "modifyMemberByAdmin";
     }
 
-    @RequestMapping(value = "/submitModifyMemberByAdmin", method = RequestMethod.POST)
+    @PostMapping("/submitModifyMemberByAdmin")
     public String submitModifyMemberByAdmin(MemberDTO memberDTO) {
         log.info("관리자의 회원수정 제출");
         memberService.submitModifyMemberByAdmin(memberDTO);

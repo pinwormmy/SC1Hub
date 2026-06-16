@@ -16,7 +16,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import javax.servlet.http.HttpServletRequest;
@@ -115,7 +121,7 @@ public class BoardController {
         return "board/writePost";
     }
 
-    @RequestMapping(value = "/{boardTitle}/submitPost", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/submitPost")
     public String submitPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model)
             throws Exception {
         MemberDTO member = getMember(request.getSession());
@@ -138,7 +144,7 @@ public class BoardController {
         return "redirect:/boards/" + boardTitle;
     }
 
-    @RequestMapping(value = "/{boardTitle}/deletePost", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/deletePost")
     public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             RedirectAttributes redirectAttributes) throws Exception {
         HttpSession session = request.getSession();
@@ -218,7 +224,7 @@ public class BoardController {
         return "alert";
     }
 
-    @RequestMapping(value = "/{boardTitle}/submitModifyPost", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/submitModifyPost")
     public String submitModifyPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             Model model) throws Exception {
         HttpSession session = request.getSession();
@@ -248,7 +254,7 @@ public class BoardController {
         return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + post.getPostNum();
     }
 
-    @RequestMapping(value = "/{boardTitle}/addComment", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/addComment")
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle,
             @RequestBody CommentDTO comment, HttpSession session) throws Exception {
@@ -281,7 +287,7 @@ public class BoardController {
         return boardService.showCommentList(boardTitle, page);
     }
 
-    @RequestMapping(value = "/{boardTitle}/deleteComment", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/deleteComment")
     @ResponseBody
     public void deleteComment(@PathVariable String boardTitle, int commentNum) throws Exception {
         boardService.deleteComment(boardTitle, commentNum);
@@ -293,7 +299,7 @@ public class BoardController {
         boardService.updateCommentCount(boardTitle, postNum);
     }
 
-    @RequestMapping(value = "/{boardTitle}/addRecommendation", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/addRecommendation")
     @ResponseBody
     public ResponseEntity<RecommendDTO> addRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
@@ -315,7 +321,7 @@ public class BoardController {
         }
     }
 
-    @RequestMapping(value = "/{boardTitle}/cancelRecommendation", method = RequestMethod.POST)
+    @PostMapping("/{boardTitle}/cancelRecommendation")
     @ResponseBody
     public ResponseEntity<RecommendDTO> cancelRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
@@ -337,7 +343,7 @@ public class BoardController {
         }
     }
 
-    @RequestMapping(value = "/{boardTitle}/checkRecommendation", method = RequestMethod.GET)
+    @GetMapping("/{boardTitle}/checkRecommendation")
     @ResponseBody
     public ResponseEntity<RecommendDTO> checkRecommendation(@PathVariable String boardTitle, RecommendDTO recommendDTO,
             HttpSession session) {
@@ -358,7 +364,7 @@ public class BoardController {
         }
     }
 
-    @RequestMapping(value = "/{boardTitle}/getRecommendCount", method = RequestMethod.GET)
+    @GetMapping("/{boardTitle}/getRecommendCount")
     @ResponseBody
     public ResponseEntity<Integer> getRecommendCount(@PathVariable String boardTitle,
             @RequestParam("postNum") int postNum) {
