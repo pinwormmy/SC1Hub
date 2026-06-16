@@ -14,7 +14,6 @@ mkdir -p \
   "$ROOT_DIR/.local-data/upload" \
   "$ROOT_DIR/.local-data/assistant"
 
-LOCAL_BASE_CONFIG="$ROOT_DIR/.local-data/application-local-base.properties"
 LOCAL_SAFE_CONFIG="$ROOT_DIR/.local-data/application-local-safe.properties"
 LOCAL_CONFIG="${SC1HUB_LOCAL_CONFIG:-$ROOT_DIR/src/main/resources/application-local.properties}"
 
@@ -49,10 +48,7 @@ EOF
   fi
 fi
 
-grep -v '^spring\.profiles\.include=' "$ROOT_DIR/src/main/resources/application.properties" > "$LOCAL_BASE_CONFIG"
-
 cat > "$LOCAL_SAFE_CONFIG" <<EOF
-spring.profiles.include=
 sc1hub.gemini.allowLiveCalls=false
 sc1hub.assistant.bot.enabled=false
 sc1hub.assistant.bot.autoPublishEnabled=false
@@ -63,6 +59,7 @@ EOF
 
 echo "Starting SC1Hub locally on http://localhost:8082"
 echo "Using local config: $LOCAL_CONFIG"
+echo "Active Spring profile: local"
 echo "Safety overrides: Gemini live calls off, assistant bot off, auto-publish off."
 
-./gradlew bootRun --args="--spring.config.location=file:$LOCAL_BASE_CONFIG,file:$LOCAL_CONFIG,file:$LOCAL_SAFE_CONFIG"
+./gradlew bootRun --args="--spring.profiles.active=local --spring.config.additional-location=file:$LOCAL_CONFIG,file:$LOCAL_SAFE_CONFIG"

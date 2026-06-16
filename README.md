@@ -29,7 +29,7 @@ cron 예시, 10분마다 확인하고 90% 이상일 때만 정리:
 
 ## 로컬 실행 테스트
 
-`run-local.sh`는 로컬 화면 확인과 스크린샷 촬영용 안전 실행 경로입니다. 기본 설정의 `online` 프로필을 제외하고, 마지막 오버라이드 파일로 Gemini 라이브 호출, assistant bot, 자동 발행, RAG 자동 업데이트를 강제로 끕니다.
+`run-local.sh`는 로컬 화면 확인과 스크린샷 촬영용 안전 실행 경로입니다. 공용 `application.properties`를 수정하지 않고 `local` 프로필을 명시하며, 마지막 오버라이드 파일로 Gemini 라이브 호출, assistant bot, 자동 발행, RAG 자동 업데이트를 강제로 끕니다.
 
 1. 로컬 설정 파일을 만듭니다.
 
@@ -48,6 +48,8 @@ cp src/main/resources/application-local.example.properties src/main/resources/ap
 ```
 
 서버는 `http://localhost:8082`에서 실행됩니다.
+
+운영 배포는 `deploy.sh`가 Tomcat `setenv.sh`에 `SPRING_PROFILES_ACTIVE=online` 기본값을 보장합니다. 로컬/운영 전환을 위해 `application.properties` 마지막 줄을 수동으로 바꾸지 않습니다.
 
 ### 설정
 

@@ -64,6 +64,15 @@ ssh "$REMOTE" \
    set -e
    REMOTE_TOMCAT_DIR='$REMOTE_TOMCAT_DIR'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
+   SETENV_SH='$REMOTE_TOMCAT_DIR/bin/setenv.sh'
+   touch \"\$SETENV_SH\"
+   if ! grep -q 'SC1Hub Spring profile' \"\$SETENV_SH\"; then
+     {
+       echo ''
+       echo '# SC1Hub Spring profile'
+       echo 'export SPRING_PROFILES_ACTIVE=\"\${SPRING_PROFILES_ACTIVE:-online}\"'
+     } >> \"\$SETENV_SH\"
+   fi
    BACKUP_STAMP=\$(date +%Y%m%d%H%M%S)
    if [ -f '$REMOTE_WAR_PATH' ]; then
      cp '$REMOTE_WAR_PATH' '$REMOTE_WAR_PATH.bak.'\"\$BACKUP_STAMP\"
