@@ -1,12 +1,14 @@
 package com.sc1hub.file.controller;
 
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
+import com.sc1hub.file.util.UploadedImagePathResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -24,7 +26,6 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -73,7 +74,7 @@ public class UploadController {
         String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
         try {
             Files.createDirectories(basePath);
-            Path targetPath = resolveUploadTarget(basePath, uid.toString(), storedFileName);
+            Path targetPath = UploadedImagePathResolver.resolveUploadTarget(basePath, uid.toString(), storedFileName);
             if (targetPath == null) {
                 log.error("Failed to resolve upload path. basePath={}, fileName={}", basePath, storedFileName);
                 return errorResponse("업로드 경로 생성에 실패했습니다.");
@@ -104,7 +105,7 @@ public class UploadController {
             return;
         }
         String decodedFileName = decodeRequestParameter(request, "fileName", fileName);
-        Path targetPath = findUploadedFile(basePaths, uid, decodedFileName);
+        Path targetPath = UploadedImagePathResolver.findUploadedFile(basePaths, uid, decodedFileName);
         if (targetPath == null) {
             log.warn("Image not found on filesystem. uid={}, fileName={}, basePaths={}. Redirecting to /img.", uid, decodedFileName, basePaths);
             if (redirectToImg(request, response, uid, decodedFileName)) {
@@ -113,10 +114,38 @@ public class UploadController {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
-        File imgFile = targetPath.toFile();
         log.info("img upload path for submit: {}", targetPath);
+        writeImageResponse(targetPath, request, response, uid, decodedFileName);
+    }
 
-        //사진 이미지 찾지 못하는 경우 예외처리로 빈 이미지 파일을 설정한다.
+    @GetMapping(value="/img/{imageName:.+}")
+    public void imgSubmit(@PathVariable("imageName") String imageName,
+            HttpServletRequest request, HttpServletResponse response) {
+
+        UploadedImageRef ref = parseImgPath(imageName);
+        if (ref == null) {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        List<Path> basePaths = getUploadBasePaths();
+        if (basePaths.isEmpty()) {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        Path targetPath = UploadedImagePathResolver.findUploadedFile(basePaths, ref.uid, ref.fileName);
+        if (targetPath == null) {
+            log.warn("Image not found on filesystem from /img. uid={}, fileName={}, basePaths={}",
+                    ref.uid, ref.fileName, basePaths);
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        log.info("img upload path for /img: {}", targetPath);
+        writeImageResponse(targetPath, request, response, ref.uid, ref.fileName);
+    }
+
+    private void writeImageResponse(Path targetPath, HttpServletRequest request, HttpServletResponse response,
+            String uid, String decodedFileName) {
+        File imgFile = targetPath.toFile();
         if (imgFile.isFile()) {
             byte[] buf = new byte[1024];
             int readByte;
@@ -153,6 +182,20 @@ public class UploadController {
         }
     }
 
+    private UploadedImageRef parseImgPath(String imageName) {
+        String decodedImageName = decodeFileName(imageName);
+        int separator = decodedImageName.indexOf('_');
+        if (separator <= 0 || separator >= decodedImageName.length() - 1) {
+            return null;
+        }
+        String uid = decodedImageName.substring(0, separator).trim();
+        String fileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(decodedImageName.substring(separator + 1));
+        if (uid.isEmpty() || fileName.isEmpty()) {
+            return null;
+        }
+        return new UploadedImageRef(uid, fileName);
+    }
+
     static String decodeRequestParameter(HttpServletRequest request, String parameterName, String fallbackValue) {
         String rawQuery = request == null ? null : request.getQueryString();
         String rawValue = findRawQueryValue(rawQuery, parameterName);
@@ -176,19 +219,6 @@ public class UploadController {
             String key = decodeFileName(pair[0]).toLowerCase();
             if (expectedKey.equals(key)) {
                 return pair.length > 1 ? pair[1] : "";
-            }
-        }
-        return null;
-    }
-
-    private Path findUploadedFile(List<Path> basePaths, String uid, String fileName) {
-        if (basePaths == null || basePaths.isEmpty()) {
-            return null;
-        }
-        for (Path basePath : basePaths) {
-            Path found = findUploadedFile(basePath, uid, fileName);
-            if (found != null) {
-                return found;
             }
         }
         return null;
@@ -268,52 +298,6 @@ public class UploadController {
         }
     }
 
-    private Path findUploadedFile(Path basePath, String uid, String fileName) {
-        if (basePath == null || uid == null || uid.trim().isEmpty()) {
-            return null;
-        }
-        for (String candidateFileName : UploadedImageFileNameUtil.candidateFileNames(fileName)) {
-            Path targetPath = resolveUploadTarget(basePath, uid, candidateFileName);
-            if (targetPath == null) {
-                continue;
-            }
-            try {
-                if (Files.isRegularFile(targetPath)) {
-                    return targetPath;
-                }
-            } catch (InvalidPathException e) {
-                log.debug("Skipping invalid uploaded image path. basePath={}, fileName={}", basePath, candidateFileName, e);
-            }
-        }
-        return null;
-    }
-
-    private Path resolveUploadTarget(Path basePath, String uid, String fileName) {
-        if (basePath == null || uid == null || uid.trim().isEmpty()) {
-            return null;
-        }
-        String legacyFileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(fileName);
-        if (legacyFileName.isEmpty()) {
-            return null;
-        }
-        try {
-            return basePath.resolve(uid + "_" + legacyFileName);
-        } catch (InvalidPathException e) {
-            log.debug("Failed to resolve legacy upload target. basePath={}, fileName={}", basePath, legacyFileName, e);
-        }
-
-        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
-        if (storedFileName.isEmpty()) {
-            return null;
-        }
-        try {
-            return basePath.resolve(uid + "_" + storedFileName);
-        } catch (InvalidPathException e) {
-            log.debug("Failed to resolve stored upload target. basePath={}, fileName={}", basePath, storedFileName, e);
-            return null;
-        }
-    }
-
     private boolean redirectToImg(HttpServletRequest request, HttpServletResponse response, String uid, String fileName) {
         if (uid == null || uid.trim().isEmpty()) {
             return false;
@@ -349,5 +333,15 @@ public class UploadController {
         detail.put("message", message);
         error.put("error", detail);
         return error;
+    }
+
+    private static final class UploadedImageRef {
+        private final String uid;
+        private final String fileName;
+
+        private UploadedImageRef(String uid, String fileName) {
+            this.uid = uid;
+            this.fileName = fileName;
+        }
     }
 }

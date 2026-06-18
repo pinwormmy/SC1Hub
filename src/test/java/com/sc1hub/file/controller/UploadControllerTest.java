@@ -48,6 +48,45 @@ class UploadControllerTest {
     }
 
     @Test
+    void ckSubmit_recoversGarbledFileNameFromUidWhenOnlyOneUploadMatches() throws Exception {
+        String uid = "81469f62-87c3-4b41-8832-eb089fa50414";
+        byte[] imageBytes = new byte[] { 5, 6, 7, 8 };
+        Files.write(tempDir.resolve(uid + "_간호사도 궁금해하는 럴커.jpg"), imageBytes);
+
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ckImgSubmit");
+        request.setQueryString("uid=" + uid + "&fileName=broken.jpg");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.ckSubmit(uid, "broken.jpg", request, response);
+
+        assertEquals(200, response.getStatus());
+        assertArrayEquals(imageBytes, response.getContentAsByteArray());
+    }
+
+    @Test
+    void imgSubmit_usesSameRecoveryAsCkSubmitForLegacyImgLinks() throws Exception {
+        String uid = "81469f62-87c3-4b41-8832-eb089fa50414";
+        byte[] imageBytes = new byte[] { 9, 10, 11, 12 };
+        Files.write(tempDir.resolve(uid + "_드라군 심시티.jpg"), imageBytes);
+
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/img/" + uid + "_broken.jpg");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.imgSubmit(uid + "_broken.jpg", request, response);
+
+        assertEquals(200, response.getStatus());
+        assertArrayEquals(imageBytes, response.getContentAsByteArray());
+    }
+
+    @Test
     void decodeRequestParameter_decodesRawQueryBeforeFallback() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ckImgSubmit");
         request.setQueryString("uid=u1&fileName=" + encode("간호사도 궁금해하는 럴커.jpg"));
