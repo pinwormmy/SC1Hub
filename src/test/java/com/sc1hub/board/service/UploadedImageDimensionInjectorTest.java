@@ -36,6 +36,23 @@ class UploadedImageDimensionInjectorTest {
     }
 
     @Test
+    void injectMissingDimensions_recoversGarbledFileNameFromUid() throws Exception {
+        String uid = "uid123";
+        Path imagePath = tempDir.resolve(uid + "_심슨버전 뮤탈.jpg");
+
+        BufferedImage image = new BufferedImage(480, 360, BufferedImage.TYPE_INT_RGB);
+        ImageIO.write(image, "jpg", imagePath.toFile());
+
+        UploadedImageDimensionInjector injector = new UploadedImageDimensionInjector(tempDir.toString(), "");
+        String html = "<p><img src=\"/ckImgSubmit?uid=uid123&fileName=broken.jpg\"></p>";
+
+        String result = injector.injectMissingDimensions(html);
+
+        assertTrue(result.contains("width=\"480\""));
+        assertTrue(result.contains("height=\"360\""));
+    }
+
+    @Test
     void injectMissingDimensions_keepsExistingWidthHeight() {
         UploadedImageDimensionInjector injector = new UploadedImageDimensionInjector(tempDir.toString(), "");
         String html = "<p><img src=\"/ckImgSubmit?uid=uid123&fileName=map.jpg\" width=\"111\" height=\"222\"></p>";

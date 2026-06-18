@@ -1,6 +1,7 @@
 package com.sc1hub.board.service;
 
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
+import com.sc1hub.file.util.UploadedImagePathResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -13,7 +14,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -287,13 +287,7 @@ public class UploadedImageDimensionInjector {
         if (!StringUtils.hasText(uid) || !StringUtils.hasText(fileName)) {
             return null;
         }
-        for (Path basePath : getUploadBasePaths()) {
-            Path found = findUploadedFile(basePath, uid, fileName);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
+        return UploadedImagePathResolver.findUploadedFile(getUploadBasePaths(), uid, fileName);
     }
 
     private List<Path> getUploadBasePaths() {
@@ -348,42 +342,6 @@ public class UploadedImageDimensionInjector {
         } catch (Exception ignored) {
         }
         return path.replaceFirst("^file:(//)?", "");
-    }
-
-    private Path findUploadedFile(Path basePath, String uid, String fileName) {
-        if (basePath == null || !StringUtils.hasText(uid) || !StringUtils.hasText(fileName)) {
-            return null;
-        }
-        for (String candidateFileName : UploadedImageFileNameUtil.candidateFileNames(fileName)) {
-            Path targetPath = resolveUploadTarget(basePath, uid, candidateFileName);
-            if (targetPath == null) {
-                continue;
-            }
-            try {
-                if (Files.isRegularFile(targetPath)) {
-                    return targetPath;
-                }
-            } catch (InvalidPathException e) {
-                log.debug("Skipping invalid uploaded image path. basePath={}, fileName={}", basePath, candidateFileName, e);
-            }
-        }
-        return null;
-    }
-
-    private Path resolveUploadTarget(Path basePath, String uid, String fileName) {
-        if (basePath == null || !StringUtils.hasText(uid) || !StringUtils.hasText(fileName)) {
-            return null;
-        }
-        String normalizedName = UploadedImageFileNameUtil.normalizeFileName(fileName);
-        if (!StringUtils.hasText(normalizedName)) {
-            return null;
-        }
-        try {
-            return basePath.resolve(uid + "_" + normalizedName);
-        } catch (InvalidPathException e) {
-            log.debug("Failed to resolve uploaded image path. basePath={}, fileName={}", basePath, normalizedName, e);
-            return null;
-        }
     }
 
     private static String upsertAttribute(String imgTag, String attributeName, String value) {
