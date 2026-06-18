@@ -1,5 +1,6 @@
 package com.sc1hub.board.service;
 
+import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -19,7 +20,8 @@ class UploadedImageDimensionInjectorTest {
     void injectMissingDimensions_readsSizeFromUploadedFile() throws Exception {
         String uid = "uid123";
         String fileName = "map.jpg";
-        Path imagePath = tempDir.resolve(uid + "_" + fileName);
+        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
+        Path imagePath = tempDir.resolve(uid + "_" + storedFileName);
 
         BufferedImage image = new BufferedImage(320, 240, BufferedImage.TYPE_INT_RGB);
         ImageIO.write(image, "jpg", imagePath.toFile());

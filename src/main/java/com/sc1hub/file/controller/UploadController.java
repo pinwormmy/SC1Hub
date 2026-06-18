@@ -1,5 +1,6 @@
 package com.sc1hub.file.controller;
 
+import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -23,16 +24,15 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Stream;
 
 // 에디터 첨부자료 통째로 들고와서 괜히 무거워짐. 나중에 필요없는 파일 다 삭제하기
 // 컨트롤러에 연산 이렇게 두는거 정리해야하지않을까?
@@ -70,12 +70,12 @@ public class UploadController {
             return errorResponse("업로드 경로가 설정되어 있지 않습니다.");
         }
         String fileName = upload.getOriginalFilename();
-        String safeFileName = sanitizeFileName(normalizeFileName(fileName));
+        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
         try {
             Files.createDirectories(basePath);
-            Path targetPath = resolveUploadTarget(basePath, uid.toString(), safeFileName);
+            Path targetPath = resolveUploadTarget(basePath, uid.toString(), storedFileName);
             if (targetPath == null) {
-                log.error("Failed to resolve upload path. basePath={}, fileName={}", basePath, safeFileName);
+                log.error("Failed to resolve upload path. basePath={}, fileName={}", basePath, storedFileName);
                 return errorResponse("업로드 경로 생성에 실패했습니다.");
             }
             log.info("img upload path: {}", targetPath);
@@ -83,9 +83,9 @@ public class UploadController {
                 out.write(upload.getBytes());
                 out.flush();
             }
-            String encodedFileName = URLEncoder.encode(safeFileName, StandardCharsets.UTF_8.name());
+            String encodedFileName = URLEncoder.encode(storedFileName, StandardCharsets.UTF_8.name());
             String fileUrl = request.getContextPath() + "/ckImgSubmit?uid=" + uid + "&fileName=" + encodedFileName;
-            return ResponseEntity.ok(buildSuccessResponse(safeFileName, fileUrl));
+            return ResponseEntity.ok(buildSuccessResponse(storedFileName, fileUrl));
         } catch (IOException e) {
             log.error("Image upload failed.", e);
             return errorResponse("이미지 업로드에 실패했습니다.");
@@ -104,13 +104,7 @@ public class UploadController {
             return;
         }
         String decodedFileName = decodeRequestParameter(request, "fileName", fileName);
-        Path targetPath = null;
-        for (Path candidateBase : basePaths) {
-            targetPath = findUploadedFile(candidateBase, uid, decodedFileName);
-            if (targetPath != null) {
-                break;
-            }
-        }
+        Path targetPath = findUploadedFile(basePaths, uid, decodedFileName);
         if (targetPath == null) {
             log.warn("Image not found on filesystem. uid={}, fileName={}, basePaths={}. Redirecting to /img.", uid, decodedFileName, basePaths);
             if (redirectToImg(request, response, uid, decodedFileName)) {
@@ -182,6 +176,19 @@ public class UploadController {
             String key = decodeFileName(pair[0]).toLowerCase();
             if (expectedKey.equals(key)) {
                 return pair.length > 1 ? pair[1] : "";
+            }
+        }
+        return null;
+    }
+
+    private Path findUploadedFile(List<Path> basePaths, String uid, String fileName) {
+        if (basePaths == null || basePaths.isEmpty()) {
+            return null;
+        }
+        for (Path basePath : basePaths) {
+            Path found = findUploadedFile(basePath, uid, fileName);
+            if (found != null) {
+                return found;
             }
         }
         return null;
@@ -261,51 +268,22 @@ public class UploadController {
         }
     }
 
-    private String normalizeFileName(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
-        String trimmed = fileName.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        return Normalizer.normalize(trimmed, Normalizer.Form.NFC);
-    }
-
-    private String sanitizeFileName(String fileName) {
-        if (fileName == null || fileName.trim().isEmpty()) {
-            return "upload";
-        }
-        return fileName.trim().replace("/", "_").replace("\\", "_");
-    }
-
     private Path findUploadedFile(Path basePath, String uid, String fileName) {
         if (basePath == null || uid == null || uid.trim().isEmpty()) {
             return null;
         }
-        String normalizedName = normalizeFileName(fileName);
-        String safeName = sanitizeFileName(normalizedName);
-        Path direct = basePath.resolve(uid + "_" + safeName);
-        if (Files.isRegularFile(direct)) {
-            return direct;
-        }
-        if (!Files.isDirectory(basePath)) {
-            return null;
-        }
-        String prefix = uid + "_";
-        try (Stream<Path> stream = Files.list(basePath)) {
-            for (Path candidate : (Iterable<Path>) stream::iterator) {
-                String name = candidate.getFileName().toString();
-                if (!name.startsWith(prefix)) {
-                    continue;
-                }
-                String actualName = name.substring(prefix.length());
-                if (normalizeFileName(actualName).equals(normalizedName)) {
-                    return candidate;
-                }
+        for (String candidateFileName : UploadedImageFileNameUtil.candidateFileNames(fileName)) {
+            Path targetPath = resolveUploadTarget(basePath, uid, candidateFileName);
+            if (targetPath == null) {
+                continue;
             }
-        } catch (IOException e) {
-            log.warn("Failed to scan upload directory. path={}", basePath, e);
+            try {
+                if (Files.isRegularFile(targetPath)) {
+                    return targetPath;
+                }
+            } catch (InvalidPathException e) {
+                log.debug("Skipping invalid uploaded image path. basePath={}, fileName={}", basePath, candidateFileName, e);
+            }
         }
         return null;
     }
@@ -314,9 +292,26 @@ public class UploadController {
         if (basePath == null || uid == null || uid.trim().isEmpty()) {
             return null;
         }
-        String normalizedName = normalizeFileName(fileName);
-        String safeName = sanitizeFileName(normalizedName);
-        return basePath.resolve(uid + "_" + safeName);
+        String legacyFileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(fileName);
+        if (legacyFileName.isEmpty()) {
+            return null;
+        }
+        try {
+            return basePath.resolve(uid + "_" + legacyFileName);
+        } catch (InvalidPathException e) {
+            log.debug("Failed to resolve legacy upload target. basePath={}, fileName={}", basePath, legacyFileName, e);
+        }
+
+        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
+        if (storedFileName.isEmpty()) {
+            return null;
+        }
+        try {
+            return basePath.resolve(uid + "_" + storedFileName);
+        } catch (InvalidPathException e) {
+            log.debug("Failed to resolve stored upload target. basePath={}, fileName={}", basePath, storedFileName, e);
+            return null;
+        }
     }
 
     private boolean redirectToImg(HttpServletRequest request, HttpServletResponse response, String uid, String fileName) {
@@ -324,8 +319,8 @@ public class UploadController {
             return false;
         }
         try {
-            String safeName = sanitizeFileName(normalizeFileName(fileName));
-            String encodedName = URLEncoder.encode(safeName, StandardCharsets.UTF_8.name()).replace("+", "%20");
+            String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
+            String encodedName = URLEncoder.encode(storedFileName, StandardCharsets.UTF_8.name()).replace("+", "%20");
             String redirectUrl = request.getContextPath() + "/img/" + uid + "_" + encodedName;
             response.sendRedirect(redirectUrl);
             return true;

@@ -3,7 +3,6 @@ package com.sc1hub.assistant.service;
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.member.dto.MemberDTO;
 import lombok.Getter;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,8 +22,6 @@ public class AssistantRateLimiter {
     private final Clock clock;
     private final Map<String, DailyCounter> counters = new ConcurrentHashMap<>();
 
-
-    @Autowired
     public AssistantRateLimiter(AssistantProperties assistantProperties) {
         this(assistantProperties, Clock.systemDefaultZone());
     }

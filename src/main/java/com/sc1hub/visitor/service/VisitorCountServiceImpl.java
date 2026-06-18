@@ -6,26 +6,41 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Slf4j
 @Service
 public class VisitorCountServiceImpl implements VisitorCountService {
+    private static final String VISITOR_COOKIE_NAME = "visitor";
+    private static final String VISITOR_COOKIE_VALUE = "true";
+    private static final String ROOT_PATH = "/";
+
     private final VisitorCountMapper visitorCountMapper;
+    private final Clock clock;
 
     public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
-        this.visitorCountMapper = visitorCountMapper;
+        this(visitorCountMapper, Clock.systemDefaultZone());
     }
 
+    VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper, Clock clock) {
+        this.visitorCountMapper = visitorCountMapper;
+        this.clock = clock;
+    }
+
+    @Override
     @Transactional
     public void incrementVisitorCount() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         VisitorCountDTO visitorCount = visitorCountMapper.findByDate(today);
 
-        Integer totalCount = visitorCountMapper.getTotalCount();
-        if (totalCount == null) {
-            totalCount = 0;
-        }
+        int totalCount = nullToZero(visitorCountMapper.getTotalCount());
 
         if (visitorCount != null) {
             visitorCountMapper.incrementDailyCount(today);
@@ -36,48 +51,52 @@ public class VisitorCountServiceImpl implements VisitorCountService {
         visitorCountMapper.incrementTotalCount();
     }
 
+    @Override
     public int getTotalCount() {
-        Integer totalCount = visitorCountMapper.getTotalCount();
-        return totalCount != null ? totalCount : 0; // null 체크
+        return nullToZero(visitorCountMapper.getTotalCount());
     }
 
+    @Override
     public int getTodayCount() {
-        LocalDate today = LocalDate.now();
-        Integer todayCount = visitorCountMapper.getTodayCount(today);
-        return todayCount != null ? todayCount : 0; // null 체크
+        LocalDate today = LocalDate.now(clock);
+        return nullToZero(visitorCountMapper.getTodayCount(today));
     }
 
-    public void processVisitor(javax.servlet.http.HttpServletRequest request,
-            javax.servlet.http.HttpServletResponse response) {
-        javax.servlet.http.Cookie[] cookies = request.getCookies();
-        boolean isVisitor = false;
-
-        if (cookies != null) {
-            for (javax.servlet.http.Cookie cookie : cookies) {
-                if ("visitor".equals(cookie.getName())) {
-                    isVisitor = true;
-                    break;
-                }
-            }
-        }
-
-        if (!isVisitor) {
+    @Override
+    public void processVisitor(HttpServletRequest request, HttpServletResponse response) {
+        if (!hasVisitorCookie(request.getCookies())) {
             createVisitorCookie(response);
             incrementVisitorCount();
         }
     }
 
-    private void createVisitorCookie(javax.servlet.http.HttpServletResponse response) {
-        javax.servlet.http.Cookie visitorCookie = new javax.servlet.http.Cookie("visitor", "true");
+    private boolean hasVisitorCookie(Cookie[] cookies) {
+        if (cookies == null) {
+            return false;
+        }
+        for (Cookie cookie : cookies) {
+            if (VISITOR_COOKIE_NAME.equals(cookie.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        // 오늘의 자정까지의 시간을 초 단위로 계산
-        java.time.LocalDateTime midnight = java.time.LocalDateTime.of(LocalDate.now().plusDays(1),
-                java.time.LocalTime.MIDNIGHT);
-        int secondsUntilMidnight = (int) java.time.Duration.between(java.time.LocalDateTime.now(), midnight)
-                .getSeconds();
+    private void createVisitorCookie(HttpServletResponse response) {
+        Cookie visitorCookie = new Cookie(VISITOR_COOKIE_NAME, VISITOR_COOKIE_VALUE);
 
-        visitorCookie.setMaxAge(secondsUntilMidnight); // 자정까지
-        visitorCookie.setPath("/"); // 전체 도메인에서 유효
+        visitorCookie.setMaxAge(secondsUntilTomorrow());
+        visitorCookie.setPath(ROOT_PATH);
         response.addCookie(visitorCookie);
+    }
+
+    private int secondsUntilTomorrow() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime midnight = LocalDateTime.of(LocalDate.now(clock).plusDays(1), LocalTime.MIDNIGHT);
+        return (int) Duration.between(now, midnight).getSeconds();
+    }
+
+    private int nullToZero(Integer value) {
+        return value == null ? 0 : value;
     }
 }

@@ -4,7 +4,6 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantSearchLogDTO;
 import com.sc1hub.assistant.mapper.AssistantSearchLogMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -29,8 +28,6 @@ public class AssistantSearchLogService {
     private final AssistantProperties assistantProperties;
     private final Clock clock;
 
-
-    @Autowired
     public AssistantSearchLogService(AssistantSearchLogMapper searchLogMapper,
                                      AssistantProperties assistantProperties) {
         this(searchLogMapper, assistantProperties, Clock.systemDefaultZone());
