@@ -18,9 +18,8 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -118,7 +117,7 @@ public class UploadController {
         writeImageResponse(targetPath, request, response, uid, decodedFileName);
     }
 
-    @GetMapping(value="/img/{imageName:.+}")
+    @GetMapping(value={"/img/{imageName:.+}", "/uploadedImg/{imageName:.+}"})
     public void imgSubmit(@PathVariable("imageName") String imageName,
             HttpServletRequest request, HttpServletResponse response) {
 
@@ -145,14 +144,13 @@ public class UploadController {
 
     private void writeImageResponse(Path targetPath, HttpServletRequest request, HttpServletResponse response,
             String uid, String decodedFileName) {
-        File imgFile = targetPath.toFile();
-        if (imgFile.isFile()) {
+        if (Files.isRegularFile(targetPath)) {
             byte[] buf = new byte[1024];
             int readByte;
             int length;
             byte[] imgBuf;
 
-            try (FileInputStream fileInputStream = new FileInputStream(imgFile);
+            try (InputStream fileInputStream = Files.newInputStream(targetPath);
                  ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                  ServletOutputStream out = response.getOutputStream()) {
 
@@ -303,9 +301,12 @@ public class UploadController {
             return false;
         }
         try {
-            String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
-            String encodedName = URLEncoder.encode(storedFileName, StandardCharsets.UTF_8.name()).replace("+", "%20");
-            String redirectUrl = request.getContextPath() + "/img/" + uid + "_" + encodedName;
+            String redirectFileName = toRedirectFileName(fileName);
+            if (redirectFileName.isEmpty()) {
+                return false;
+            }
+            String encodedName = URLEncoder.encode(redirectFileName, StandardCharsets.UTF_8.name()).replace("+", "%20");
+            String redirectUrl = request.getContextPath() + "/uploadedImg/" + uid + "_" + encodedName;
             response.sendRedirect(redirectUrl);
             return true;
         } catch (IOException e) {
@@ -333,6 +334,25 @@ public class UploadController {
         detail.put("message", message);
         error.put("error", detail);
         return error;
+    }
+
+    private static String toRedirectFileName(String fileName) {
+        String sanitizedFileName = UploadedImageFileNameUtil.sanitizeLegacyFileName(fileName);
+        if (sanitizedFileName.isEmpty()) {
+            return "";
+        }
+        return isAsciiFileName(sanitizedFileName)
+                ? sanitizedFileName
+                : UploadedImageFileNameUtil.toStoredFileName(sanitizedFileName);
+    }
+
+    private static boolean isAsciiFileName(String fileName) {
+        for (int i = 0; i < fileName.length(); i++) {
+            if (fileName.charAt(i) > 0x7F) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final class UploadedImageRef {
