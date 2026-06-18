@@ -61,6 +61,8 @@ public class AssistantBotService {
     private static final String POST_STRATEGY_FRESH = "fresh";
     private static final String AUTO_DRAFT_SKIPPED_AFTER_GENERATION = "draft_skipped_after_generation:";
     private static final String AUTO_DRAFT_BUDGET_EXCEEDED = "generate_call_budget_exceeded";
+    private static final int LINKED_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
+    private static final int FRESH_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
 
     private final AssistantBotProperties botProperties;
     private final AssistantProperties assistantProperties;
@@ -1480,7 +1482,8 @@ public class AssistantBotService {
             if (latestOverlap <= 0) {
                 return KeywordOverlapCheck.of("연계 글인데 최신글 제목과 이어지는 핵심 단어가 없습니다.");
             }
-            if (latestOverlap >= 2 || maxOverlapWithRecentTitle >= 3) {
+            if (latestOverlap >= LINKED_TITLE_KEYWORD_OVERLAP_LIMIT
+                    || maxOverlapWithRecentTitle >= LINKED_TITLE_KEYWORD_OVERLAP_LIMIT) {
                 return KeywordOverlapCheck.of("연계 글인데 최신글 제목 단어를 너무 많이 재사용했습니다.");
             }
             return KeywordOverlapCheck.valid();
@@ -1488,7 +1491,8 @@ public class AssistantBotService {
 
         Set<String> hotKeywords = collectFrequentRecentTitleKeywords(recentPosts, 8);
         int hotOverlap = countOverlap(generatedKeywords, hotKeywords);
-        if (hotOverlap >= 2 || maxOverlapWithRecentTitle >= 2) {
+        if (hotOverlap >= FRESH_TITLE_KEYWORD_OVERLAP_LIMIT
+                || maxOverlapWithRecentTitle >= FRESH_TITLE_KEYWORD_OVERLAP_LIMIT) {
             return KeywordOverlapCheck.of("신규 글인데 최신글 제목 단어를 너무 많이 재사용했습니다.");
         }
         return KeywordOverlapCheck.valid();

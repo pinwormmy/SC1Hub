@@ -364,6 +364,26 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void validateCandidate_acceptsFreshPostWithLimitedRecentTitleKeywordOverlap() throws Exception {
+        BoardDTO latestPost = post(702, "테스터A", 0, "퇴근길에 비 오니까 럴커 버로우 시키고 싶네");
+        String rawJson = "{\"analysis\":{\"topic\":\"일상글\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"비 오는 퇴근길에 손이 느리네\",\"body\":\"집 도착해서 한 판만 하려 했는데 손이 먼저 굳었다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.singletonList(latestPost),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+    }
+
+    @Test
     void buildPrompt_forZergPersonaIncludesZergPointOfViewForGameTalk() {
         String prompt = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
