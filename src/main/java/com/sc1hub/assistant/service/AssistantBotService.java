@@ -18,6 +18,7 @@ import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.service.BoardService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.HtmlUtils;
@@ -72,6 +73,7 @@ public class AssistantBotService {
     private LocalDate generateCallBudgetDate;
     private int generateCallBudgetUsed;
 
+    @Autowired
     public AssistantBotService(AssistantBotProperties botProperties,
                                AssistantProperties assistantProperties,
                                BoardService boardService,
