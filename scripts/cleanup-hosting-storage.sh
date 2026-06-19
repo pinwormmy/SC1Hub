@@ -11,7 +11,12 @@ BACKUP_KEEP="${BACKUP_KEEP:-2}"
 DRY_RUN="${DRY_RUN:-false}"
 
 usage_percent() {
-  df -P "$TOMCAT_DIR" | awk 'NR == 2 { gsub("%", "", $5); print $5 }'
+  if command -v df >/dev/null 2>&1; then
+    df -P "$TOMCAT_DIR" | awk 'NR == 2 { gsub("%", "", $5); print $5 }'
+    return
+  fi
+
+  echo 100
 }
 
 run_cmd() {
@@ -39,7 +44,11 @@ if [[ -d "$LOGS_DIR" ]]; then
   find "$LOGS_DIR" -type f \( -name '*.log' -o -name '*.out' -o -name '*.txt' \) -print |
     while IFS= read -r log_file; do
       echo "Truncating log: $log_file"
-      run_cmd truncate -s 0 "$log_file"
+      if [[ "$DRY_RUN" == "true" ]]; then
+        printf '[dry-run] : > %q\n' "$log_file"
+      else
+        : > "$log_file"
+      fi
     done
 fi
 

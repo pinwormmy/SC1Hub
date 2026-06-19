@@ -13,7 +13,9 @@ DEPLOY_HOST="${DEPLOY_HOST:-sc1hub-prod}"
 DEPLOY_USER="${DEPLOY_USER:-}"
 REMOTE_TOMCAT_DIR="${REMOTE_TOMCAT_DIR:-/home/hosting_users/sc1hub/tomcat}"
 REMOTE_SCRIPT_DIR="${REMOTE_SCRIPT_DIR:-$(dirname "$REMOTE_TOMCAT_DIR")/scripts}"
+REMOTE_CONFIG_DIR="${REMOTE_CONFIG_DIR:-$(dirname "$REMOTE_TOMCAT_DIR")/config}"
 REMOTE_WAR_NAME="${REMOTE_WAR_NAME:-ROOT.war}"
+REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-1}"
 REMOTE_STOP_CMD="${REMOTE_STOP_CMD:-\$REMOTE_TOMCAT_DIR/bin/shutdown.sh}"
 REMOTE_START_CMD="${REMOTE_START_CMD:-\$REMOTE_TOMCAT_DIR/bin/startup.sh}"
 
@@ -33,6 +35,7 @@ REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
+REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 
 echo "Building bootWar..."
 ./gradlew clean bootWar </dev/null
@@ -65,8 +68,14 @@ ssh "$REMOTE" \
   ". ~/.bash_profile
    set -e
    REMOTE_TOMCAT_DIR='$REMOTE_TOMCAT_DIR'
+   REMOTE_CONFIG_DIR='$REMOTE_CONFIG_DIR'
+   REMOTE_ONLINE_PROPS='$REMOTE_ONLINE_PROPS'
+   REMOTE_WAR_NAME='$REMOTE_WAR_NAME'
+   REMOTE_BACKUP_KEEP='$REMOTE_BACKUP_KEEP'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
+   mkdir -p \"\$REMOTE_CONFIG_DIR\"
+   chmod 700 \"\$REMOTE_CONFIG_DIR\"
    SETENV_SH='$REMOTE_TOMCAT_DIR/bin/setenv.sh'
    touch \"\$SETENV_SH\"
    if ! grep -q 'SC1Hub Spring profile' \"\$SETENV_SH\"; then
@@ -76,12 +85,37 @@ ssh "$REMOTE" \
        echo 'export SPRING_PROFILES_ACTIVE=\"\${SPRING_PROFILES_ACTIVE:-online}\"'
      } >> \"\$SETENV_SH\"
    fi
+   if ! grep -q 'SC1Hub external config' \"\$SETENV_SH\"; then
+     {
+       echo ''
+       echo '# SC1Hub external config'
+       echo 'export SPRING_CONFIG_ADDITIONAL_LOCATION=\"\${SPRING_CONFIG_ADDITIONAL_LOCATION:-file:/home/hosting_users/sc1hub/config/}\"'
+     } >> \"\$SETENV_SH\"
+   fi
+   LEGACY_ONLINE_PROPS=\"\$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
+   if [ ! -f \"\$REMOTE_ONLINE_PROPS\" ] && [ -f \"\$LEGACY_ONLINE_PROPS\" ]; then
+     cp \"\$LEGACY_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS\"
+     chmod 600 \"\$REMOTE_ONLINE_PROPS\"
+   fi
+   if [ ! -s \"\$REMOTE_ONLINE_PROPS\" ]; then
+     echo \"Missing required online config: \$REMOTE_ONLINE_PROPS\" >&2
+     exit 1
+   fi
+   if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
+     : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
+   fi
+   find '$REMOTE_WEBAPPS_DIR' -maxdepth 1 -type f -name \"\$REMOTE_WAR_NAME.bak.*\" -print |
+     sort -r |
+     awk -v keep=\"\$REMOTE_BACKUP_KEEP\" 'NR > keep { print }' |
+     while IFS= read -r old_backup; do
+       rm -f \"\$old_backup\"
+     done
    BACKUP_STAMP=\$(date +%Y%m%d%H%M%S)
    if [ -f '$REMOTE_WAR_PATH' ]; then
      cp '$REMOTE_WAR_PATH' '$REMOTE_WAR_PATH.bak.'\"\$BACKUP_STAMP\"
    fi
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
-   PROP=\"$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
+   PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
