@@ -2,6 +2,7 @@ package com.sc1hub.assistant.controller;
 
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
+import com.sc1hub.assistant.dto.AssistantBotAutoPublishStatusDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO;
 import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
@@ -57,6 +58,22 @@ public class AssistantBotAdminController {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result);
         }
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping(value = "/auto-publish/run-all", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<AssistantBotService.AutoPublishResult>> runAutoPublishAllPersonas() {
+        List<AssistantBotService.AutoPublishResult> results = assistantBotService.autoPublishAllPersonas();
+        for (AssistantBotService.AutoPublishResult result : results) {
+            if (result != null && AssistantBotService.AutoPublishResult.OUTCOME_FAILED.equals(result.getOutcome())) {
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(results);
+            }
+        }
+        return ResponseEntity.ok(results);
+    }
+
+    @GetMapping(value = "/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<AssistantBotAutoPublishStatusDTO> getAutoPublishStatus() {
+        return ResponseEntity.ok(assistantBotService.getAutoPublishStatus());
     }
 
     @GetMapping(value = "/history", produces = MediaType.APPLICATION_JSON_VALUE)

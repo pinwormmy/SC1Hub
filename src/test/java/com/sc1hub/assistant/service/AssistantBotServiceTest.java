@@ -3,6 +3,7 @@ package com.sc1hub.assistant.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantBotProperties;
 import com.sc1hub.assistant.config.AssistantProperties;
+import com.sc1hub.assistant.dto.AssistantBotAutoPublishStatusDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
@@ -214,6 +215,23 @@ class AssistantBotServiceTest {
         assertEquals("테뻔뻔봇", results.get(1).getPersonaName());
         assertEquals("저묵묵봇", results.get(2).getPersonaName());
         assertEquals("훈훈봇", results.get(3).getPersonaName());
+    }
+
+    @Test
+    void getAutoPublishStatus_returnsConfigCountsAndSlotsForEveryPersona() {
+        AssistantBotAutoPublishStatusDTO status = assistantBotService.getAutoPublishStatus();
+
+        assertTrue(status.isEnabled());
+        assertTrue(status.isAutoPublishEnabled());
+        assertTrue(status.isAutoPublishCatchUpEnabled());
+        assertEquals(4, status.getPersonas().size());
+        assertEquals("프징징봇", status.getPersonas().get(0).getPersonaName());
+        assertEquals("funboard", status.getPersonas().get(0).getBoardTitle());
+        assertEquals(botProperties.getAutoPublishPostDailyLimit() + botProperties.getAutoPublishCatchUpPostRetrySlots(),
+                status.getPersonas().get(0).getPostSlots().size());
+        assertEquals(botProperties.getAutoPublishCommentDailyLimit(),
+                status.getPersonas().get(0).getCommentSlots().size());
+        assertTrue(status.getPersonas().get(0).getWaitingDetail() != null);
     }
 
     @Test
@@ -715,7 +733,8 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void isPublishMinute_onlyReturnsTrueAtExactRandomMinuteByDefault() {
+    void isPublishMinute_onlyReturnsTrueAtExactRandomMinuteWhenCatchUpDisabled() {
+        botProperties.setAutoPublishCatchUpEnabled(false);
         LocalDate date = LocalDate.of(2026, 3, 9);
         List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
         int firstPostSlot = postSlots.stream()

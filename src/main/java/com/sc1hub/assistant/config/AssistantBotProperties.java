@@ -36,7 +36,7 @@ public class AssistantBotProperties {
     private boolean autoPublishEnabled = false;
     private String autoPublishCron = "0 * * * * *";
     private String autoPublishZone = "Asia/Seoul";
-    private boolean autoPublishCatchUpEnabled = false;
+    private boolean autoPublishCatchUpEnabled = true;
     private int autoPublishCatchUpPostRetrySlots = 2;
     private int autoPublishCatchUpRecoveryCooldownMinutes = 60;
     private int autoPublishPostDailyLimit = 3;

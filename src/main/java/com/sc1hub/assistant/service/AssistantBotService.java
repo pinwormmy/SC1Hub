@@ -7,6 +7,7 @@ import com.sc1hub.assistant.config.AssistantBotProperties.PersonaProperties;
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
+import com.sc1hub.assistant.dto.AssistantBotAutoPublishStatusDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistorySummaryDTO;
 import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
@@ -369,6 +370,93 @@ public class AssistantBotService {
 
     public List<AssistantBotHistorySummaryDTO> getHistorySummary(int days) {
         return safeList(assistantBotMapper.selectHistorySummarySince(resolveHistorySince(days)));
+    }
+
+    public AssistantBotAutoPublishStatusDTO getAutoPublishStatus() {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
+        LocalDateTime since = today.atStartOfDay();
+        LocalDateTime minuteStart = now.withSecond(0).withNano(0);
+
+        AssistantBotAutoPublishStatusDTO status = new AssistantBotAutoPublishStatusDTO();
+        status.setEnabled(botProperties.isEnabled());
+        status.setAutoPublishEnabled(botProperties.isAutoPublishEnabled());
+        status.setAutoPublishCatchUpEnabled(botProperties.isAutoPublishCatchUpEnabled());
+        status.setAutoPublishCron(botProperties.getAutoPublishCron());
+        status.setAutoPublishZone(botProperties.getAutoPublishZone());
+        status.setPostDailyLimit(Math.max(0, botProperties.getAutoPublishPostDailyLimit()));
+        status.setCommentDailyLimit(Math.max(0, botProperties.getAutoPublishCommentDailyLimit()));
+        status.setDate(today);
+        status.setServerNow(now);
+
+        List<AssistantBotAutoPublishStatusDTO.PersonaStatusDTO> personaStatuses = new ArrayList<>();
+        for (PersonaProperties persona : safeList(botProperties.getEnabledPersonas())) {
+            if (persona == null) {
+                continue;
+            }
+            personaStatuses.add(buildPersonaAutoPublishStatus(persona, today, now, since, minuteStart));
+        }
+        status.setPersonas(personaStatuses);
+        return status;
+    }
+
+    private AssistantBotAutoPublishStatusDTO.PersonaStatusDTO buildPersonaAutoPublishStatus(PersonaProperties persona,
+                                                                                           LocalDate today,
+                                                                                           LocalDateTime now,
+                                                                                           LocalDateTime since,
+                                                                                           LocalDateTime minuteStart) {
+        String boardTitle = resolveBoardTitle(persona.getBoardTitle(), persona);
+        AssistantBotAutoPublishStatusDTO.PersonaStatusDTO personaStatus = new AssistantBotAutoPublishStatusDTO.PersonaStatusDTO();
+        personaStatus.setPersonaName(persona.getName());
+        personaStatus.setBoardTitle(boardTitle);
+        personaStatus.setModel(resolveModel(persona));
+
+        if (!StringUtils.hasText(boardTitle)) {
+            personaStatus.setWaitingDetail("invalid_board");
+            return personaStatus;
+        }
+
+        int handledPostToday = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
+        int handledCommentToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
+        int handledPostThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
+        int handledCommentThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, minuteStart);
+        int handledPostRecoveryCooldown = assistantBotMapper.countGeneratedSinceByMode(
+                persona.getName(),
+                boardTitle,
+                MODE_POST,
+                now.minusMinutes(Math.max(1, botProperties.getAutoPublishCatchUpRecoveryCooldownMinutes()))
+        );
+
+        personaStatus.setHandledPostToday(handledPostToday);
+        personaStatus.setHandledCommentToday(handledCommentToday);
+        personaStatus.setHandledPostThisMinute(handledPostThisMinute);
+        personaStatus.setHandledCommentThisMinute(handledCommentThisMinute);
+        personaStatus.setHandledPostRecoveryCooldown(handledPostRecoveryCooldown);
+
+        List<Integer> postSlots = resolveAutoPublishSlots(persona, today, MODE_POST, Math.max(0, botProperties.getAutoPublishPostDailyLimit()));
+        List<Integer> commentSlots = resolveAutoPublishSlots(persona, today, MODE_COMMENT, Math.max(0, botProperties.getAutoPublishCommentDailyLimit()));
+        personaStatus.setPostSlots(formatMinuteSlots(postSlots));
+        personaStatus.setCommentSlots(formatMinuteSlots(commentSlots));
+
+        Integer nextPostSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, today, MODE_POST, now.toLocalTime());
+        Integer nextCommentSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, today, MODE_COMMENT, now.toLocalTime());
+        personaStatus.setNextPostSlot(nextPostSlot == null ? null : formatMinuteOfDay(nextPostSlot));
+        personaStatus.setNextCommentSlot(nextCommentSlot == null ? null : formatMinuteOfDay(nextCommentSlot));
+
+        List<AutoPublishCandidate> dueCandidates = resolveDueAutoPublishCandidates(persona, today, now.toLocalTime(),
+                handledPostToday, handledCommentToday, handledPostThisMinute, handledCommentThisMinute,
+                handledPostRecoveryCooldown);
+        List<String> dueModes = new ArrayList<>();
+        for (AutoPublishCandidate candidate : dueCandidates) {
+            if (candidate != null && StringUtils.hasText(candidate.mode)) {
+                dueModes.add(candidate.mode);
+            }
+        }
+        personaStatus.setDueModes(dueModes);
+        personaStatus.setWaitingDetail(dueModes.isEmpty()
+                ? buildWaitingDetail(persona, today, now.toLocalTime(), handledPostToday, handledCommentToday)
+                : "due_now");
+        return personaStatus;
     }
 
     private LocalDateTime resolveHistorySince(int days) {
@@ -763,6 +851,20 @@ public class AssistantBotService {
         combinedSlots.addAll(catchUpSlots);
         Collections.sort(combinedSlots);
         return combinedSlots;
+    }
+
+    private List<String> formatMinuteSlots(List<Integer> slots) {
+        if (slots == null || slots.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> formatted = new ArrayList<>();
+        for (Integer slot : slots) {
+            if (slot == null) {
+                continue;
+            }
+            formatted.add(formatMinuteOfDay(slot));
+        }
+        return formatted;
     }
 
     private String formatMinuteOfDay(int minuteOfDay) {

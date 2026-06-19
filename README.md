@@ -114,6 +114,7 @@ sc1hub.assistant.bot.publishGuestPassword=CHANGE_ME_TO_A_STRONG_VALUE
 sc1hub.assistant.bot.autoPublishEnabled=true
 sc1hub.assistant.bot.autoPublishCron=0 * * * * *
 sc1hub.assistant.bot.autoPublishZone=Asia/Seoul
+sc1hub.assistant.bot.autoPublishCatchUpEnabled=true
 sc1hub.assistant.bot.autoPublishPostDailyLimit=5
 sc1hub.assistant.bot.autoPublishCommentDailyLimit=10
 sc1hub.assistant.bot.autoPublishCommentCandidatePosts=6
@@ -121,9 +122,21 @@ sc1hub.assistant.bot.autoPublishCommentCandidatePosts=6
 
 - 권장값 기준으로 매분 발행 가능 여부를 체크하고, 하루 전체 24시간 안에서 게시글 5회와 댓글 10회의 무작위 슬롯이 각각 잡힙니다.
 - 운영시간 제한이나 최소 대기시간 없이, 일일 횟수 제한만 적용됩니다.
+- `autoPublishCatchUpEnabled=true`이면 서버가 랜덤 슬롯을 놓친 경우 같은 날 남은 슬롯이나 복구 타이밍에 다시 시도합니다.
 - `publishGuestPassword`는 운영 전용 강한 값으로 별도 관리해야 합니다.
 
-배포 후 관리자 로그인 상태에서 수동 1회 점검:
+배포 후 관리자 로그인 상태에서 현재 설정/슬롯 확인:
+
+```js
+fetch('/api/admin/assistant-bot/status', {
+  credentials: 'include'
+})
+  .then(r => r.json())
+  .then(console.log)
+  .catch(console.error)
+```
+
+관리자 로그인 상태에서 수동 1회 점검:
 
 ```js
 fetch('/api/admin/assistant-bot/auto-publish/run', {
@@ -134,6 +147,8 @@ fetch('/api/admin/assistant-bot/auto-publish/run', {
   .then(console.log)
   .catch(console.error)
 ```
+
+전체 페르소나별 결과를 보려면 `/api/admin/assistant-bot/auto-publish/run-all`을 같은 방식으로 호출합니다.
 
 ### RAG 적용 흐름
 
