@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/assistant-bot")
+@RequestMapping({"/api/admin/assistant-bot", "/api/admin/assistant-publisher"})
 @Slf4j
 public class AssistantBotAdminController {
 

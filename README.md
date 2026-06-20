@@ -128,7 +128,7 @@ sc1hub.assistant.bot.autoPublishCommentCandidatePosts=6
 배포 후 관리자 로그인 상태에서 현재 설정/슬롯 확인:
 
 ```js
-fetch('/api/admin/assistant-bot/status', {
+fetch('/api/admin/assistant-publisher/status', {
   credentials: 'include'
 })
   .then(r => r.json())
@@ -139,7 +139,7 @@ fetch('/api/admin/assistant-bot/status', {
 관리자 로그인 상태에서 수동 1회 점검:
 
 ```js
-fetch('/api/admin/assistant-bot/auto-publish/run', {
+fetch('/api/admin/assistant-publisher/auto-publish/run', {
   method: 'POST',
   credentials: 'include'
 })
@@ -148,7 +148,7 @@ fetch('/api/admin/assistant-bot/auto-publish/run', {
   .catch(console.error)
 ```
 
-전체 페르소나별 결과를 보려면 `/api/admin/assistant-bot/auto-publish/run-all`을 같은 방식으로 호출합니다.
+전체 페르소나별 결과를 보려면 `/api/admin/assistant-publisher/auto-publish/run-all`을 같은 방식으로 호출합니다.
 
 ### RAG 적용 흐름
 
