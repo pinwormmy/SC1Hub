@@ -1988,7 +1988,7 @@ public class AssistantBotService {
         }
 
         int safeAttempt = Math.max(1, attempt);
-        int offset = (int) Math.floorMod(LocalDate.now(clock).toEpochDay() + safeAttempt, candidates.size());
+        int offset = (int) Math.floorMod(LocalDate.now(clock).toEpochDay() + safeAttempt, (long) candidates.size());
         return candidates.get(offset);
     }
 
@@ -2048,7 +2048,7 @@ public class AssistantBotService {
         if (persona != null && StringUtils.hasText(persona.getName())) {
             seed += persona.getName().hashCode();
         }
-        return Math.floorMod(seed, 2) == 0 ? POST_STRATEGY_LINKED : POST_STRATEGY_FRESH;
+        return Math.floorMod(seed, 2L) == 0 ? POST_STRATEGY_LINKED : POST_STRATEGY_FRESH;
     }
 
     private String buildCommentInteractionRule(PersonaProperties persona, BoardDTO targetPost) {

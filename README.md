@@ -128,7 +128,7 @@ sc1hub.assistant.bot.autoPublishCommentCandidatePosts=6
 배포 후 관리자 로그인 상태에서 현재 설정/슬롯 확인:
 
 ```js
-fetch('/api/admin/assistant-publisher/status', {
+fetch('/adminPage/ops/status', {
   credentials: 'include'
 })
   .then(r => r.json())
@@ -149,6 +149,11 @@ fetch('/api/admin/assistant-publisher/auto-publish/run', {
 ```
 
 전체 페르소나별 결과를 보려면 `/api/admin/assistant-publisher/auto-publish/run-all`을 같은 방식으로 호출합니다.
+
+최근 생성 이력과 요약은 관리자 로그인 상태에서 `/adminPage/ops` 화면 또는 아래 URL로 직접 확인할 수 있습니다.
+
+- `/adminPage/ops/history?days=3&limit=100`
+- `/adminPage/ops/history/summary?days=3`
 
 ### RAG 적용 흐름
 

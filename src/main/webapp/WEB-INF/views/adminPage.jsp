@@ -409,6 +409,15 @@
                             <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary'">관리하기</button>
                         </div>
                     </div>
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div>
+                                <h2 class="admin-card-title">운영 점검</h2>
+                                <p class="admin-card-subtitle">자동 발행 설정, 슬롯, 최근 생성 이력</p>
+                            </div>
+                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/ops'">확인하기</button>
+                        </div>
+                    </div>
                     <div class="admin-card admin-card--indexing">
                         <div class="admin-card-header">
                             <div>
