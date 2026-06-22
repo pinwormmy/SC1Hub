@@ -614,6 +614,48 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void buildPrompt_forHealthPersonaRequiresHealthKnowledgeHelp() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("건강봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("건강 상식 도움말"));
+        assertTrue(prompt.contains("핵심 상식 -> 이유 -> 생활 속 적용 -> 주의/상담 기준"));
+        assertTrue(prompt.contains("심호흡, 차 한잔, 물 마시기처럼 누구나 아는 한 줄 조언만으로 끝내면 실패"));
+        assertTrue(prompt.contains("수면 위생"));
+        assertTrue(prompt.contains("건강검진"));
+    }
+
+    @Test
+    void buildCommentInteractionRule_forHealthPersonaRequiresContextualKnowledge() {
+        BoardDTO targetPost = post(904, "테스터A", 0, "요즘 앉아 있으면 허리가 뻐근하다");
+        targetPost.setContent("퇴근하고 나면 허리랑 목이 같이 뻣뻣하다");
+
+        String rule = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildCommentInteractionRule",
+                persona("건강봇"),
+                targetPost
+        );
+
+        assertTrue(rule.contains("건강상식"));
+        assertTrue(rule.contains("단순 위로"));
+        assertTrue(rule.contains("왜 도움이 되는지"));
+        assertTrue(rule.contains("전문가 상담"));
+    }
+
+    @Test
     void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
         BoardDTO targetPost = post(903, "테스터A", 0, "오늘 퇴근길에 비가 너무 많이 왔다");
         targetPost.setContent("우산이 있었는데도 신발이 다 젖어서 좀 난감했다");
