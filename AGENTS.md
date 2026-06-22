@@ -46,6 +46,8 @@ If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line 
 - If a session starts on `main` or detached HEAD, create or switch to a task branch before making code changes.
 - After implementation, run the narrowest useful tests. Commit changes when the user asked for a completed implementation or commit-ready work.
 - Do not push, create PRs, or merge into `main` unless the user explicitly asks.
+- Do not push `main` or deploy from an implementation worktree session by default. If asked to push or deploy there, advise using a fresh workspace session after verifying `main`, `git status`, recent commits, and required checks.
+- Only proceed with push or deployment in the current session if the user explicitly confirms that they want to do so despite the fresh-session workflow.
 - When the user explicitly asks to push, create a PR, or merge, prepare the branch by committing first if needed, then confirm before the final merge into `main`.
 
 ## Security & Configuration Tips
