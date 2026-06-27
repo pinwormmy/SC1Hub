@@ -15,7 +15,6 @@ REMOTE_TOMCAT_DIR="${REMOTE_TOMCAT_DIR:-/home/hosting_users/sc1hub/tomcat}"
 REMOTE_SCRIPT_DIR="${REMOTE_SCRIPT_DIR:-$(dirname "$REMOTE_TOMCAT_DIR")/scripts}"
 REMOTE_CONFIG_DIR="${REMOTE_CONFIG_DIR:-$(dirname "$REMOTE_TOMCAT_DIR")/config}"
 REMOTE_WAR_NAME="${REMOTE_WAR_NAME:-ROOT.war}"
-REMOTE_BACKUP_KEEP="${REMOTE_BACKUP_KEEP:-1}"
 REMOTE_STOP_CMD="${REMOTE_STOP_CMD:-\$REMOTE_TOMCAT_DIR/bin/shutdown.sh}"
 REMOTE_START_CMD="${REMOTE_START_CMD:-\$REMOTE_TOMCAT_DIR/bin/startup.sh}"
 
@@ -71,7 +70,6 @@ ssh "$REMOTE" \
    REMOTE_CONFIG_DIR='$REMOTE_CONFIG_DIR'
    REMOTE_ONLINE_PROPS='$REMOTE_ONLINE_PROPS'
    REMOTE_WAR_NAME='$REMOTE_WAR_NAME'
-   REMOTE_BACKUP_KEEP='$REMOTE_BACKUP_KEEP'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -103,16 +101,6 @@ ssh "$REMOTE" \
    fi
    if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
      : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
-   fi
-   find '$REMOTE_WEBAPPS_DIR' -maxdepth 1 -type f -name \"\$REMOTE_WAR_NAME.bak.*\" -print |
-     sort -r |
-     awk -v keep=\"\$REMOTE_BACKUP_KEEP\" 'NR > keep { print }' |
-     while IFS= read -r old_backup; do
-       rm -f \"\$old_backup\"
-     done
-   BACKUP_STAMP=\$(date +%Y%m%d%H%M%S)
-   if [ -f '$REMOTE_WAR_PATH' ]; then
-     cp '$REMOTE_WAR_PATH' '$REMOTE_WAR_PATH.bak.'\"\$BACKUP_STAMP\"
    fi
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
    PROP=\"\$REMOTE_ONLINE_PROPS\"
