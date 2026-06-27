@@ -91,14 +91,28 @@
     grid-column: 2;
     justify-self: center;
     justify-content: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.sc-paging__pages::-webkit-scrollbar {
+    display: none;
 }
 .sc-paging__nav {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
     white-space: nowrap;
 }
 .sc-paging__prev { justify-self: start; }
 .sc-paging__next { justify-self: end; }
+.sc-paging__page {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
 .sc-paging__page.is-current {
     color: #75f94c;
     border-color: #75f94c;
@@ -136,18 +150,31 @@
         font-size: 0.95rem;
     }
     .sc-paging {
-        grid-template-columns: 1fr;
-        justify-items: center;
-        gap: 0.35rem;
-    }
-    .sc-paging__pages,
-    .sc-paging__prev,
-    .sc-paging__next {
-        grid-column: auto;
-        justify-self: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.04rem;
+        font-size: 0.68rem;
     }
     .sc-paging__pages {
-        max-width: 100%;
+        order: 2;
+        flex: 0 1 auto;
+        width: max-content;
+        max-width: calc(100% - 3rem);
+        justify-content: flex-start;
+        gap: 0.02rem;
+    }
+    .sc-paging__prev {
+        order: 1;
+    }
+    .sc-paging__next {
+        order: 3;
+    }
+    .sc-paging__page,
+    .sc-paging__nav {
+        font-size: inherit;
+        padding: 0.04rem 0.05rem;
+        line-height: 1.2;
     }
 }
 /* 비 모바일 환경에서는 모든 열을 표시 */
