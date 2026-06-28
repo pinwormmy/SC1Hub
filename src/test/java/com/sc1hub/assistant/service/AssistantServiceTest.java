@@ -59,9 +59,9 @@ class AssistantServiceTest {
         assistantProperties.setRequireLogin(false);
         assistantProperties.setMaxRelatedPosts(5);
         assistantProperties.setContextPosts(3);
-        assistantProperties.setAnswerMaxSentences(8);
-        assistantProperties.setAnswerMaxChars(1500);
-        assistantProperties.setAnswerMaxOutputTokens(2048);
+        assistantProperties.setAnswerMaxSentences(3);
+        assistantProperties.setAnswerMaxChars(600);
+        assistantProperties.setAnswerMaxOutputTokens(512);
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
@@ -136,13 +136,15 @@ class AssistantServiceTest {
         assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
+        ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(geminiClient).generateAnswer(promptCaptor.capture(), maxTokensCaptor.capture());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("User question"));
-        assertTrue(prompt.contains("max 8 sentences"));
-        assertTrue(prompt.contains("<= 1500 chars"));
+        assertTrue(prompt.contains("max 3 sentences"));
+        assertTrue(prompt.contains("<= 600 chars"));
         assertTrue(prompt.contains("board=freeboard"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
+        assertEquals(512, maxTokensCaptor.getValue());
     }
 
     @Test

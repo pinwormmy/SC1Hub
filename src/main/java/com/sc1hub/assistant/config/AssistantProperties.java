@@ -15,7 +15,7 @@ public class AssistantProperties {
     private int maxRelatedPosts = 3;
     private int contextPosts = 3;
     // Answer generation limits (prompt guidance + output token budget)
-    private int answerMaxSentences = 5;
+    private int answerMaxSentences = 3;
     private int answerMaxChars = 600;
     private int answerMaxOutputTokens = 0;
     // Answer-grounded related posts: candidate pool size for selecting high-quality supporting links.
