@@ -25,11 +25,22 @@
     </c:otherwise>
 </c:choose>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="preload" href="https://sc1hub.cdn1.cafe24.com/home-wallpaper-dark.jpg" as="image">
 <link rel="stylesheet" href="/css/sc1hub-layout.css">
 <link rel="stylesheet" href="/css/style.css">
 <!-- Neo둥근모 Pro -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
-<link rel="preload" href="/images/home-wallpaper-dark.png" as="image">
+<script>
+(function () {
+    var cdnWallpaperUrl = "https://sc1hub.cdn1.cafe24.com/home-wallpaper-dark.jpg";
+    var fallbackWallpaper = 'url("/images/home-wallpaper-dark.jpg")';
+    var wallpaperProbe = new Image();
+    wallpaperProbe.onerror = function () {
+        document.documentElement.style.setProperty("--sc-home-wallpaper-image", fallbackWallpaper);
+    };
+    wallpaperProbe.src = cdnWallpaperUrl;
+})();
+</script>
 <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
 
 <style>

@@ -14,6 +14,7 @@ html {
     --sc-cyan: #00ffff;
     --sc-magenta: #ea40f7;
     --sc-terminal-glow: 0 0 14px rgba(117, 249, 76, 0.16);
+    --sc-home-wallpaper-image: url("https://sc1hub.cdn1.cafe24.com/home-wallpaper-dark.jpg");
 }
 *, *::before, *::after {
     border-radius: 0 !important;
@@ -36,7 +37,7 @@ body {
         radial-gradient(circle at 18% 0%, rgba(0, 255, 255, 0.13), transparent 26rem),
         radial-gradient(circle at 82% 18%, rgba(117, 249, 76, 0.12), transparent 24rem),
         linear-gradient(rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.9)),
-        url("/images/home-wallpaper-dark.png");
+        var(--sc-home-wallpaper-image);
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
