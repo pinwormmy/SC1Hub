@@ -35,6 +35,7 @@ REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
+REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
 
 echo "Building bootWar..."
 ./gradlew clean bootWar </dev/null
@@ -70,6 +71,7 @@ ssh "$REMOTE" \
    REMOTE_CONFIG_DIR='$REMOTE_CONFIG_DIR'
    REMOTE_ONLINE_PROPS='$REMOTE_ONLINE_PROPS'
    REMOTE_WAR_NAME='$REMOTE_WAR_NAME'
+   REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -102,6 +104,17 @@ ssh "$REMOTE" \
    if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
      : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
    fi
+   $REMOTE_STOP_CMD || true
+   for attempt in 1 2 3 4 5 6 7 8 9 10; do
+     if ! curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
+       break
+     fi
+     perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
+   done
+   if curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
+     echo \"Tomcat is still responding on port \$REMOTE_HTTP_PORT after shutdown.\" >&2
+     exit 1
+   fi
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
@@ -115,7 +128,15 @@ ssh "$REMOTE" \
    fi
    mv '$REMOTE_UPLOAD_PATH' '$REMOTE_WAR_PATH'
    rm -rf '$REMOTE_EXPLODED_DIR'
-   $REMOTE_STOP_CMD || true
-   $REMOTE_START_CMD"
+   $REMOTE_START_CMD
+   for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+     if curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
+       exit 0
+     fi
+     perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
+   done
+   echo \"Tomcat did not respond on port \$REMOTE_HTTP_PORT after startup.\" >&2
+   tail -n 120 \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" >&2 || true
+   exit 1"
 
 echo "Deploy complete."
