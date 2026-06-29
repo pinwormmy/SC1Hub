@@ -34,7 +34,7 @@ public class UploadedImageDimensionInjector {
     private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile("(?i)([a-z_:][-a-z0-9_:.]*)\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))");
     private static final Pattern PIXEL_VALUE_PATTERN = Pattern.compile("(?i)^\\s*(\\d+)\\s*(px)?\\s*$");
     private static final Pattern STYLE_DECLARATION_PATTERN = Pattern.compile("(?i)^\\s*(width|height)\\s*:\\s*(\\d+)\\s*(px)?\\s*$");
-    private static final Pattern IMG_PATH_PATTERN = Pattern.compile("(?i)/img/([^/?#]+)");
+    private static final Pattern IMG_PATH_PATTERN = Pattern.compile("(?i)/(?:img|uploadedImg)/([^/?#]+)");
 
     private final String uploadPath;
     private final String imageUploadPath;
@@ -76,11 +76,12 @@ public class UploadedImageDimensionInjector {
         if (!StringUtils.hasText(src)) {
             return imgTag;
         }
+        String normalizedSrc = normalizeLocalUploadedImageSrc(src);
 
         int widthFromAttr = parsePixelValue(attrs.get("width"));
         int heightFromAttr = parsePixelValue(attrs.get("height"));
         if (widthFromAttr > 0 && heightFromAttr > 0) {
-            return imgTag;
+            return normalizedSrc.equals(src) ? imgTag : upsertAttribute(imgTag, "src", normalizedSrc);
         }
 
         int[] styleDimensions = parseStyleDimensions(attrs.get("style"));
@@ -88,7 +89,7 @@ public class UploadedImageDimensionInjector {
         int height = heightFromAttr > 0 ? heightFromAttr : styleDimensions[1];
 
         if (width <= 0 || height <= 0) {
-            UploadedImageRef ref = parseUploadedImageRef(src);
+            UploadedImageRef ref = parseUploadedImageRef(normalizedSrc);
             if (ref != null) {
                 ImageDimension dimension = readImageDimension(ref);
                 if (dimension != null) {
@@ -103,10 +104,10 @@ public class UploadedImageDimensionInjector {
         }
 
         if (width <= 0 || height <= 0) {
-            return imgTag;
+            return normalizedSrc.equals(src) ? imgTag : upsertAttribute(imgTag, "src", normalizedSrc);
         }
 
-        String updated = imgTag;
+        String updated = normalizedSrc.equals(src) ? imgTag : upsertAttribute(imgTag, "src", normalizedSrc);
         if (widthFromAttr <= 0) {
             updated = upsertAttribute(updated, "width", Integer.toString(width));
         }
@@ -140,6 +141,26 @@ public class UploadedImageDimensionInjector {
             }
         }
         return null;
+    }
+
+    private static String normalizeLocalUploadedImageSrc(String src) {
+        if (!StringUtils.hasText(src)) {
+            return src;
+        }
+        String trimmed = src.trim();
+        if (trimmed.startsWith("/img/")) {
+            return "/uploadedImg/" + trimmed.substring("/img/".length());
+        }
+        if (trimmed.startsWith("//sc1hub.com/img/")) {
+            return "//sc1hub.com/uploadedImg/" + trimmed.substring("//sc1hub.com/img/".length());
+        }
+        if (trimmed.startsWith("https://sc1hub.com/img/")) {
+            return "https://sc1hub.com/uploadedImg/" + trimmed.substring("https://sc1hub.com/img/".length());
+        }
+        if (trimmed.startsWith("http://sc1hub.com/img/")) {
+            return "http://sc1hub.com/uploadedImg/" + trimmed.substring("http://sc1hub.com/img/".length());
+        }
+        return src;
     }
 
     private static int parsePixelValue(String value) {

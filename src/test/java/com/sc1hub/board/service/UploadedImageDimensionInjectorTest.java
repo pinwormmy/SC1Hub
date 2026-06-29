@@ -72,4 +72,14 @@ class UploadedImageDimensionInjectorTest {
         assertTrue(result.contains("width=\"800\""));
         assertTrue(result.contains("height=\"700\""));
     }
+
+    @Test
+    void injectMissingDimensions_rewritesLegacyImgPathToUploadedImg() {
+        UploadedImageDimensionInjector injector = new UploadedImageDimensionInjector(tempDir.toString(), "");
+        String html = "<p><img src=\"/img/uid123_map.jpg\"></p>";
+
+        String result = injector.injectMissingDimensions(html);
+
+        assertTrue(result.contains("src=\"/uploadedImg/uid123_map.jpg\""));
+    }
 }

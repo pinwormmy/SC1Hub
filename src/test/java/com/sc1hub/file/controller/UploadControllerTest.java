@@ -124,6 +124,25 @@ class UploadControllerTest {
         }
     }
 
+    @Test
+    void ckSubmit_redirectsWithoutDoubleEncodingStoredFileName() throws Exception {
+        String uid = "81469f62-87c3-4b41-8832-eb089fa50414";
+        String storedFileName = UploadedImageFileNameUtil.toStoredFileName("뮤탈과 바이오닉 심슨버전.jpg");
+
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ckImgSubmit");
+        request.setQueryString("uid=" + uid + "&fileName=" + encode(storedFileName));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.ckSubmit(uid, storedFileName, request, response);
+
+        assertEquals(302, response.getStatus());
+        assertEquals("/uploadedImg/" + uid + "_" + storedFileName, response.getRedirectedUrl());
+    }
+
     private static String encode(String value) throws Exception {
         return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
     }
