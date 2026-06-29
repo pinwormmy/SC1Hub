@@ -51,6 +51,8 @@ public class AssistantService {
             "unit", "stats", "stat", "damage", "armor", "health", "shield", "range", "speed", "cooldown", "cost", "supply"
     ));
     private static final int FACT_BOARD_SCORE_BONUS = 2;
+    private static final int MIN_ANSWER_MAX_OUTPUT_TOKENS = 2048;
+    private static final int EMPTY_ANSWER_RETRY_MAX_OUTPUT_TOKENS = 3072;
 
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
@@ -159,9 +161,7 @@ public class AssistantService {
         AssistantAnswerResult answerResult;
         String answer;
         try {
-            int answerMaxOutputTokens = Math.max(0, assistantProperties.getAnswerMaxOutputTokens());
-            String rawAnswer = geminiClient.generateAnswer(prompt, answerMaxOutputTokens);
-            answerResult = parseAnswerResult(rawAnswer, allowedSourceIds);
+            answerResult = generateAnswerResult(prompt, allowedSourceIds);
             answer = answerResult.getAnswer() == null ? "" : answerResult.getAnswer().trim();
             if (!StringUtils.hasText(answer)) {
                 answer = "답변을 생성하지 못했습니다.";
@@ -191,6 +191,30 @@ public class AssistantService {
         response.setRelatedPostsNotice(selection.notice);
         logAnswerGroundedRelatedPosts(normalizedMessage, parseResult, expandedTerms, answerResult.getUsedPostIds(), selection);
         return response;
+    }
+
+    private AssistantAnswerResult generateAnswerResult(String prompt, Set<String> allowedSourceIds) {
+        int answerMaxOutputTokens = resolveAnswerMaxOutputTokens();
+        String rawAnswer = geminiClient.generateAnswer(prompt, answerMaxOutputTokens);
+        AssistantAnswerResult result = parseAnswerResult(rawAnswer, allowedSourceIds);
+        if (StringUtils.hasText(result.getAnswer())) {
+            return result;
+        }
+
+        int retryMaxOutputTokens = Math.max(answerMaxOutputTokens, EMPTY_ANSWER_RETRY_MAX_OUTPUT_TOKENS);
+        if (retryMaxOutputTokens <= answerMaxOutputTokens) {
+            return result;
+        }
+
+        log.warn("AI 검색 답변이 빈 값으로 반환되어 더 큰 출력 예산으로 1회 재시도합니다. firstMaxOutputTokens={}, retryMaxOutputTokens={}",
+                answerMaxOutputTokens, retryMaxOutputTokens);
+        String retryRawAnswer = geminiClient.generateAnswer(prompt, retryMaxOutputTokens);
+        return parseAnswerResult(retryRawAnswer, allowedSourceIds);
+    }
+
+    private int resolveAnswerMaxOutputTokens() {
+        int configured = Math.max(0, assistantProperties.getAnswerMaxOutputTokens());
+        return Math.max(configured, MIN_ANSWER_MAX_OUTPUT_TOKENS);
     }
 
     private AssistantAnswerResult parseAnswerResult(String raw, Set<String> allowedSourceIds) {

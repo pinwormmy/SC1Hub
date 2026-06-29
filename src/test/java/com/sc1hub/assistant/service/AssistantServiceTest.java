@@ -61,7 +61,7 @@ class AssistantServiceTest {
         assistantProperties.setContextPosts(3);
         assistantProperties.setAnswerMaxSentences(3);
         assistantProperties.setAnswerMaxChars(600);
-        assistantProperties.setAnswerMaxOutputTokens(1024);
+        assistantProperties.setAnswerMaxOutputTokens(2048);
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
@@ -144,7 +144,37 @@ class AssistantServiceTest {
         assertTrue(prompt.contains("<= 600 chars"));
         assertTrue(prompt.contains("board=freeboard"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
-        assertEquals(1024, maxTokensCaptor.getValue());
+        assertEquals(2048, maxTokensCaptor.getValue());
+    }
+
+    @Test
+    void chat_usesMinimumAnswerOutputBudget_whenConfiguredBudgetIsTooLow() throws Exception {
+        assistantProperties.setAnswerMaxOutputTokens(512);
+        when(boardMapper.getBoardList()).thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt()))
+                .thenReturn("{\"answer\":\"짧은 답변입니다.\",\"citations\":[]}");
+
+        AssistantChatResponseDTO response = assistantService.chat("5팩 알려줘", null);
+
+        assertEquals("짧은 답변입니다.", response.getAnswer());
+        ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(geminiClient).generateAnswer(anyString(), maxTokensCaptor.capture());
+        assertEquals(2048, maxTokensCaptor.getValue());
+    }
+
+    @Test
+    void chat_retriesOnceWithLargerBudget_whenGeminiReturnsEmptyAnswer() throws Exception {
+        assistantProperties.setAnswerMaxOutputTokens(512);
+        when(boardMapper.getBoardList()).thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt()))
+                .thenReturn("", "{\"answer\":\"재시도 답변입니다.\",\"citations\":[]}");
+
+        AssistantChatResponseDTO response = assistantService.chat("5팩 알려줘", null);
+
+        assertEquals("재시도 답변입니다.", response.getAnswer());
+        ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(geminiClient, times(2)).generateAnswer(anyString(), maxTokensCaptor.capture());
+        assertEquals(Arrays.asList(2048, 3072), maxTokensCaptor.getAllValues());
     }
 
     @Test
