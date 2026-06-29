@@ -61,7 +61,7 @@ class AssistantServiceTest {
         assistantProperties.setContextPosts(3);
         assistantProperties.setAnswerMaxSentences(3);
         assistantProperties.setAnswerMaxChars(600);
-        assistantProperties.setAnswerMaxOutputTokens(512);
+        assistantProperties.setAnswerMaxOutputTokens(1024);
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
@@ -144,7 +144,7 @@ class AssistantServiceTest {
         assertTrue(prompt.contains("<= 600 chars"));
         assertTrue(prompt.contains("board=freeboard"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
-        assertEquals(512, maxTokensCaptor.getValue());
+        assertEquals(1024, maxTokensCaptor.getValue());
     }
 
     @Test

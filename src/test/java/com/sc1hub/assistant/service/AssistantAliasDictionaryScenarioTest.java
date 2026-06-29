@@ -60,7 +60,7 @@ class AssistantAliasDictionaryScenarioTest {
         assistantProperties.setContextPosts(5);
         assistantProperties.setAnswerMaxSentences(3);
         assistantProperties.setAnswerMaxChars(600);
-        assistantProperties.setAnswerMaxOutputTokens(512);
+        assistantProperties.setAnswerMaxOutputTokens(1024);
         assistantProperties.setPerBoardLimit(5);
 
         AssistantRagProperties ragProperties = new AssistantRagProperties();
