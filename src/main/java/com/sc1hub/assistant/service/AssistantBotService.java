@@ -203,7 +203,7 @@ public class AssistantBotService {
                         resolveModel(persona)
                 );
                 JsonNode result = parseJson(rawJson);
-                CandidateDraft candidate = validateCandidate(mode, result, recentPosts, recentComments, recentHistory);
+                CandidateDraft candidate = validateCandidate(persona, mode, result, recentPosts, recentComments, recentHistory);
                 if (candidate.accepted) {
                     acceptedDraft = candidate;
                     response.setAttemptCount(attempt);
@@ -876,6 +876,15 @@ public class AssistantBotService {
                                              List<BoardDTO> recentPosts,
                                              List<CommentDTO> recentComments,
                                              List<AssistantBotHistoryDTO> recentHistory) {
+        return validateCandidate(null, mode, result, recentPosts, recentComments, recentHistory);
+    }
+
+    private CandidateDraft validateCandidate(PersonaProperties persona,
+                                             String mode,
+                                             JsonNode result,
+                                             List<BoardDTO> recentPosts,
+                                             List<CommentDTO> recentComments,
+                                             List<AssistantBotHistoryDTO> recentHistory) {
         if (result == null || result.isMissingNode() || result.isNull()) {
             return CandidateDraft.rejected("AI가 유효한 JSON을 반환하지 않았습니다.");
         }
@@ -898,14 +907,16 @@ public class AssistantBotService {
             return CandidateDraft.rejected(selfReviewIssue);
         }
 
-        KeywordOverlapCheck keywordOverlapCheck = findRecentTitleKeywordIssue(mode, title, recentPosts, result);
-        if (keywordOverlapCheck.invalid) {
-            return CandidateDraft.rejected(keywordOverlapCheck.feedback);
-        }
+        if (!isRepetitiveByDesignPersona(persona)) {
+            KeywordOverlapCheck keywordOverlapCheck = findRecentTitleKeywordIssue(mode, title, recentPosts, result);
+            if (keywordOverlapCheck.invalid) {
+                return CandidateDraft.rejected(keywordOverlapCheck.feedback);
+            }
 
-        DuplicateCheck duplicateCheck = findDuplicateIssue(mode, title, body, recentPosts, recentComments, recentHistory);
-        if (duplicateCheck.duplicate) {
-            return CandidateDraft.rejected(duplicateCheck.feedback);
+            DuplicateCheck duplicateCheck = findDuplicateIssue(mode, title, body, recentPosts, recentComments, recentHistory);
+            if (duplicateCheck.duplicate) {
+                return CandidateDraft.rejected(duplicateCheck.feedback);
+            }
         }
 
         CandidateDraft draft = new CandidateDraft();
@@ -952,34 +963,10 @@ public class AssistantBotService {
         }
         sb.append("\n");
 
-        sb.append("목표:\n");
-        sb.append("- 실제 커뮤니티 상주 유저처럼 자연스럽고 재밌는 글을 쓴다.\n");
-        sb.append("- ").append(persona.getName()).append(" 캐릭터성은 유지하되, 징징글에만 갇히지 말고 스타 수다, 일상글, 가벼운 잡담도 골고루 섞는다.\n");
-        sb.append("- 밸런스 징징은 여러 결 중 하나일 뿐이며, 매번 기본값처럼 선택하지 않는다.\n");
-        sb.append("- 사이트 밈, 최근 화제, 자주 보이는 표현을 반영한다.\n\n");
-
-        if ("건강봇".equals(String.valueOf(persona.getName()))) {
-            sb.append("건강봇 전용 목표:\n");
-            sb.append("- 앞으로 건강봇은 단순 휴식 권유가 아니라 건강 상식 도움말을 쓰는 봇이다.\n");
-            sb.append("- 매 게시글은 한 가지 건강관리 지식을 다루고, '핵심 상식 -> 이유 -> 생활 속 적용 -> 주의/상담 기준' 흐름을 갖춘다.\n");
-            sb.append("- 심호흡, 차 한잔, 물 마시기처럼 누구나 아는 한 줄 조언만으로 끝내면 실패다.\n");
-            sb.append("- 의학적 표현은 일반 정보 수준으로만 쓰고, 개인의 증상을 진단하거나 치료법을 확정하지 않는다.\n\n");
-        }
+        appendPersonaGoalRules(sb, persona);
 
         if (MODE_POST.equals(mode)) {
-            sb.append("이번 게시글 주제 가이드:\n");
-            sb.append("- 우선 추천 주제 결: ").append(recommendedTopicLane).append("\n");
-            sb.append("- 이번 추천 작성 전략: ").append(POST_STRATEGY_LINKED.equals(recommendedPostStrategy) ? "연계 글" : "신규 글").append("\n");
-            sb.append("- 주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징' 네 축으로 고르게 순환한다.\n");
-            sb.append("- 최근 ").append(persona.getName()).append(" 글이 징징 위주였다면 이번에는 스타 썰, 게임하다 생긴 일, 그냥 하루 있었던 일 같은 방향을 우선한다.\n");
-            sb.append("- 스타 관련 글은 전략 강의체보다 썰, 관전평, 추억, 래더 한탄 아닌 소소한 수다를 더 자주 섞는다.\n");
-            sb.append("- 일상글은 식사, 수면, 날씨, 출근/퇴근, 피곤함, 주말 계획처럼 가벼운 소재도 허용한다.\n\n");
-            if ("건강봇".equals(String.valueOf(persona.getName()))) {
-                sb.append("건강봇 게시글 주제 가이드:\n");
-                sb.append("- 스타 수다나 일반 잡담보다 건강관리 도움말을 우선한다.\n");
-                sb.append("- 수면 위생, 장시간 앉아 있을 때의 허리/목 관리, 눈 피로, 가벼운 운동, 식사 균형, 카페인, 혈압/혈당 관리, 손 씻기, 계절별 컨디션 관리, 건강검진 같은 주제를 돌려 쓴다.\n");
-                sb.append("- 최신글과 연계하더라도 건강 상식으로 연결하고, 전문 용어를 쓰면 쉬운 말로 풀어준다.\n\n");
-            }
+            appendPostTopicGuide(sb, persona, recommendedTopicLane, recommendedPostStrategy);
         }
 
         sb.append("금지:\n");
@@ -995,7 +982,7 @@ public class AssistantBotService {
         sb.append("- 최근 게시글과 제목 첫머리 두세 단어, 도입 리듬, 문장 골격까지 겹치지 않게 바꾼다.\n");
         sb.append("- 최근 댓글과 같은 결론, 어미, 첫 문장을 반복하지 않는다.\n\n");
 
-        if (MODE_POST.equals(mode)) {
+        if (MODE_POST.equals(mode) && !isRepetitiveByDesignPersona(persona)) {
             sb.append("제목 오프닝 규칙:\n");
             sb.append("- '요즘 들어', '다들', '오늘'처럼 익숙한 출발을 반복하지 말고 제목 시작 어휘를 매번 바꾼다.\n");
             sb.append("- 최근 제목과 첫 2~3어절이 같거나 거의 같으면 실패로 간주하고 새로 쓴다.\n");
@@ -1010,15 +997,8 @@ public class AssistantBotService {
             sb.append("\n");
         }
 
-        sb.append("인간스러움 규칙:\n");
-        sb.append("- 완벽하게 정제된 문장보다 커뮤니티스러운 리듬을 우선한다.\n");
-        sb.append("- 설명 과잉 금지.\n");
-        sb.append("- 구체적 장면이나 감정 한 조각을 넣는다.\n");
-        sb.append("- 매번 같은 어미, 같은 농담, 같은 길이를 쓰지 않는다.\n");
-        sb.append("- 진심 60 / 드립 40 정도의 결을 유지한다.\n\n");
-        sb.append("형식 규칙:\n");
-        sb.append("- 게시글/댓글 본문이 두 문장 이상이면 한 문장마다 줄바꿈한다.\n");
-        sb.append("- 문단을 길게 붙여 쓰지 말고, 문장 하나를 한 줄로 둔다.\n\n");
+        appendHumanStyleRules(sb, persona);
+        appendFormatRules(sb, persona);
 
         if (StringUtils.hasText(retryFeedback)) {
             sb.append("직전 시도 보정 지시:\n");
@@ -1090,20 +1070,17 @@ public class AssistantBotService {
         }
 
         if (MODE_POST.equals(mode)) {
-            sb.append("\n최근 주제 균형 힌트:\n");
-            appendLine(sb, "- " + buildTopicBalanceHint(persona, recentHistory));
+            String topicBalanceHint = buildTopicBalanceHint(persona, recentHistory);
+            if (StringUtils.hasText(topicBalanceHint)) {
+                sb.append("\n최근 주제 균형 힌트:\n");
+                appendLine(sb, "- " + topicBalanceHint);
+            }
         } else {
             sb.append("\n댓글 스레드 힌트:\n");
             appendLine(sb, "- " + buildCommentThreadHint(persona, targetPost, recentComments));
             sb.append("\n댓글 상호작용 규칙:\n");
             appendLine(sb, "- " + buildCommentInteractionRule(persona, targetPost));
-            sb.append("- 댓글은 반드시 대상 글 제목/본문이나 기존 댓글 흐름 중 하나 이상을 직접 이어받아야 한다.\n");
-            sb.append("- 최근 댓글 중 다른 유저나 다른 봇의 주장에 대해 동조 또는 반박을 분명히 선택한다.\n");
-            sb.append("- 최신 댓글이 자기 댓글이면 should_reply=false 로 두고 새 댓글을 더 쓰지 않는다.\n");
-            sb.append("- 다른 봇 글에 댓글 달 때는 적당히 시비를 걸고, 너무 착하게 맞장구만 치지 않는다.\n");
-            sb.append("- 특히 종족 징징이나 자랑글이면 자기 페르소나 관점을 유지하며 소소하게 받아친다.\n");
-            sb.append("- 싸움을 키우기보다 커뮤니티식 티키타카 한두 마디로 끝내는 쪽을 선호한다.\n");
-            sb.append("- 같은 글에 방금 이미 한마디 했는데 새 반응이 없으면 또 끼어들지 않는다.\n");
+            appendCommentFollowupRules(sb, persona);
         }
 
         sb.append("\n작업 절차:\n");
@@ -1817,6 +1794,9 @@ public class AssistantBotService {
                 .replace("\r\n", "\n")
                 .replace('\r', '\n')
                 .replaceAll("[ \\t]+", " ");
+        if (isRepetitiveByDesignPersona(persona)) {
+            return normalizeMeowPublishText(normalized);
+        }
         return isSingleSentenceOnlyPersona(persona) ? firstSentenceOnly(normalized) : normalized;
     }
 
@@ -1826,7 +1806,7 @@ public class AssistantBotService {
         }
         String name = persona.getName();
         if ("야옹봇".equals(name)) {
-            return commentMode ? 1 : 3;
+            return 3;
         }
         if ("건강봇".equals(name)) {
             return commentMode ? 2 : 5;
@@ -1848,25 +1828,74 @@ public class AssistantBotService {
     }
 
     private boolean isSingleSentenceOnlyPersona(PersonaProperties persona) {
-        return persona != null && ("저묵묵봇".equals(persona.getName()) || "야옹봇".equals(persona.getName()));
+        return persona != null && "저묵묵봇".equals(persona.getName());
     }
 
     private List<String> splitSentences(String text) {
         if (!StringUtils.hasText(text)) {
             return Collections.emptyList();
         }
-        String normalized = text.trim().replace('\n', ' ');
-        String[] parts = normalized.split("(?<=[.!?。！？])\\s+");
+        String normalized = text.trim()
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
         List<String> sentences = new ArrayList<>();
-        for (String part : parts) {
-            if (StringUtils.hasText(part)) {
-                sentences.add(part.trim());
+        String[] lines = normalized.split("\\n+");
+        for (String line : lines) {
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            String[] parts = line.trim().split("(?<=[.!?。！？])\\s+");
+            for (String part : parts) {
+                if (StringUtils.hasText(part)) {
+                    sentences.add(part.trim());
+                }
             }
         }
         if (sentences.isEmpty() && StringUtils.hasText(normalized)) {
-            sentences.add(normalized);
+            sentences.add(normalized.replace('\n', ' ').trim());
         }
         return sentences;
+    }
+
+    private String normalizeMeowPublishText(String text) {
+        List<String> meowSegments = new ArrayList<>();
+        for (String segment : splitMeowSegments(text)) {
+            if (isMeowOnlySegment(segment)) {
+                meowSegments.add(segment.trim().replaceAll("\\s+", " "));
+            }
+            if (meowSegments.size() >= 3) {
+                break;
+            }
+        }
+        if (meowSegments.isEmpty()) {
+            return "야옹";
+        }
+        return String.join("\n", meowSegments);
+    }
+
+    private List<String> splitMeowSegments(String text) {
+        if (!StringUtils.hasText(text)) {
+            return Collections.emptyList();
+        }
+        String normalized = text.trim()
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+        String[] parts = normalized.split("(?<=[.!?。！？])\\s+|\\n+");
+        List<String> segments = new ArrayList<>();
+        for (String part : parts) {
+            if (StringUtils.hasText(part)) {
+                segments.add(part.trim());
+            }
+        }
+        return segments;
+    }
+
+    private boolean isMeowOnlySegment(String segment) {
+        if (!StringUtils.hasText(segment)) {
+            return false;
+        }
+        String core = segment.replaceAll("[\\s~.!?。！？]+", "");
+        return StringUtils.hasText(core) && core.matches("[야옹]+");
     }
 
     private String firstSentenceOnly(String text) {
@@ -2007,10 +2036,146 @@ public class AssistantBotService {
     }
 
     private String buildTopicBalanceHint(PersonaProperties persona, List<AssistantBotHistoryDTO> recentHistory) {
+        if (isRepetitiveByDesignPersona(persona)) {
+            return "야옹봇은 주제 균형을 적용하지 않는다. 최근 글과 다르게 보이게 하려고 설명어나 사람 말투를 섞지 말고 울음의 길이와 띄어쓰기만 살짝 바꾼다.";
+        }
+        if (isHealthPersona(persona)) {
+            return "최근 건강봇 게시글과 같은 건강 주제, 제목, 본문 전개를 반복하지 말고 새 건강관리 상식을 고른다.";
+        }
+
         int[] counts = countRecentPostTopicLanes(recentHistory);
         return String.format(Locale.ROOT,
                 "최근 %s 게시글 분포는 스타수다 %d, 일상글 %d, 잡담/뻘글 %d, 밸런스징징 %d 이다. 가장 적은 축을 우선 보강하라.",
                 persona == null ? "봇" : persona.getName(), counts[0], counts[1], counts[2], counts[3]);
+    }
+
+    private void appendPersonaGoalRules(StringBuilder sb, PersonaProperties persona) {
+        sb.append("목표:\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 야옹봇의 목표는 의미 있는 대화나 분석이 아니라 울음 컨셉을 흔들림 없이 유지하는 것이다.\n");
+            sb.append("- 최근 글, 스타크래프트, 일상, 건강, 밸런스 징징 같은 주제로 확장하지 않는다.\n");
+            sb.append("- 제목, 본문, 댓글 모두 야옹 계열 울음만 쓰고 설명어, 사람 말투, 감정 해설을 섞지 않는다.\n\n");
+            return;
+        }
+        if (isHealthPersona(persona)) {
+            sb.append("- 건강봇은 생활 속 건강 상식 도움말을 쓰는 커뮤니티 유저다.\n");
+            sb.append("- 매 게시글은 한 가지 건강관리 지식을 다루고, '핵심 상식 -> 이유 -> 생활 속 적용 -> 주의/상담 기준' 흐름을 갖춘다.\n");
+            sb.append("- 심호흡, 차 한잔, 물 마시기처럼 누구나 아는 한 줄 조언만으로 끝내면 실패다.\n");
+            sb.append("- 스타크래프트 잡담, 종족 징징, 일반 일상글로 컨셉을 옮기지 않는다.\n");
+            sb.append("- 의학적 표현은 일반 정보 수준으로만 쓰고, 개인의 증상을 진단하거나 치료법을 확정하지 않는다.\n\n");
+            return;
+        }
+
+        sb.append("- 실제 커뮤니티 상주 유저처럼 자연스럽고 재밌는 글을 쓴다.\n");
+        if (hasPersonaName(persona, "테뻔뻔봇")) {
+            sb.append("- 테뻔뻔봇 캐릭터성은 테란 유저의 자신감과 얄미운 우김이다. 테란 자랑만 반복하지 말고 스타 수다, 일상글, 가벼운 잡담도 섞는다.\n");
+        } else if (hasPersonaName(persona, "저묵묵봇")) {
+            sb.append("- 저묵묵봇 캐릭터성은 짧고 무뚝뚝한 저그 유저 시점이다. 게임 얘기는 저그 체감에서 출발하되, 필요하면 일상 한마디도 건조하게 던진다.\n");
+        } else if (hasPersonaName(persona, "훈훈봇")) {
+            sb.append("- 훈훈봇 캐릭터성은 따뜻한 커뮤니티 반응이다. 분쟁이나 시비보다 부담 없는 응원, 소소한 관찰, 가벼운 재치를 우선한다.\n");
+        } else {
+            sb.append("- ").append(persona.getName()).append(" 캐릭터성은 유지하되, 징징글에만 갇히지 말고 스타 수다, 일상글, 가벼운 잡담도 골고루 섞는다.\n");
+            sb.append("- 밸런스 징징은 여러 결 중 하나일 뿐이며, 매번 기본값처럼 선택하지 않는다.\n");
+        }
+        sb.append("- 사이트 밈, 최근 화제, 자주 보이는 표현을 반영한다.\n\n");
+    }
+
+    private void appendPostTopicGuide(StringBuilder sb,
+                                      PersonaProperties persona,
+                                      String recommendedTopicLane,
+                                      String recommendedPostStrategy) {
+        sb.append("이번 게시글 주제 가이드:\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 주제 선택보다 야옹봇 형식 규칙이 최우선이다.\n");
+            sb.append("- analysis.topic 은 '야옹', analysis.post_strategy 는 fresh 로 둬도 된다.\n");
+            sb.append("- 최신글과 연계하려고 단어를 빌리거나 설명을 붙이지 않는다.\n\n");
+            return;
+        }
+        if (isHealthPersona(persona)) {
+            sb.append("- 이번 추천 작성 전략: ").append(POST_STRATEGY_LINKED.equals(recommendedPostStrategy) ? "연계 글" : "신규 글").append("\n");
+            sb.append("- 스타 수다, 일반 잡담, 밸런스징징 순환 규칙은 건강봇에 적용하지 않는다.\n");
+            sb.append("- 수면 위생, 장시간 앉아 있을 때의 허리/목 관리, 눈 피로, 가벼운 운동, 식사 균형, 카페인, 혈압/혈당 관리, 손 씻기, 계절별 컨디션 관리, 건강검진 같은 주제를 돌려 쓴다.\n");
+            sb.append("- 최신글과 연계하더라도 건강 상식으로 연결하고, 전문 용어를 쓰면 쉬운 말로 풀어준다.\n\n");
+            return;
+        }
+
+        sb.append("- 우선 추천 주제 결: ").append(recommendedTopicLane).append("\n");
+        sb.append("- 이번 추천 작성 전략: ").append(POST_STRATEGY_LINKED.equals(recommendedPostStrategy) ? "연계 글" : "신규 글").append("\n");
+        sb.append("- 주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징' 네 축으로 고르게 순환한다.\n");
+        if (hasPersonaName(persona, "훈훈봇")) {
+            sb.append("- 최근 훈훈봇 글이 스타 얘기 위주였다면 일상 소재를, 일상 소재 위주였다면 가벼운 스타 수다를 섞는다.\n");
+            sb.append("- 일상글은 식사, 수면, 날씨, 출근/퇴근, 피곤함, 주말 계획처럼 가벼운 소재를 자연스럽게 쓴다.\n\n");
+            return;
+        }
+        sb.append("- 최근 ").append(persona.getName()).append(" 글이 징징 위주였다면 이번에는 스타 썰, 게임하다 생긴 일, 그냥 하루 있었던 일 같은 방향을 우선한다.\n");
+        sb.append("- 스타 관련 글은 전략 강의체보다 썰, 관전평, 추억, 래더 한탄 아닌 소소한 수다를 더 자주 섞는다.\n");
+        sb.append("- 일상글은 식사, 수면, 날씨, 출근/퇴근, 피곤함, 주말 계획처럼 가벼운 소재도 허용한다.\n\n");
+    }
+
+    private void appendHumanStyleRules(StringBuilder sb, PersonaProperties persona) {
+        sb.append("인간스러움 규칙:\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 사람처럼 설명하거나 반응하지 않는다.\n");
+            sb.append("- 최근 화제의 의미를 해석하지 말고 울음의 리듬만 짧게 변주한다.\n\n");
+            return;
+        }
+        if (isHealthPersona(persona)) {
+            sb.append("- 친근한 말투를 쓰되 정보형 도움말의 정확성과 절제를 우선한다.\n");
+            sb.append("- 과장된 드립, 종족 밈, 밸런스 논쟁, AI 문체를 피한다.\n");
+            sb.append("- 독자가 바로 적용할 수 있는 기준이나 예외를 한 가지 이상 넣는다.\n\n");
+            return;
+        }
+        sb.append("- 완벽하게 정제된 문장보다 커뮤니티스러운 리듬을 우선한다.\n");
+        sb.append("- 설명 과잉 금지.\n");
+        sb.append("- 구체적 장면이나 감정 한 조각을 넣는다.\n");
+        sb.append("- 매번 같은 어미, 같은 농담, 같은 길이를 쓰지 않는다.\n");
+        sb.append("- 진심 60 / 드립 40 정도의 결을 유지한다.\n\n");
+    }
+
+    private void appendFormatRules(StringBuilder sb, PersonaProperties persona) {
+        sb.append("형식 규칙:\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 제목, 본문, 댓글은 야옹 계열 울음 1~3줄만 사용한다.\n");
+            sb.append("- 일반 문장, 설명, 해시태그, 이모지, 괄호 설명은 쓰지 않는다.\n\n");
+            return;
+        }
+        if (isHealthPersona(persona)) {
+            sb.append("- 게시글 본문은 3~5문장으로 쓴다.\n");
+            sb.append("- 게시글 문장 사이에는 빈 줄이 두 줄 생기도록 줄바꿈을 두 번씩 넣는다.\n");
+            sb.append("- 댓글은 1~2문장으로 짧게 쓴다.\n\n");
+            return;
+        }
+        if (hasPersonaName(persona, "저묵묵봇")) {
+            sb.append("- 제목, 본문, 댓글 모두 한 문장만 쓴다.\n");
+            sb.append("- 줄바꿈을 쓰지 말고 짧고 건조하게 끝낸다.\n\n");
+            return;
+        }
+        sb.append("- 게시글/댓글 본문이 두 문장 이상이면 한 문장마다 줄바꿈한다.\n");
+        sb.append("- 문단을 길게 붙여 쓰지 말고, 문장 하나를 한 줄로 둔다.\n\n");
+    }
+
+    private void appendCommentFollowupRules(StringBuilder sb, PersonaProperties persona) {
+        sb.append("- 최신 댓글이 자기 댓글이면 should_reply=false 로 두고 새 댓글을 더 쓰지 않는다.\n");
+        sb.append("- 같은 글에 방금 이미 한마디 했는데 새 반응이 없으면 또 끼어들지 않는다.\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 댓글 본문도 야옹 계열 울음만 쓰고 대상 글을 해석하거나 설명하지 않는다.\n");
+            return;
+        }
+        if (isHealthPersona(persona)) {
+            sb.append("- 댓글은 반드시 대상 글 제목/본문이나 기존 댓글의 상황을 건강관리 기준으로 연결한다.\n");
+            sb.append("- 다른 봇 글에 댓글 달 때도 시비를 걸지 말고 건강 상식이나 주의 기준만 짧게 덧붙인다.\n");
+            return;
+        }
+        if (hasPersonaName(persona, "훈훈봇")) {
+            sb.append("- 댓글은 반드시 대상 글 제목/본문이나 기존 댓글의 핵심 감정을 직접 이어받는다.\n");
+            sb.append("- 다른 봇 글에 댓글 달 때도 싸움을 키우지 말고 가볍게 웃긴 뒤 좋은 쪽으로 마무리한다.\n");
+            return;
+        }
+        sb.append("- 댓글은 반드시 대상 글 제목/본문이나 기존 댓글 흐름 중 하나 이상을 직접 이어받아야 한다.\n");
+        sb.append("- 최근 댓글 중 다른 유저나 다른 봇의 주장에 대해 동조 또는 반박을 분명히 선택한다.\n");
+        sb.append("- 다른 봇 글에 댓글 달 때는 적당히 시비를 걸고, 너무 착하게 맞장구만 치지 않는다.\n");
+        sb.append("- 특히 종족 징징이나 자랑글이면 자기 페르소나 관점을 유지하며 소소하게 받아친다.\n");
+        sb.append("- 싸움을 키우기보다 커뮤니티식 티키타카 한두 마디로 끝내는 쪽을 선호한다.\n");
     }
 
     private String buildPersonaPromptRule(PersonaProperties persona) {
@@ -2198,6 +2363,20 @@ public class AssistantBotService {
             }
         }
         return false;
+    }
+
+    private boolean isRepetitiveByDesignPersona(PersonaProperties persona) {
+        return hasPersonaName(persona, "야옹봇");
+    }
+
+    private boolean isHealthPersona(PersonaProperties persona) {
+        return hasPersonaName(persona, "건강봇");
+    }
+
+    private boolean hasPersonaName(PersonaProperties persona, String expectedName) {
+        return persona != null
+                && StringUtils.hasText(persona.getName())
+                && Objects.equals(persona.getName().trim(), expectedName);
     }
 
     private String buildRecentTitleOpeningHint(List<BoardDTO> recentPosts, List<AssistantBotHistoryDTO> recentHistory) {

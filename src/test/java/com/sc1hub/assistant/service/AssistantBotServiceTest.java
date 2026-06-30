@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -590,15 +591,15 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void safeCommentForPublish_forMeowPersonaLimitsToOneSentence() {
+    void safeCommentForPublish_forMeowPersonaKeepsUpToThreeMeows() {
         String content = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "safeCommentForPublish",
                 persona("야옹봇"),
-                "야옹 야~~옹~~~~. 야옹 야옹."
+                "야옹 야~~옹~~~~. 사람 말투는 제거한다. 야옹 야옹. 야~~옹~~~~."
         );
 
-        assertEquals("야옹 야~~옹~~~~.", content);
+        assertEquals("야옹 야~~옹~~~~.\n야옹 야옹.\n야~~옹~~~~.", content);
     }
 
     @Test
@@ -635,6 +636,82 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("심호흡, 차 한잔, 물 마시기처럼 누구나 아는 한 줄 조언만으로 끝내면 실패"));
         assertTrue(prompt.contains("수면 위생"));
         assertTrue(prompt.contains("건강검진"));
+        assertTrue(prompt.contains("스타 수다, 일반 잡담, 밸런스징징 순환 규칙은 건강봇에 적용하지 않는다."));
+        assertFalse(prompt.contains("우선 추천 주제 결:"));
+        assertFalse(prompt.contains("진심 60 / 드립 40"));
+    }
+
+    @Test
+    void buildPrompt_forMeowPersonaKeepsOnlyMeowConceptRules() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("야옹봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.singletonList(post(905, "테스터A", 0, "오늘 래더는 테란이 좀 뻔뻔하네")),
+                Collections.emptyList(),
+                Collections.singletonList(history("post", "야옹", "야옹 야~~옹~~~~", "야옹")),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("울음 컨셉을 흔들림 없이 유지"));
+        assertTrue(prompt.contains("야옹봇은 주제 균형을 적용하지 않는다."));
+        assertFalse(prompt.contains("주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징'"));
+        assertFalse(prompt.contains("제목 오프닝 규칙:"));
+        assertFalse(prompt.contains("최신글 연계/신규 전략 규칙:"));
+        assertFalse(prompt.contains("구체적 장면이나 감정 한 조각"));
+        assertFalse(prompt.contains("진심 60 / 드립 40"));
+    }
+
+    @Test
+    void validateCandidate_forMeowPersonaAllowsIntentionalRepetition() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"야옹\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"야옹 야~~옹~~~~\",\"body\":\"야옹 야~~옹~~~~. 야옹 야옹.\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+        BoardDTO recentPost = post(907, "야옹봇", 0, "야옹 야~~옹~~~~");
+        AssistantBotHistoryDTO recentHistory = history("post", "야옹", "야옹 야~~옹~~~~", "야옹 야~~옹~~~~");
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("야옹봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.singletonList(recentPost),
+                Collections.emptyList(),
+                Collections.singletonList(recentHistory)
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+    }
+
+    @Test
+    void buildPrompt_forHealthCommentDoesNotUseBotConflictRules() {
+        BoardDTO targetPost = post(906, "테뻔뻔봇", 0, "손목이 좀 뻐근해도 래더는 해야지");
+        targetPost.setContent("마우스 오래 잡으니까 손목이 살짝 찌릿하다");
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("건강봇"),
+                "comment",
+                "funboard",
+                targetPost,
+                Collections.emptyList(),
+                Collections.singletonList(comment("테뻔뻔봇", 1, "테란은 손목도 실력으로 버틴다")),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("다른 봇 글에 댓글 달 때도 시비를 걸지 말고 건강 상식"));
+        assertFalse(prompt.contains("다른 봇 글에 댓글 달 때는 적당히 시비"));
+        assertFalse(prompt.contains("종족 징징이나 자랑글"));
     }
 
     @Test
