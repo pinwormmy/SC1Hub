@@ -34,12 +34,15 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,9 +94,9 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_spreadsAcrossRecentPosts_andSkipsBotOnlyThread() throws Exception {
-        BoardDTO botPost = post(101, "프징징봇", 1);
-        BoardDTO recentPostA = post(102, "테스터A", 0);
-        BoardDTO recentPostB = post(103, "테스터B", 0);
+        BoardDTO botPost = post(101, "프징징봇", 1, "토스 드라군 또 길 막힘");
+        BoardDTO recentPostA = post(102, "테스터A", 0, "프로토스 리버 견제 어렵다");
+        BoardDTO recentPostB = post(103, "테스터B", 0, "토스 질럿 타이밍 좋네");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(botPost, recentPostA, recentPostB));
@@ -109,9 +112,9 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_prioritizesBotPost_whenOthersReplyToIt() throws Exception {
-        BoardDTO botPost = post(201, "프징징봇", 2);
-        BoardDTO recentPostA = post(202, "테스터A", 0);
-        BoardDTO recentPostB = post(203, "테스터B", 0);
+        BoardDTO botPost = post(201, "프징징봇", 2, "토스 리버 억까 또 나옴");
+        BoardDTO recentPostA = post(202, "테스터A", 0, "프로토스 커세어 운영 궁금함");
+        BoardDTO recentPostB = post(203, "테스터B", 0, "토스 드라군 사업 타이밍");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(botPost, recentPostA, recentPostB));
@@ -125,8 +128,8 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_skipsPost_whenPersonaAlreadyCommentedAndNoNewReply() throws Exception {
-        BoardDTO staleThread = post(301, "일반유저", 2);
-        BoardDTO freshThread = post(302, "일반유저2", 0);
+        BoardDTO staleThread = post(301, "일반유저", 2, "프로토스 드라군 타이밍 또 꼬임");
+        BoardDTO freshThread = post(302, "일반유저2", 0, "토스 리버 셔틀 견제 각 보인다");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(staleThread, freshThread));
@@ -140,7 +143,7 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_allowsReturn_whenNewReplyArrivedAfterPersonaComment() throws Exception {
-        BoardDTO activeThread = post(401, "일반유저", 3);
+        BoardDTO activeThread = post(401, "일반유저", 3, "프로토스 드라군 운영 답답하네");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Collections.singletonList(activeThread));
@@ -150,6 +153,19 @@ class AssistantBotServiceTest {
         Integer targetPostNum = assistantBotService.pickAutoCommentTarget(persona("프징징봇"), "funboard", new FixedRandom(0.8, 0));
 
         assertEquals(Integer.valueOf(401), targetPostNum);
+    }
+
+    @Test
+    void pickAutoCommentTarget_forRacePersonaSkipsNonGamePosts() throws Exception {
+        BoardDTO dailyPost = post(501, "테스터A", 0, "오늘 점심 뭐 먹냐");
+        BoardDTO gamePost = post(502, "테스터B", 0, "테란 팩토리 타이밍 이거 맞냐");
+
+        when(boardMapper.selectRecentPostsForBot("funboard", 10))
+                .thenReturn(Arrays.asList(dailyPost, gamePost));
+
+        Integer targetPostNum = assistantBotService.pickAutoCommentTarget(persona("테뻔뻔봇"), "funboard", new FixedRandom(0.8, 0));
+
+        assertEquals(Integer.valueOf(502), targetPostNum);
     }
 
     @Test
@@ -286,7 +302,7 @@ class AssistantBotServiceTest {
                 .thenReturn(validPostDraftJson());
         when(assistantBotMapper.selectHistoryById(77L)).thenAnswer(invocation -> insertedHistory.get());
         when(boardMapper.selectRecentPostsForBot("funboard", 5))
-                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "오늘 래더 한 판만 더 해야지")));
+                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "프로토스 래더 한 판만 더 해야지")));
 
         AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
 
@@ -402,6 +418,68 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void validateCandidate_rejectsRacePersonaPostWithoutGameTopic() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"일상글\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"오늘 점심이 너무 짰다\",\"body\":\"김치찌개 먹고 하루가 좀 늘어졌다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("프징징봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.FALSE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertTrue(String.valueOf(ReflectionTestUtils.getField(candidate, "feedback")).contains("스타크래프트 게임 이야기"));
+    }
+
+    @Test
+    void validateCandidate_rejectsRacePersonaPostWithoutOwnRaceAnchor() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"래더에서 뮤탈 견제 너무 빡세네\",\"body\":\"운영이 꼬이면 답이 없다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("테뻔뻔봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.FALSE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertTrue(String.valueOf(ReflectionTestUtils.getField(candidate, "feedback")).contains("테란 중심 단서"));
+    }
+
+    @Test
+    void validateCandidate_acceptsRacePersonaGamePostWithOwnRaceAnchor() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"테란 팩토리 타이밍은 결국 실력임\",\"body\":\"벌처 먼저 굴리면 토스가 억울해해도 운영 차이가 난다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("테뻔뻔봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+    }
+
+    @Test
     void buildPrompt_forZergPersonaIncludesZergPointOfViewForGameTalk() {
         String prompt = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
@@ -418,7 +496,8 @@ class AssistantBotServiceTest {
                 3
         );
 
-        assertTrue(prompt.contains("게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고"));
+        assertTrue(prompt.contains("저그 중심의 스타크래프트 게임 이야기만 한다"));
+        assertTrue(prompt.contains("일상글, 일반 잡담, 건강, 날씨, 식사 같은 소재로 빠지지 않는다."));
     }
 
     @Test
@@ -478,6 +557,9 @@ class AssistantBotServiceTest {
         );
 
         assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+        assertTrue(prompt.contains("테란 중심의 스타크래프트 게임 이야기만 한다"));
+        assertTrue(prompt.contains("주제 풀은 스타크래프트 게임 이야기로만 제한한다."));
+        assertFalse(prompt.contains("일상글은 식사, 수면, 날씨"));
     }
 
     @Test
@@ -498,6 +580,8 @@ class AssistantBotServiceTest {
         );
 
         assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+        assertTrue(prompt.contains("프로토스 중심의 스타크래프트 게임 이야기만 한다"));
+        assertFalse(prompt.contains("주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징'"));
     }
 
     @Test
@@ -590,15 +674,15 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void safeCommentForPublish_forMeowPersonaLimitsToOneSentence() {
+    void safeCommentForPublish_forMeowPersonaKeepsUpToThreeMeows() {
         String content = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
                 "safeCommentForPublish",
                 persona("야옹봇"),
-                "야옹 야~~옹~~~~. 야옹 야옹."
+                "야옹 야~~옹~~~~. 사람 말투는 제거한다. 야옹 야옹. 야~~옹~~~~."
         );
 
-        assertEquals("야옹 야~~옹~~~~.", content);
+        assertEquals("야옹 야~~옹~~~~.\n야옹 야옹.\n야~~옹~~~~.", content);
     }
 
     @Test
@@ -635,6 +719,128 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("심호흡, 차 한잔, 물 마시기처럼 누구나 아는 한 줄 조언만으로 끝내면 실패"));
         assertTrue(prompt.contains("수면 위생"));
         assertTrue(prompt.contains("건강검진"));
+        assertTrue(prompt.contains("스타 수다, 일반 잡담, 밸런스징징 순환 규칙은 건강봇에 적용하지 않는다."));
+        assertFalse(prompt.contains("우선 추천 주제 결:"));
+        assertFalse(prompt.contains("진심 60 / 드립 40"));
+    }
+
+    @Test
+    void buildPrompt_forMeowPersonaKeepsOnlyMeowConceptRules() {
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("야옹봇"),
+                "post",
+                "funboard",
+                null,
+                Collections.singletonList(post(905, "테스터A", 0, "오늘 래더는 테란이 좀 뻔뻔하네")),
+                Collections.emptyList(),
+                Collections.singletonList(history("post", "야옹", "야옹 야~~옹~~~~", "야옹")),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("울음 컨셉을 흔들림 없이 유지"));
+        assertTrue(prompt.contains("야옹봇은 주제 균형을 적용하지 않는다."));
+        assertFalse(prompt.contains("주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징'"));
+        assertFalse(prompt.contains("제목 오프닝 규칙:"));
+        assertFalse(prompt.contains("최신글 연계/신규 전략 규칙:"));
+        assertFalse(prompt.contains("구체적 장면이나 감정 한 조각"));
+        assertFalse(prompt.contains("진심 60 / 드립 40"));
+        assertFalse(prompt.contains("최근 게시글:"));
+        assertFalse(prompt.contains("최근 댓글:"));
+        assertFalse(prompt.contains("최근 야옹봇 초안:"));
+        assertTrue(prompt.contains("최근 게시글, 댓글, 이전 초안에 반응하지 않는다."));
+    }
+
+    @Test
+    void generateDraft_forMeowPersonaSkipsRecentContextQueries() throws Exception {
+        botProperties.setPersonas(Arrays.asList(
+                persona("프징징봇"),
+                persona("테뻔뻔봇"),
+                persona("저묵묵봇"),
+                persona("훈훈봇"),
+                persona("야옹봇")
+        ));
+        AssistantBotDraftRequestDTO request = new AssistantBotDraftRequestDTO();
+        request.setPersonaName("야옹봇");
+        request.setBoardTitle("funboard");
+        request.setMode("post");
+
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validMeowPostDraftJson());
+
+        AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(request);
+
+        assertEquals("draft", response.getStatus());
+        assertEquals(0, response.getRecentPostCount());
+        assertEquals(0, response.getRecentCommentCount());
+        assertEquals(0, response.getRecentHistoryCount());
+        verify(boardMapper, never()).selectRecentPostsForBot(anyString(), anyInt());
+        verify(boardMapper, never()).selectRecentCommentsForBot(anyString(), any(), anyInt());
+        verify(assistantBotMapper, never()).selectRecentHistory(anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    void buildAutoDraftRequest_forMeowCommentDoesNotPickRecentPostTarget() throws Exception {
+        AssistantBotDraftRequestDTO request = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildAutoDraftRequest",
+                persona("야옹봇"),
+                "funboard",
+                "comment"
+        );
+
+        assertNull(request);
+        verify(boardMapper, never()).selectRecentPostsForBot(anyString(), anyInt());
+    }
+
+    @Test
+    void validateCandidate_forMeowPersonaAllowsIntentionalRepetition() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"야옹\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"야옹 야~~옹~~~~\",\"body\":\"야옹 야~~옹~~~~. 야옹 야옹.\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+        BoardDTO recentPost = post(907, "야옹봇", 0, "야옹 야~~옹~~~~");
+        AssistantBotHistoryDTO recentHistory = history("post", "야옹", "야옹 야~~옹~~~~", "야옹 야~~옹~~~~");
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("야옹봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.singletonList(recentPost),
+                Collections.emptyList(),
+                Collections.singletonList(recentHistory)
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+    }
+
+    @Test
+    void buildPrompt_forHealthCommentDoesNotUseBotConflictRules() {
+        BoardDTO targetPost = post(906, "테뻔뻔봇", 0, "손목이 좀 뻐근해도 래더는 해야지");
+        targetPost.setContent("마우스 오래 잡으니까 손목이 살짝 찌릿하다");
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildPrompt",
+                persona("건강봇"),
+                "comment",
+                "funboard",
+                targetPost,
+                Collections.emptyList(),
+                Collections.singletonList(comment("테뻔뻔봇", 1, "테란은 손목도 실력으로 버틴다")),
+                Collections.emptyList(),
+                null,
+                1,
+                3
+        );
+
+        assertTrue(prompt.contains("다른 봇 글에 댓글 달 때도 시비를 걸지 말고 건강 상식"));
+        assertFalse(prompt.contains("다른 봇 글에 댓글 달 때는 적당히 시비"));
+        assertFalse(prompt.contains("종족 징징이나 자랑글"));
     }
 
     @Test
@@ -1053,8 +1259,14 @@ class AssistantBotServiceTest {
     }
 
     private String validPostDraftJson() {
-        return "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
-                + "\"post\":{\"title\":\"오늘 래더 한 판만 더 해야지\",\"body\":\"말은 한 판인데 또 손이 간다\"},"
+        return "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"프로토스 래더 한 판만 더 해야지\",\"body\":\"토스 드라군 굴리다 보면 말은 한 판인데 또 손이 간다\"},"
+                + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
+    }
+
+    private String validMeowPostDraftJson() {
+        return "{\"analysis\":{\"topic\":\"야옹\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"야옹 야~~옹~~~~\",\"body\":\"야옹 야~~옹~~~~. 야옹 야옹.\"},"
                 + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
     }
 
