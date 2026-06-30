@@ -94,9 +94,9 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_spreadsAcrossRecentPosts_andSkipsBotOnlyThread() throws Exception {
-        BoardDTO botPost = post(101, "프징징봇", 1);
-        BoardDTO recentPostA = post(102, "테스터A", 0);
-        BoardDTO recentPostB = post(103, "테스터B", 0);
+        BoardDTO botPost = post(101, "프징징봇", 1, "토스 드라군 또 길 막힘");
+        BoardDTO recentPostA = post(102, "테스터A", 0, "프로토스 리버 견제 어렵다");
+        BoardDTO recentPostB = post(103, "테스터B", 0, "토스 질럿 타이밍 좋네");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(botPost, recentPostA, recentPostB));
@@ -112,9 +112,9 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_prioritizesBotPost_whenOthersReplyToIt() throws Exception {
-        BoardDTO botPost = post(201, "프징징봇", 2);
-        BoardDTO recentPostA = post(202, "테스터A", 0);
-        BoardDTO recentPostB = post(203, "테스터B", 0);
+        BoardDTO botPost = post(201, "프징징봇", 2, "토스 리버 억까 또 나옴");
+        BoardDTO recentPostA = post(202, "테스터A", 0, "프로토스 커세어 운영 궁금함");
+        BoardDTO recentPostB = post(203, "테스터B", 0, "토스 드라군 사업 타이밍");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(botPost, recentPostA, recentPostB));
@@ -128,8 +128,8 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_skipsPost_whenPersonaAlreadyCommentedAndNoNewReply() throws Exception {
-        BoardDTO staleThread = post(301, "일반유저", 2);
-        BoardDTO freshThread = post(302, "일반유저2", 0);
+        BoardDTO staleThread = post(301, "일반유저", 2, "프로토스 드라군 타이밍 또 꼬임");
+        BoardDTO freshThread = post(302, "일반유저2", 0, "토스 리버 셔틀 견제 각 보인다");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Arrays.asList(staleThread, freshThread));
@@ -143,7 +143,7 @@ class AssistantBotServiceTest {
 
     @Test
     void pickAutoCommentTarget_allowsReturn_whenNewReplyArrivedAfterPersonaComment() throws Exception {
-        BoardDTO activeThread = post(401, "일반유저", 3);
+        BoardDTO activeThread = post(401, "일반유저", 3, "프로토스 드라군 운영 답답하네");
 
         when(boardMapper.selectRecentPostsForBot("funboard", 10))
                 .thenReturn(Collections.singletonList(activeThread));
@@ -153,6 +153,19 @@ class AssistantBotServiceTest {
         Integer targetPostNum = assistantBotService.pickAutoCommentTarget(persona("프징징봇"), "funboard", new FixedRandom(0.8, 0));
 
         assertEquals(Integer.valueOf(401), targetPostNum);
+    }
+
+    @Test
+    void pickAutoCommentTarget_forRacePersonaSkipsNonGamePosts() throws Exception {
+        BoardDTO dailyPost = post(501, "테스터A", 0, "오늘 점심 뭐 먹냐");
+        BoardDTO gamePost = post(502, "테스터B", 0, "테란 팩토리 타이밍 이거 맞냐");
+
+        when(boardMapper.selectRecentPostsForBot("funboard", 10))
+                .thenReturn(Arrays.asList(dailyPost, gamePost));
+
+        Integer targetPostNum = assistantBotService.pickAutoCommentTarget(persona("테뻔뻔봇"), "funboard", new FixedRandom(0.8, 0));
+
+        assertEquals(Integer.valueOf(502), targetPostNum);
     }
 
     @Test
@@ -289,7 +302,7 @@ class AssistantBotServiceTest {
                 .thenReturn(validPostDraftJson());
         when(assistantBotMapper.selectHistoryById(77L)).thenAnswer(invocation -> insertedHistory.get());
         when(boardMapper.selectRecentPostsForBot("funboard", 5))
-                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "오늘 래더 한 판만 더 해야지")));
+                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "프로토스 래더 한 판만 더 해야지")));
 
         AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
 
@@ -405,6 +418,68 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void validateCandidate_rejectsRacePersonaPostWithoutGameTopic() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"일상글\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"오늘 점심이 너무 짰다\",\"body\":\"김치찌개 먹고 하루가 좀 늘어졌다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("프징징봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.FALSE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertTrue(String.valueOf(ReflectionTestUtils.getField(candidate, "feedback")).contains("스타크래프트 게임 이야기"));
+    }
+
+    @Test
+    void validateCandidate_rejectsRacePersonaPostWithoutOwnRaceAnchor() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"래더에서 뮤탈 견제 너무 빡세네\",\"body\":\"운영이 꼬이면 답이 없다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("테뻔뻔봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.FALSE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertTrue(String.valueOf(ReflectionTestUtils.getField(candidate, "feedback")).contains("테란 중심 단서"));
+    }
+
+    @Test
+    void validateCandidate_acceptsRacePersonaGamePostWithOwnRaceAnchor() throws Exception {
+        String rawJson = "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"테란 팩토리 타이밍은 결국 실력임\",\"body\":\"벌처 먼저 굴리면 토스가 억울해해도 운영 차이가 난다\"},"
+                + "\"self_review\":{\"naturalness\":80,\"novelty\":80,\"engagement\":80,\"needs_revision\":false}}";
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateCandidate",
+                persona("테뻔뻔봇"),
+                "post",
+                new ObjectMapper().readTree(rawJson),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList()
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+    }
+
+    @Test
     void buildPrompt_forZergPersonaIncludesZergPointOfViewForGameTalk() {
         String prompt = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
@@ -421,7 +496,8 @@ class AssistantBotServiceTest {
                 3
         );
 
-        assertTrue(prompt.contains("게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고"));
+        assertTrue(prompt.contains("저그 중심의 스타크래프트 게임 이야기만 한다"));
+        assertTrue(prompt.contains("일상글, 일반 잡담, 건강, 날씨, 식사 같은 소재로 빠지지 않는다."));
     }
 
     @Test
@@ -481,6 +557,9 @@ class AssistantBotServiceTest {
         );
 
         assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+        assertTrue(prompt.contains("테란 중심의 스타크래프트 게임 이야기만 한다"));
+        assertTrue(prompt.contains("주제 풀은 스타크래프트 게임 이야기로만 제한한다."));
+        assertFalse(prompt.contains("일상글은 식사, 수면, 날씨"));
     }
 
     @Test
@@ -501,6 +580,8 @@ class AssistantBotServiceTest {
         );
 
         assertTrue(prompt.contains("게시글은 1~5문장, 댓글은 1~2문장으로 쓴다."));
+        assertTrue(prompt.contains("프로토스 중심의 스타크래프트 게임 이야기만 한다"));
+        assertFalse(prompt.contains("주제 풀은 '스타수다 / 일상글 / 잡담/뻘글 / 밸런스징징'"));
     }
 
     @Test
@@ -1178,8 +1259,8 @@ class AssistantBotServiceTest {
     }
 
     private String validPostDraftJson() {
-        return "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
-                + "\"post\":{\"title\":\"오늘 래더 한 판만 더 해야지\",\"body\":\"말은 한 판인데 또 손이 간다\"},"
+        return "{\"analysis\":{\"topic\":\"스타수다\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"프로토스 래더 한 판만 더 해야지\",\"body\":\"토스 드라군 굴리다 보면 말은 한 판인데 또 손이 간다\"},"
                 + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
     }
 

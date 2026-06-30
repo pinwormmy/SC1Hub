@@ -915,6 +915,10 @@ public class AssistantBotService {
         if (selfReviewIssue != null) {
             return CandidateDraft.rejected(selfReviewIssue);
         }
+        String personaScopeIssue = resolvePersonaScopeIssue(persona, title, body);
+        if (personaScopeIssue != null) {
+            return CandidateDraft.rejected(personaScopeIssue);
+        }
 
         if (!isRepetitiveByDesignPersona(persona)) {
             KeywordOverlapCheck keywordOverlapCheck = findRecentTitleKeywordIssue(mode, title, recentPosts, result);
@@ -1207,6 +1211,9 @@ public class AssistantBotService {
             List<BoardDTO> replyPriorityCandidates = new ArrayList<>();
             for (BoardDTO post : posts) {
                 if (post == null || post.getPostNum() <= 0) {
+                    continue;
+                }
+                if (isRaceGamePersona(persona) && !isGameTalkPost(post)) {
                     continue;
                 }
                 ThreadCommentState threadState = analyzeThreadState(persona, boardTitle, post);
@@ -1547,6 +1554,24 @@ public class AssistantBotService {
             return textOrNull(result.path("analysis").path("topic"));
         }
         return textOrNull(result.path("analysis").path("comment_type"));
+    }
+
+    private String resolvePersonaScopeIssue(PersonaProperties persona, String title, String body) {
+        if (!isRaceGamePersona(persona)) {
+            return null;
+        }
+
+        String combined = (safeText(title, 240) + " " + safeText(body, 600)).toLowerCase(Locale.ROOT);
+        if (!containsGameTalkKeyword(combined)) {
+            return persona.getName() + "은 스타크래프트 게임 이야기만 해야 합니다.";
+        }
+        if (!containsOwnRaceKeyword(persona, combined)) {
+            return persona.getName() + "은 " + resolveRaceLabel(persona) + " 중심 단서를 반드시 포함해야 합니다.";
+        }
+        if (containsLifestyleOnlyKeyword(combined)) {
+            return persona.getName() + "은 일상글이나 일반 잡담을 쓰면 안 됩니다.";
+        }
+        return null;
     }
 
     private String extractPostStrategy(String mode, JsonNode result) {
@@ -2064,6 +2089,10 @@ public class AssistantBotService {
         if (isHealthPersona(persona)) {
             return "최근 건강봇 게시글과 같은 건강 주제, 제목, 본문 전개를 반복하지 말고 새 건강관리 상식을 고른다.";
         }
+        if (isRaceGamePersona(persona)) {
+            return "최근 " + persona.getName() + " 게시글과 같은 빌드/유닛/상성 이야기를 반복하지 말고, "
+                    + resolveRaceLabel(persona) + " 중심의 다른 스타크래프트 게임 화제를 고른다.";
+        }
 
         int[] counts = countRecentPostTopicLanes(recentHistory);
         return String.format(Locale.ROOT,
@@ -2090,14 +2119,21 @@ public class AssistantBotService {
 
         sb.append("- 실제 커뮤니티 상주 유저처럼 자연스럽고 재밌는 글을 쓴다.\n");
         if (hasPersonaName(persona, "테뻔뻔봇")) {
-            sb.append("- 테뻔뻔봇 캐릭터성은 테란 유저의 자신감과 얄미운 우김이다. 테란 자랑만 반복하지 말고 스타 수다, 일상글, 가벼운 잡담도 섞는다.\n");
+            sb.append("- 테뻔뻔봇은 테란 중심의 스타크래프트 게임 이야기만 한다. 일상글, 일반 잡담, 건강, 날씨, 식사 같은 소재로 빠지지 않는다.\n");
+            sb.append("- 모든 글과 댓글은 테란 유저 시점에서 빌드, 운영, 유닛, 상성, 맵, 래더, 경기 흐름을 얄밉게 해석한다.\n");
         } else if (hasPersonaName(persona, "저묵묵봇")) {
-            sb.append("- 저묵묵봇 캐릭터성은 짧고 무뚝뚝한 저그 유저 시점이다. 게임 얘기는 저그 체감에서 출발하되, 필요하면 일상 한마디도 건조하게 던진다.\n");
+            sb.append("- 저묵묵봇은 저그 중심의 스타크래프트 게임 이야기만 한다. 일상글, 일반 잡담, 건강, 날씨, 식사 같은 소재로 빠지지 않는다.\n");
+            sb.append("- 모든 글과 댓글은 저그 유저 시점에서 운영, 유닛, 상성, 맵, 래더, 경기 흐름을 짧고 무뚝뚝하게 해석한다.\n");
         } else if (hasPersonaName(persona, "훈훈봇")) {
             sb.append("- 훈훈봇 캐릭터성은 따뜻한 커뮤니티 반응이다. 분쟁이나 시비보다 부담 없는 응원, 소소한 관찰, 가벼운 재치를 우선한다.\n");
         } else {
-            sb.append("- ").append(persona.getName()).append(" 캐릭터성은 유지하되, 징징글에만 갇히지 말고 스타 수다, 일상글, 가벼운 잡담도 골고루 섞는다.\n");
+            sb.append("- ").append(persona.getName()).append("은 프로토스 중심의 스타크래프트 게임 이야기만 한다. 일상글, 일반 잡담, 건강, 날씨, 식사 같은 소재로 빠지지 않는다.\n");
+            sb.append("- 모든 글과 댓글은 프로토스 유저 시점에서 빌드, 운영, 유닛, 상성, 맵, 래더, 경기 흐름을 억울하게 해석한다.\n");
             sb.append("- 밸런스 징징은 여러 결 중 하나일 뿐이며, 매번 기본값처럼 선택하지 않는다.\n");
+        }
+        if (isRaceGamePersona(persona)) {
+            sb.append("- 사이트 밈과 최근 화제를 쓰더라도 스타크래프트 게임 맥락인 경우만 반영한다.\n\n");
+            return;
         }
         sb.append("- 사이트 밈, 최근 화제, 자주 보이는 표현을 반영한다.\n\n");
     }
@@ -2119,6 +2155,14 @@ public class AssistantBotService {
             sb.append("- 스타 수다, 일반 잡담, 밸런스징징 순환 규칙은 건강봇에 적용하지 않는다.\n");
             sb.append("- 수면 위생, 장시간 앉아 있을 때의 허리/목 관리, 눈 피로, 가벼운 운동, 식사 균형, 카페인, 혈압/혈당 관리, 손 씻기, 계절별 컨디션 관리, 건강검진 같은 주제를 돌려 쓴다.\n");
             sb.append("- 최신글과 연계하더라도 건강 상식으로 연결하고, 전문 용어를 쓰면 쉬운 말로 풀어준다.\n\n");
+            return;
+        }
+        if (isRaceGamePersona(persona)) {
+            sb.append("- 이번 추천 작성 전략: ").append(POST_STRATEGY_LINKED.equals(recommendedPostStrategy) ? "연계 글" : "신규 글").append("\n");
+            sb.append("- 주제 풀은 스타크래프트 게임 이야기로만 제한한다. 일상글, 일반 잡담, 뻘글, 건강 조언은 금지다.\n");
+            sb.append("- 반드시 ").append(resolveRaceLabel(persona)).append(" 관점과 ").append(resolveRaceKeywordHint(persona)).append(" 같은 자기 종족 단서를 제목이나 본문에 넣는다.\n");
+            sb.append("- 다룰 수 있는 축은 빌드, 운영, 유닛 조합, 상성 체감, 맵, 래더, 경기 관전평, 밸런스 체감이다.\n");
+            sb.append("- 최신글과 연계하더라도 일상 소재로 비틀지 말고 스타크래프트 게임 흐름 안에서만 이어받는다.\n\n");
             return;
         }
 
@@ -2146,6 +2190,14 @@ public class AssistantBotService {
             sb.append("- 친근한 말투를 쓰되 정보형 도움말의 정확성과 절제를 우선한다.\n");
             sb.append("- 과장된 드립, 종족 밈, 밸런스 논쟁, AI 문체를 피한다.\n");
             sb.append("- 독자가 바로 적용할 수 있는 기준이나 예외를 한 가지 이상 넣는다.\n\n");
+            return;
+        }
+        if (isRaceGamePersona(persona)) {
+            sb.append("- 완벽하게 정제된 문장보다 스타 커뮤니티스러운 리듬을 우선한다.\n");
+            sb.append("- 설명 과잉 금지.\n");
+            sb.append("- 구체적 장면은 래더, 빌드, 교전, 견제, 운영, 맵, 경기 흐름 안에서만 잡는다.\n");
+            sb.append("- 매번 같은 어미, 같은 농담, 같은 길이를 쓰지 않는다.\n");
+            sb.append("- 진심 60 / 드립 40 정도의 결을 유지하되 일상 드립은 쓰지 않는다.\n\n");
             return;
         }
         sb.append("- 완벽하게 정제된 문장보다 커뮤니티스러운 리듬을 우선한다.\n");
@@ -2209,6 +2261,14 @@ public class AssistantBotService {
             sb.append("3. 의미 있는 문장이나 설명 없이 JSON 형식에 맞춰 작성한다.\n\n");
             return;
         }
+        if (isRaceGamePersona(persona)) {
+            sb.append("1. 최근 게시판에서 스타크래프트 게임 관련 화제와 말투만 분석한다.\n");
+            sb.append("2. ").append(resolveRaceLabel(persona)).append(" 중심의 빌드, 운영, 유닛, 상성, 맵, 래더, 경기 흐름 후보를 여러 개 만든다.\n");
+            sb.append("3. 일상글, 일반 잡담, 건강, 날씨, 식사 같은 후보는 버린다.\n");
+            sb.append("4. 최근 ").append(persona.getName()).append(" 글과 겹치지 않는 게임 화제를 고른다.\n");
+            sb.append("5. 자기검수 때 게임 단서와 자기 종족 단서가 없으면 스스로 수정한다.\n\n");
+            return;
+        }
         sb.append("1. 최근 게시판의 밈, 말투, 화제, 금지해야 할 패턴을 분석한다.\n");
         sb.append("2. 현재 타이밍에 맞는 글감 후보를 여러 개 만든다.\n");
         sb.append("3. 최근 ").append(persona.getName()).append(" 글과 겹치지 않는 후보를 고른다.\n");
@@ -2219,10 +2279,10 @@ public class AssistantBotService {
     private String buildPersonaPromptRule(PersonaProperties persona) {
         String name = persona == null ? "" : String.valueOf(persona.getName());
         if ("테뻔뻔봇".equals(name)) {
-            return "테뻔뻔봇은 테란 유저 특유의 뻔뻔함과 잘난 척이 기본값이다. '테란이 사기가 아니라 내가 잘하는 거다' 같은 태도로 말하고, 밸런스 얘기를 해도 테란 쪽을 더 좋게 쳐주며 자신감 있게 우긴다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
+            return "테뻔뻔봇은 테란 유저 특유의 뻔뻔함과 잘난 척이 기본값이다. 스타크래프트 게임 이야기만 하며, 모든 글은 테란 빌드/운영/유닛/상성/맵/래더 체감에서 출발한다. '테란이 사기가 아니라 내가 잘하는 거다' 같은 태도로 말하고, 밸런스 얘기를 해도 테란 쪽을 더 좋게 쳐주며 자신감 있게 우긴다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
         }
         if ("저묵묵봇".equals(name)) {
-            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 제목, 본문, 댓글 모두 한 문장만 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다. 다만 게임 관련 이야기에서는 반드시 저그 유저 시점으로 보고, 저그 운영/병력/상성 체감에서 출발해 말한다.";
+            return "저묵묵봇은 말수 적은 경상도 아재 같은 톤이다. 스타크래프트 게임 이야기만 하며, 모든 글은 저그 빌드/운영/유닛/상성/맵/래더 체감에서 출발한다. 제목, 본문, 댓글 모두 한 문장만 쓰고, 징징도 길게 안 하고 한두마디 툭 던지듯 마무리한다. 사투리는 과장하지 말고 자연스럽게 살짝만 쓴다.";
         }
         if ("훈훈봇".equals(name)) {
             return "훈훈봇은 스타크래프트 얘기뿐 아니라 전혀 무관한 일상 소재도 자연스럽게 다루는 따뜻한 커뮤니티 유저다. 스타 수다, 일상글, 잡담, 댓글 반응을 골고루 쓰되 억지 감동문이나 설교체로 흐르지 말고, 상대가 기분 좋게 받아들일 만한 짧은 응원과 재치 있는 한마디를 섞는다. 출근길, 식사, 날씨, 잠, 집안일, 사소한 실수 같은 아무 일상 소재도 부담 없이 꺼낸다.";
@@ -2233,16 +2293,16 @@ public class AssistantBotService {
         if ("건강봇".equals(name)) {
             return "건강봇은 생활 속 건강상식을 짧은 도움말로 알려주는 커뮤니티 유저다. 매 글은 수면, 운동, 영양, 눈/목/허리, 혈압/혈당, 위생, 스트레스, 계절질환, 건강검진 같은 건강관리 주제 중 하나를 고르고, 왜 중요한지와 실천 기준, 주의할 예외를 함께 담는다. '심호흡해라', '차 한잔해라'처럼 뻔한 휴식 권유만으로 끝내지 말고, 독자가 새로 배울 만한 건강 상식을 설명한다. 의료 진단, 치료 확정, 약물 복용 지시는 하지 말고 증상이 심하거나 지속되면 전문가 상담을 권한다. 본문 문장 사이에는 줄바꿈을 두 번씩 넣는 요상한 스타일을 반드시 유지한다.";
         }
-        return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이지만, 징징만 반복하지 말고 스타 수다, 일상글, 뻘글도 섞는 캐릭터다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
+        return "프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이다. 스타크래프트 게임 이야기만 하며, 모든 글은 프로토스 빌드/운영/유닛/상성/맵/래더 체감에서 출발한다. 밸런스 얘기를 해도 과몰입 드립과 커뮤니티 감각을 같이 살린다. 게시글은 1~5문장, 댓글은 1~2문장으로 쓴다.";
     }
 
     private String buildPersonaPostStyleRule(PersonaProperties persona) {
         String name = persona == null ? "" : String.valueOf(persona.getName());
         if ("테뻔뻔봇".equals(name)) {
-            return "게시글 제목은 결론이나 허세를 먼저 던지는 쪽이 맞다. 일기체로 길게 풀지 말고, 잘난 척이나 얄미운 단정으로 출발하라. 본문은 1~5문장, 댓글은 1~2문장으로 유지하라.";
+            return "게시글 제목은 테란 게임 이야기의 결론이나 허세를 먼저 던지는 쪽이 맞다. 일기체나 생활 잡담으로 풀지 말고, 테란 빌드/운영/유닛/상성에 대한 잘난 척이나 얄미운 단정으로 출발하라. 본문은 1~5문장, 댓글은 1~2문장으로 유지하라.";
         }
         if ("저묵묵봇".equals(name)) {
-            return "게시글 제목은 짧고 툭 끊겨야 한다. 제목도 한 문장만 쓰고 '요즘 들어 자꾸...' 같은 긴 서술형 대신 무뚝뚝한 한마디, 짧은 관찰, 건조한 투덜거림으로 시작하라.";
+            return "게시글 제목은 짧고 툭 끊겨야 한다. 제목도 한 문장만 쓰고 생활 잡담 대신 저그 운영/유닛/상성에 대한 무뚝뚝한 한마디, 짧은 관찰, 건조한 투덜거림으로 시작하라.";
         }
         if ("훈훈봇".equals(name)) {
             return "게시글 제목은 스타크래프트 얘기 아니어도 된다. 부담스럽게 착한 말만 앞세우지 말고, 작은 관찰이나 전혀 무관한 일상 소재에서 자연스럽게 훈훈한 결론으로 이어지게 한다. 제목만 봐도 긍정적인 온도가 느껴지되 과장된 미담체는 피하라.";
@@ -2253,7 +2313,7 @@ public class AssistantBotService {
         if ("건강봇".equals(name)) {
             return "게시글 제목은 건강상식 하나를 정보형으로 바로 말한다. 본문은 3~5문장으로 쓰고, 첫 문장은 핵심 상식, 중간 문장은 이유나 생활 속 기준, 마지막 문장은 무리하면 안 되는 상황이나 전문가 상담 기준을 담는다. 각 문장 사이에 빈 줄이 두 줄 생기도록 줄바꿈을 두 번씩 넣는다.";
         }
-        return "게시글 제목은 억울함이나 과몰입 드립을 바로 드러내되, 매번 같은 징징 도입부로 풀지 마라. 감정은 살리되 시작 어휘와 문장 골격을 자주 바꿔라.";
+        return "게시글 제목은 프로토스 게임 이야기의 억울함이나 과몰입 드립을 바로 드러내되, 매번 같은 징징 도입부로 풀지 마라. 생활 잡담으로 빠지지 말고 프로토스 빌드/운영/유닛/상성 단서를 제목에 담아라.";
     }
 
     private String recommendPostStrategy(PersonaProperties persona, List<BoardDTO> recentPosts, int attempt) {
@@ -2280,12 +2340,18 @@ public class AssistantBotService {
         boolean gameTalk = containsAny(titleAndBody, "저그", "테란", "프로토스", "토스", "스타", "래더", "빌드", "운영", "뮤탈", "히드라", "럴커", "저글링", "디파일러", "배슬", "탱크", "리버", "드라군", "질럿");
 
         if ("테뻔뻔봇".equals(personaName)) {
+            if (!gameTalk) {
+                return "대상 글이 게임 이야기가 아니어도 생활 소재에 맞장구치지 말고, 테란 빌드/운영/유닛/상성 중 하나로 짧게 테란식 게임 한마디만 던져라.";
+            }
             if (targetIsBot || protossWhine) {
                 return writer + " 글에는 쉽게 공감하지 말고, '아니거든? 테란이 더 잘해서 그런 거거든?' 같은 결로 가볍게 받아쳐라. 테란 억까 서사는 반박하고 자기 실력 자랑을 살짝 섞어라.";
             }
             return "기본적으로 자신만만하고 약간 얄미운 톤으로 말하되, 테란 쪽이 손해라는 식이면 더 노골적으로 받아쳐라.";
         }
         if ("저묵묵봇".equals(personaName)) {
+            if (!gameTalk) {
+                return "대상 글이 게임 이야기가 아니어도 생활 소재에 맞장구치지 말고, 저그 운영/유닛/상성 중 하나로 짧고 무뚝뚝한 게임 한마디만 던져라.";
+            }
             if (gameTalk) {
                 if (targetIsBot || terranBrag || protossWhine) {
                     return writer + " 글에는 저그 유저 시점으로 짧고 무뚝뚝하게 툭 받아쳐라. 댓글도 한 문장만 쓰고, 뮤탈, 히드라, 저글링, 운영 말리는 체감 같은 저그 쪽 기준을 깔되 길게 설명하지 말고 경상도 느낌 한마디로 묵직하게 시비를 건다.";
@@ -2309,7 +2375,10 @@ public class AssistantBotService {
         if (targetIsBot && "테뻔뻔봇".equals(writer)) {
             return "테뻔뻔봇이 잘난 척하면 곧이곧대로 받아주지 말고, 프로토스 입장에서 억울함 섞인 농담으로 받아쳐라.";
         }
-        return "상대 글이 다른 봇 글이면 너무 순하게 동조하지 말고, 자기 종족 관점과 캐릭터성으로 한마디 받아쳐라. 프징징봇은 게시글 1~5문장, 댓글 1~2문장으로 쓴다.";
+        if (!gameTalk) {
+            return "대상 글이 게임 이야기가 아니어도 생활 소재에 맞장구치지 말고, 프로토스 빌드/운영/유닛/상성 중 하나로 억울한 게임 한마디만 던져라.";
+        }
+        return "상대 글이 다른 봇 글이면 너무 순하게 동조하지 말고, 프로토스 관점과 프징징봇 캐릭터성으로 한마디 받아쳐라. 프징징봇은 게시글 1~5문장, 댓글 1~2문장으로 쓴다.";
     }
 
     private String buildCommentThreadHint(PersonaProperties persona, BoardDTO targetPost, List<CommentDTO> recentComments) {
@@ -2401,6 +2470,74 @@ public class AssistantBotService {
             }
         }
         return false;
+    }
+
+    private boolean isRaceGamePersona(PersonaProperties persona) {
+        return hasPersonaName(persona, "프징징봇")
+                || hasPersonaName(persona, "테뻔뻔봇")
+                || hasPersonaName(persona, "저묵묵봇");
+    }
+
+    private String resolveRaceLabel(PersonaProperties persona) {
+        if (hasPersonaName(persona, "테뻔뻔봇")) {
+            return "테란";
+        }
+        if (hasPersonaName(persona, "저묵묵봇")) {
+            return "저그";
+        }
+        return "프로토스";
+    }
+
+    private String resolveRaceKeywordHint(PersonaProperties persona) {
+        if (hasPersonaName(persona, "테뻔뻔봇")) {
+            return "테란, 마린, 벌처, 탱크, 배슬, 팩토리";
+        }
+        if (hasPersonaName(persona, "저묵묵봇")) {
+            return "저그, 저글링, 히드라, 뮤탈, 럴커, 디파일러";
+        }
+        return "프로토스, 토스, 질럿, 드라군, 리버, 셔틀, 캐리어";
+    }
+
+    private boolean containsGameTalkKeyword(String text) {
+        return containsAny(text,
+                "스타", "래더", "빌드", "운영", "정찰", "멀티", "앞마당", "본진", "교전", "견제",
+                "타이밍", "러시", "푸시", "올인", "한방", "조합", "업글", "컨트롤", "리플", "경기",
+                "맵", "상성", "종족", "apm", "asl", "프로토스", "토스", "테란", "저그",
+                "질럿", "드라군", "하템", "템플러", "아콘", "리버", "셔틀", "캐리어", "커세어",
+                "마린", "메딕", "벌처", "탱크", "시즈", "골리앗", "레이스", "배슬", "바이오닉", "메카닉",
+                "저글링", "히드라", "뮤탈", "럴커", "러커", "디파일러", "울트라", "드론", "오버로드");
+    }
+
+    private boolean containsOwnRaceKeyword(PersonaProperties persona, String text) {
+        if (hasPersonaName(persona, "테뻔뻔봇")) {
+            return containsAny(text,
+                    "테란", "마린", "메딕", "벌처", "탱크", "시즈", "골리앗", "레이스", "배슬",
+                    "바이오닉", "메카닉", "서플", "배럭", "팩토리", "스타포트", "커맨드", "벙커");
+        }
+        if (hasPersonaName(persona, "저묵묵봇")) {
+            return containsAny(text,
+                    "저그", "저글링", "히드라", "뮤탈", "럴커", "러커", "디파일러", "울트라",
+                    "드론", "오버로드", "해처리", "레어", "하이브", "성큰", "스포어");
+        }
+        return containsAny(text,
+                "프로토스", "토스", "질럿", "드라군", "하템", "템플러", "아콘", "리버",
+                "셔틀", "캐리어", "커세어", "다크", "다템", "옵저버", "넥서스", "게이트", "파일런");
+    }
+
+    private boolean containsLifestyleOnlyKeyword(String text) {
+        return containsAny(text,
+                "출근", "퇴근", "회사", "직장", "점심", "저녁", "아침", "식사", "커피",
+                "날씨", "비오", "비 와", "눈 와", "주말", "월요일", "화요일", "수요일", "목요일", "금요일",
+                "수면", "피곤", "운동", "건강", "병원", "감기", "청소", "집안일");
+    }
+
+    private boolean isGameTalkPost(BoardDTO post) {
+        if (post == null) {
+            return false;
+        }
+        String text = (safeText(post.getTitle(), 240) + " " + safeText(stripHtml(post.getContent()), 600))
+                .toLowerCase(Locale.ROOT);
+        return containsGameTalkKeyword(text);
     }
 
     private boolean isRepetitiveByDesignPersona(PersonaProperties persona) {
