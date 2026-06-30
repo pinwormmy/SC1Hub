@@ -150,19 +150,25 @@ public class AssistantBotService {
         response.setTargetPostNum(targetPostNum);
 
         try {
-            int recentPostLimit = resolveLimit(request == null ? null : request.getRecentPostLimit(), botProperties.getRecentPostLimit());
-            int recentCommentLimit = resolveLimit(request == null ? null : request.getRecentCommentLimit(), botProperties.getRecentCommentLimit());
-            int recentHistoryLimit = Math.max(1, botProperties.getRecentHistoryLimit());
             int maxAttempts = Math.max(1, requestedMaxAttempts);
+            boolean useRecentContext = shouldUseRecentContext(persona);
 
-            List<BoardDTO> recentPosts = safeList(boardMapper.selectRecentPostsForBot(boardTitle, recentPostLimit));
-            List<CommentDTO> recentComments = safeList(boardMapper.selectRecentCommentsForBot(boardTitle, targetPostNum, recentCommentLimit));
-            List<AssistantBotHistoryDTO> recentHistory = safeList(
-                    assistantBotMapper.selectRecentHistory(persona.getName(), boardTitle, recentHistoryLimit)
-            );
+            List<BoardDTO> recentPosts = Collections.emptyList();
+            List<CommentDTO> recentComments = Collections.emptyList();
+            List<AssistantBotHistoryDTO> recentHistory = Collections.emptyList();
+            if (useRecentContext) {
+                int recentPostLimit = resolveLimit(request == null ? null : request.getRecentPostLimit(), botProperties.getRecentPostLimit());
+                int recentCommentLimit = resolveLimit(request == null ? null : request.getRecentCommentLimit(), botProperties.getRecentCommentLimit());
+                int recentHistoryLimit = Math.max(1, botProperties.getRecentHistoryLimit());
+                recentPosts = safeList(boardMapper.selectRecentPostsForBot(boardTitle, recentPostLimit));
+                recentComments = safeList(boardMapper.selectRecentCommentsForBot(boardTitle, targetPostNum, recentCommentLimit));
+                recentHistory = safeList(
+                        assistantBotMapper.selectRecentHistory(persona.getName(), boardTitle, recentHistoryLimit)
+                );
+            }
 
             BoardDTO targetPost = null;
-            if (MODE_COMMENT.equals(mode)) {
+            if (MODE_COMMENT.equals(mode) && useRecentContext) {
                 targetPost = boardMapper.readPost(boardTitle, targetPostNum);
                 if (targetPost == null) {
                     response.setError("대상 게시글을 찾지 못했습니다.");
@@ -812,6 +818,9 @@ public class AssistantBotService {
         if (persona == null || date == null || !StringUtils.hasText(mode) || dailyLimit <= 0) {
             return Collections.emptyList();
         }
+        if (MODE_COMMENT.equals(mode) && !supportsAutoComment(persona)) {
+            return Collections.emptyList();
+        }
 
         List<Integer> primarySlots = botProperties.buildDailyAutoPublishSlots(
                 date,
@@ -940,6 +949,7 @@ public class AssistantBotService {
                                int attempt,
                                int maxAttempts) {
         StringBuilder sb = new StringBuilder();
+        boolean useRecentContext = shouldUseRecentContext(persona);
         String recommendedTopicLane = MODE_POST.equals(mode)
                 ? recommendPostTopicLane(recentHistory, attempt)
                 : null;
@@ -1007,12 +1017,18 @@ public class AssistantBotService {
         }
 
         sb.append("입력:\n");
-        sb.append("1. 최근 게시글/댓글 데이터\n");
-        sb.append("2. 최근 작성한 ").append(persona.getName()).append(" 글 목록\n");
-        sb.append("3. 오늘의 생성 모드(").append(MODE_COMMENT.equals(mode) ? "댓글" : "게시글").append(")\n");
-        sb.append("4. 게시판 이름(").append(boardTitle).append(")\n\n");
+        if (useRecentContext) {
+            sb.append("1. 최근 게시글/댓글 데이터\n");
+            sb.append("2. 최근 작성한 ").append(persona.getName()).append(" 글 목록\n");
+            sb.append("3. 오늘의 생성 모드(").append(MODE_COMMENT.equals(mode) ? "댓글" : "게시글").append(")\n");
+            sb.append("4. 게시판 이름(").append(boardTitle).append(")\n\n");
+        } else {
+            sb.append("1. 오늘의 생성 모드(").append(MODE_COMMENT.equals(mode) ? "댓글" : "게시글").append(")\n");
+            sb.append("2. 게시판 이름(").append(boardTitle).append(")\n");
+            sb.append("3. 야옹봇은 최근 게시글, 댓글, 이전 초안에 반응하지 않는다.\n\n");
+        }
 
-        if (targetPost != null) {
+        if (useRecentContext && targetPost != null) {
             sb.append("대상 게시글:\n");
             appendLine(sb, "- 작성자: " + safeText(targetPost.getWriter(), 60));
             appendLine(sb, "- 제목: " + safeText(targetPost.getTitle(), 160));
@@ -1020,75 +1036,78 @@ public class AssistantBotService {
             sb.append("\n");
         }
 
-        sb.append("최근 게시글:\n");
-        if (recentPosts.isEmpty()) {
-            sb.append("- 없음\n");
-        } else {
-            int index = 1;
-            for (BoardDTO post : recentPosts) {
-                if (post == null) {
-                    continue;
+        if (useRecentContext) {
+            sb.append("최근 게시글:\n");
+            if (recentPosts.isEmpty()) {
+                sb.append("- 없음\n");
+            } else {
+                int index = 1;
+                for (BoardDTO post : recentPosts) {
+                    if (post == null) {
+                        continue;
+                    }
+                    appendLine(sb, index + ". 제목: " + safeText(post.getTitle(), 120));
+                    appendLine(sb, "   본문: " + safeText(stripHtml(post.getContent()), botProperties.getPromptExcerptChars()));
+                    index++;
                 }
-                appendLine(sb, index + ". 제목: " + safeText(post.getTitle(), 120));
-                appendLine(sb, "   본문: " + safeText(stripHtml(post.getContent()), botProperties.getPromptExcerptChars()));
-                index++;
+            }
+
+            sb.append("\n최근 댓글:\n");
+            if (recentComments.isEmpty()) {
+                sb.append("- 없음\n");
+            } else {
+                int index = 1;
+                for (CommentDTO comment : recentComments) {
+                    if (comment == null) {
+                        continue;
+                    }
+                    String nickname = StringUtils.hasText(comment.getNickname()) ? comment.getNickname() : "익명";
+                    appendLine(sb, index + ". [" + nickname + "] " + safeText(stripHtml(comment.getContent()), 160));
+                    index++;
+                }
+            }
+
+            sb.append("\n최근 ").append(persona.getName()).append(" 초안:\n");
+            if (recentHistory.isEmpty()) {
+                sb.append("- 없음\n");
+            } else {
+                int index = 1;
+                for (AssistantBotHistoryDTO history : recentHistory) {
+                    if (history == null) {
+                        continue;
+                    }
+                    String label = MODE_POST.equals(normalizeMode(history.getGenerationMode())) ? "게시글" : "댓글";
+                    appendLine(sb, index + ". [" + label + "] 주제=" + safeText(history.getTopic(), 80));
+                    if (StringUtils.hasText(history.getDraftTitle())) {
+                        appendLine(sb, "   제목: " + safeText(history.getDraftTitle(), 100));
+                    }
+                    appendLine(sb, "   본문: " + safeText(history.getDraftBody(), 160));
+                    index++;
+                }
             }
         }
 
-        sb.append("\n최근 댓글:\n");
-        if (recentComments.isEmpty()) {
-            sb.append("- 없음\n");
-        } else {
-            int index = 1;
-            for (CommentDTO comment : recentComments) {
-                if (comment == null) {
-                    continue;
-                }
-                String nickname = StringUtils.hasText(comment.getNickname()) ? comment.getNickname() : "익명";
-                appendLine(sb, index + ". [" + nickname + "] " + safeText(stripHtml(comment.getContent()), 160));
-                index++;
-            }
-        }
-
-        sb.append("\n최근 ").append(persona.getName()).append(" 초안:\n");
-        if (recentHistory.isEmpty()) {
-            sb.append("- 없음\n");
-        } else {
-            int index = 1;
-            for (AssistantBotHistoryDTO history : recentHistory) {
-                if (history == null) {
-                    continue;
-                }
-                String label = MODE_POST.equals(normalizeMode(history.getGenerationMode())) ? "게시글" : "댓글";
-                appendLine(sb, index + ". [" + label + "] 주제=" + safeText(history.getTopic(), 80));
-                if (StringUtils.hasText(history.getDraftTitle())) {
-                    appendLine(sb, "   제목: " + safeText(history.getDraftTitle(), 100));
-                }
-                appendLine(sb, "   본문: " + safeText(history.getDraftBody(), 160));
-                index++;
-            }
-        }
-
-        if (MODE_POST.equals(mode)) {
+        if (MODE_POST.equals(mode) && useRecentContext) {
             String topicBalanceHint = buildTopicBalanceHint(persona, recentHistory);
             if (StringUtils.hasText(topicBalanceHint)) {
                 sb.append("\n최근 주제 균형 힌트:\n");
                 appendLine(sb, "- " + topicBalanceHint);
             }
         } else {
-            sb.append("\n댓글 스레드 힌트:\n");
-            appendLine(sb, "- " + buildCommentThreadHint(persona, targetPost, recentComments));
-            sb.append("\n댓글 상호작용 규칙:\n");
-            appendLine(sb, "- " + buildCommentInteractionRule(persona, targetPost));
-            appendCommentFollowupRules(sb, persona);
+            if (useRecentContext) {
+                sb.append("\n댓글 스레드 힌트:\n");
+                appendLine(sb, "- " + buildCommentThreadHint(persona, targetPost, recentComments));
+                sb.append("\n댓글 상호작용 규칙:\n");
+                appendLine(sb, "- " + buildCommentInteractionRule(persona, targetPost));
+                appendCommentFollowupRules(sb, persona);
+            } else if (MODE_COMMENT.equals(mode)) {
+                sb.append("\n댓글 규칙:\n");
+                appendLine(sb, "- " + buildCommentInteractionRule(persona, targetPost));
+                appendCommentFollowupRules(sb, persona);
+            }
         }
 
-        sb.append("\n작업 절차:\n");
-        sb.append("1. 최근 게시판의 밈, 말투, 화제, 금지해야 할 패턴을 분석한다.\n");
-        sb.append("2. 현재 타이밍에 맞는 글감 후보를 여러 개 만든다.\n");
-        sb.append("3. 최근 ").append(persona.getName()).append(" 글과 겹치지 않는 후보를 고른다.\n");
-        sb.append("4. 자연스러운 제목/본문 또는 댓글을 작성한다.\n");
-        sb.append("5. 자기검수 후, 어색하면 스스로 수정한다.\n\n");
+        appendWorkProcedureRules(sb, persona);
 
         sb.append("출력은 반드시 JSON 하나만 반환한다.\n");
         if (MODE_POST.equals(mode)) {
@@ -1164,6 +1183,9 @@ public class AssistantBotService {
         request.setRecentCommentLimit(botProperties.getRecentCommentLimit());
 
         if (MODE_COMMENT.equals(mode)) {
+            if (!supportsAutoComment(persona)) {
+                return null;
+            }
             Integer targetPostNum = pickAutoCommentTarget(persona, boardTitle);
             if (targetPostNum == null || targetPostNum <= 0) {
                 return null;
@@ -2087,6 +2109,7 @@ public class AssistantBotService {
         sb.append("이번 게시글 주제 가이드:\n");
         if (isRepetitiveByDesignPersona(persona)) {
             sb.append("- 주제 선택보다 야옹봇 형식 규칙이 최우선이다.\n");
+            sb.append("- 야옹봇은 주제 균형을 적용하지 않는다.\n");
             sb.append("- analysis.topic 은 '야옹', analysis.post_strategy 는 fresh 로 둬도 된다.\n");
             sb.append("- 최신글과 연계하려고 단어를 빌리거나 설명을 붙이지 않는다.\n\n");
             return;
@@ -2176,6 +2199,21 @@ public class AssistantBotService {
         sb.append("- 다른 봇 글에 댓글 달 때는 적당히 시비를 걸고, 너무 착하게 맞장구만 치지 않는다.\n");
         sb.append("- 특히 종족 징징이나 자랑글이면 자기 페르소나 관점을 유지하며 소소하게 받아친다.\n");
         sb.append("- 싸움을 키우기보다 커뮤니티식 티키타카 한두 마디로 끝내는 쪽을 선호한다.\n");
+    }
+
+    private void appendWorkProcedureRules(StringBuilder sb, PersonaProperties persona) {
+        sb.append("\n작업 절차:\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("1. 최근 게시글이나 댓글을 분석하지 않는다.\n");
+            sb.append("2. 야옹 울음의 길이, 물결표, 띄어쓰기만 불규칙하게 고른다.\n");
+            sb.append("3. 의미 있는 문장이나 설명 없이 JSON 형식에 맞춰 작성한다.\n\n");
+            return;
+        }
+        sb.append("1. 최근 게시판의 밈, 말투, 화제, 금지해야 할 패턴을 분석한다.\n");
+        sb.append("2. 현재 타이밍에 맞는 글감 후보를 여러 개 만든다.\n");
+        sb.append("3. 최근 ").append(persona.getName()).append(" 글과 겹치지 않는 후보를 고른다.\n");
+        sb.append("4. 자연스러운 제목/본문 또는 댓글을 작성한다.\n");
+        sb.append("5. 자기검수 후, 어색하면 스스로 수정한다.\n\n");
     }
 
     private String buildPersonaPromptRule(PersonaProperties persona) {
@@ -2367,6 +2405,14 @@ public class AssistantBotService {
 
     private boolean isRepetitiveByDesignPersona(PersonaProperties persona) {
         return hasPersonaName(persona, "야옹봇");
+    }
+
+    private boolean shouldUseRecentContext(PersonaProperties persona) {
+        return !isRepetitiveByDesignPersona(persona);
+    }
+
+    private boolean supportsAutoComment(PersonaProperties persona) {
+        return !isRepetitiveByDesignPersona(persona);
     }
 
     private boolean isHealthPersona(PersonaProperties persona) {

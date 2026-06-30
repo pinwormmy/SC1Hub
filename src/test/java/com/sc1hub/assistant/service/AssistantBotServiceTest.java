@@ -35,12 +35,14 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -665,6 +667,52 @@ class AssistantBotServiceTest {
         assertFalse(prompt.contains("최신글 연계/신규 전략 규칙:"));
         assertFalse(prompt.contains("구체적 장면이나 감정 한 조각"));
         assertFalse(prompt.contains("진심 60 / 드립 40"));
+        assertFalse(prompt.contains("최근 게시글:"));
+        assertFalse(prompt.contains("최근 댓글:"));
+        assertFalse(prompt.contains("최근 야옹봇 초안:"));
+        assertTrue(prompt.contains("최근 게시글, 댓글, 이전 초안에 반응하지 않는다."));
+    }
+
+    @Test
+    void generateDraft_forMeowPersonaSkipsRecentContextQueries() throws Exception {
+        botProperties.setPersonas(Arrays.asList(
+                persona("프징징봇"),
+                persona("테뻔뻔봇"),
+                persona("저묵묵봇"),
+                persona("훈훈봇"),
+                persona("야옹봇")
+        ));
+        AssistantBotDraftRequestDTO request = new AssistantBotDraftRequestDTO();
+        request.setPersonaName("야옹봇");
+        request.setBoardTitle("funboard");
+        request.setMode("post");
+
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validMeowPostDraftJson());
+
+        AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(request);
+
+        assertEquals("draft", response.getStatus());
+        assertEquals(0, response.getRecentPostCount());
+        assertEquals(0, response.getRecentCommentCount());
+        assertEquals(0, response.getRecentHistoryCount());
+        verify(boardMapper, never()).selectRecentPostsForBot(anyString(), anyInt());
+        verify(boardMapper, never()).selectRecentCommentsForBot(anyString(), any(), anyInt());
+        verify(assistantBotMapper, never()).selectRecentHistory(anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    void buildAutoDraftRequest_forMeowCommentDoesNotPickRecentPostTarget() throws Exception {
+        AssistantBotDraftRequestDTO request = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "buildAutoDraftRequest",
+                persona("야옹봇"),
+                "funboard",
+                "comment"
+        );
+
+        assertNull(request);
+        verify(boardMapper, never()).selectRecentPostsForBot(anyString(), anyInt());
     }
 
     @Test
@@ -1132,6 +1180,12 @@ class AssistantBotServiceTest {
     private String validPostDraftJson() {
         return "{\"analysis\":{\"topic\":\"잡담\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
                 + "\"post\":{\"title\":\"오늘 래더 한 판만 더 해야지\",\"body\":\"말은 한 판인데 또 손이 간다\"},"
+                + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
+    }
+
+    private String validMeowPostDraftJson() {
+        return "{\"analysis\":{\"topic\":\"야옹\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
+                + "\"post\":{\"title\":\"야옹 야~~옹~~~~\",\"body\":\"야옹 야~~옹~~~~. 야옹 야옹.\"},"
                 + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
     }
 
