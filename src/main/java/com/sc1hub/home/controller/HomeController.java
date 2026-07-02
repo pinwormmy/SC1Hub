@@ -22,7 +22,6 @@ import java.util.List;
 public class HomeController {
 
     private static final int POPULAR_POST_LIMIT = 5;
-    private static final String POPULAR_SECTION_LEGEND_COLOR = "#75f94c";
 
     private final VisitorCountService visitorCountService;
     private final BoardService boardService;
@@ -73,7 +72,6 @@ public class HomeController {
         HomePopularSectionDTO section = new HomePopularSectionDTO();
         section.setTitle(title);
         section.setCssClass(cssClass);
-        section.setLegendColor(POPULAR_SECTION_LEGEND_COLOR);
         section.setBoards(buildBoards(boardTitles));
         return section;
     }

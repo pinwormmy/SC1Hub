@@ -88,8 +88,8 @@
     border-color: rgba(255, 255, 255, 0.4);
 }
 .admin-btn--danger {
-    border-color: #ff6b6b;
-    color: #ff6b6b;
+    border-color: #FF5555;
+    color: #FF5555;
 }
 .admin-table-wrap {
     margin-top: 14px;

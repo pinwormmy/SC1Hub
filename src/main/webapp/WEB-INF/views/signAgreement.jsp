@@ -10,7 +10,7 @@
 .terms-content {
     height: 200px;
     overflow-y: scroll;
-    border: 1px solid #ccc;
+    border: 1px solid var(--sc-line-soft);
     padding: 10px;
 }
 .checkbox-section label {

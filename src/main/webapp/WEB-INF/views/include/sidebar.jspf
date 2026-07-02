@@ -18,7 +18,7 @@
 }
 .menu-toggle-hint {
     display: block; /* 토글 힌트 항상 표시 */
-    color: #888;
+    color: var(--sc-text-dim);
     text-align: center;
     margin: 0 0 0.25rem;
     font-size: 0.82rem;

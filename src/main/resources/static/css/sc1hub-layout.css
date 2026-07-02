@@ -190,15 +190,15 @@ body {
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #007bff;
-    border-color: #007bff;
+    color: var(--sc-pc-invert-text);
+    background-color: var(--sc-pc-invert-bg);
+    border-color: var(--sc-pc-invert-bg);
 }
 
 .table {
     width: 100%;
     margin-bottom: 1rem;
-    color: #212529;
+    color: inherit;
     border-collapse: collapse;
 }
 
@@ -206,7 +206,7 @@ body {
 .table td {
     padding: 0.75rem;
     vertical-align: top;
-    border-top: 1px solid #dee2e6;
+    border-top: 1px solid var(--sc-line-soft);
 }
 
 /* Utility */
@@ -220,13 +220,14 @@ body {
 .pull-center { display: block; text-align: center; }
 
 .btn-theme {
-    color: #fff;
+    color: var(--sc-text);
     background-color: transparent;
-    border-color: #fff;
+    border-color: var(--sc-line-soft);
 }
 
 .btn-theme:hover,
 .btn-theme:focus {
-    color: #ccc;
-    border-color: #ccc;
+    color: var(--sc-pc-invert-text);
+    background-color: var(--sc-pc-invert-bg);
+    border-color: transparent;
 }

@@ -8,6 +8,5 @@ import java.util.List;
 public class HomePopularSectionDTO {
     private String title;
     private String cssClass;
-    private String legendColor;
     private List<HomePopularBoardDTO> boards;
 }

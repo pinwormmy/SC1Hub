@@ -1258,8 +1258,8 @@
                 if (item.accessKey) {
                     anchorEl.setAttribute('data-sc-accesskey', item.accessKey);
                 }
-                if (item.style) {
-                    anchorEl.setAttribute('style', item.style);
+                if (item.className) {
+                    anchorEl.className = item.className;
                 }
                 liEl.appendChild(anchorEl);
                 listEl.appendChild(liEl);
@@ -1280,15 +1280,15 @@
 
         sidebarEl.appendChild(
             createFieldset('[ 공략게시판 ]', [
-                { href: '/boards/tVsZBoard', label: '10. 테저전 게시판', style: 'color:#00FFFF;' },
-                { href: '/boards/tVsPBoard', label: '11. 테프전 게시판', style: 'color:#00FFFF;' },
-                { href: '/boards/tVsTBoard', label: '12. 테테전 게시판', style: 'color:#00FFFF;' },
-                { href: '/boards/zVsTBoard', label: '13. 저테전 게시판', style: 'color:#ea40f7;' },
-                { href: '/boards/zVsPBoard', label: '14. 저프전 게시판', style: 'color:#ea40f7;' },
-                { href: '/boards/zVsZBoard', label: '15. 저저전 게시판', style: 'color:#ea40f7;' },
-                { href: '/boards/pVsTBoard', label: '16. 프테전 게시판', style: 'color:#FFFF00' },
-                { href: '/boards/pVsZBoard', label: '17. 프저전 게시판', style: 'color:#FFFF00' },
-                { href: '/boards/pVsPBoard', label: '18. 프프전 게시판', style: 'color:#FFFF00' },
+                { href: '/boards/tVsZBoard', label: '10. 테저전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/tVsPBoard', label: '11. 테프전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/tVsTBoard', label: '12. 테테전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/zVsTBoard', label: '13. 저테전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/zVsPBoard', label: '14. 저프전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/zVsZBoard', label: '15. 저저전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/pVsTBoard', label: '16. 프테전 게시판', className: 'sc-menu-link--protoss' },
+                { href: '/boards/pVsZBoard', label: '17. 프저전 게시판', className: 'sc-menu-link--protoss' },
+                { href: '/boards/pVsPBoard', label: '18. 프프전 게시판', className: 'sc-menu-link--protoss' },
                 { href: '/boards/teamPlayGuideBoard', label: '19. 팀플 게시판' },
                 { href: '/boards/tipBoard', label: '20. 꿀팁보급고(T)', accessKey: 't' },
             ]),
