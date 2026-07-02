@@ -22,6 +22,8 @@
         <hr>
     </div>
 
+    <%@include file="./coupangDynamicAd.jspf" %>
+
     <div id="comments">
         <div class="mb">
             [댓 글]

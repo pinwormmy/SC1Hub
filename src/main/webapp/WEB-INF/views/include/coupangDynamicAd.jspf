@@ -1,0 +1,58 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ taglib uri='http://java.sun.com/jsp/jstl/core' prefix='c'%>
+<%--
+    쿠팡 파트너스 다이나믹 배너 설정.
+    파트너스 관리페이지 > 링크 생성 > 다이나믹 배너에서 배너 생성 후,
+    발급된 스크립트의 id 숫자와 trackingCode(AF로 시작) 값을 아래에 입력하면 활성화된다.
+    PC용 id와 trackingCode가 비어 있는 동안에는 아무것도 렌더링하지 않는다.
+    모바일용 id가 비어 있으면 모바일에서도 PC용 배너를 사용한다.
+--%>
+<c:set var="coupangDynamicTrackingCode" value="AF8324470" />
+<c:set var="coupangDynamicPcId" value="1002422" />
+<c:set var="coupangDynamicPcWidth" value="680" />
+<c:set var="coupangDynamicPcHeight" value="140" />
+<c:set var="coupangDynamicMobileId" value="1002496" />
+<c:set var="coupangDynamicMobileWidth" value="300" />
+<c:set var="coupangDynamicMobileHeight" value="250" />
+
+<c:if test="${not empty coupangDynamicPcId and not empty coupangDynamicTrackingCode}">
+<style>
+.coupang-dynamic-ad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+    overflow: hidden; /* 화면보다 넓은 고정폭 iframe이 레이아웃을 밀지 않도록 클리핑 */
+    margin: 20px 0;
+}
+</style>
+<div class="coupang-dynamic-ad">
+    <%-- 쿠팡 위젯 스크립트는 document.write 방식이라 반드시 이 위치에 동기(인라인)로 삽입해야 한다 --%>
+    <script src="https://ads-partners.coupang.com/g.js"></script>
+    <script>
+        (function() {
+            var pcBanner = {
+                "id": ${coupangDynamicPcId},
+                "template": "carousel",
+                "trackingCode": "${coupangDynamicTrackingCode}",
+                "width": "${coupangDynamicPcWidth}",
+                "height": "${coupangDynamicPcHeight}",
+                "tsource": ""
+            };
+            var mobileBanner = <c:choose><c:when test="${not empty coupangDynamicMobileId}">{
+                "id": ${coupangDynamicMobileId},
+                "template": "carousel",
+                "trackingCode": "${coupangDynamicTrackingCode}",
+                "width": "${coupangDynamicMobileWidth}",
+                "height": "${coupangDynamicMobileHeight}",
+                "tsource": ""
+            }</c:when><c:otherwise>null</c:otherwise></c:choose>;
+            var useMobile = mobileBanner && window.matchMedia('(max-width: 768px)').matches;
+            new PartnersCoupang.G(useMobile ? mobileBanner : pcBanner);
+        })();
+    </script>
+    <div class="coupang-banner-text">
+        <p>사이트 내 쿠팡 배너는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+    </div>
+</div>
+</c:if>
