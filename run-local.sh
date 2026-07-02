@@ -55,11 +55,12 @@ sc1hub.assistant.bot.autoPublishEnabled=false
 sc1hub.assistant.bot.autoPublishCatchUpEnabled=false
 sc1hub.assistant.rag.enabled=false
 sc1hub.assistant.rag.autoUpdate.enabled=false
+sc1hub.http-redirect.enabled=false
 EOF
 
 echo "Starting SC1Hub locally on http://localhost:8082"
 echo "Using local config: $LOCAL_CONFIG"
 echo "Active Spring profile: local"
-echo "Safety overrides: Gemini live calls off, assistant bot off, auto-publish off."
+echo "Safety overrides: Gemini live calls off, assistant bot off, auto-publish off, port 80 HTTP redirect off."
 
 ./gradlew bootRun --args="--spring.profiles.active=local --spring.config.additional-location=file:$LOCAL_CONFIG,file:$LOCAL_SAFE_CONFIG"
