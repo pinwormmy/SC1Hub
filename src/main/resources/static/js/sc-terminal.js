@@ -263,11 +263,6 @@
         }
         feedModeEnabled = true;
 
-        const footerCoupangEl = document.getElementById('scFooterCoupang');
-        if (footerCoupangEl) {
-            footerCoupangEl.hidden = true;
-        }
-
         const footerMetaEl = document.getElementById('scFooterMeta');
         if (footerMetaEl) {
             footerMetaEl.hidden = true;
@@ -388,24 +383,6 @@
         return dividerEl;
     }
 
-    function createCoupangBannerClone() {
-        const bannerEl = document.querySelector('.ad-banners');
-        const textEl = document.querySelector('.coupang-banner-text');
-        if (!bannerEl && !textEl) {
-            return null;
-        }
-
-        const wrapperEl = document.createElement('div');
-        wrapperEl.className = 'sc-feed__ad';
-        if (bannerEl) {
-            wrapperEl.appendChild(bannerEl.cloneNode(true));
-        }
-        if (textEl) {
-            wrapperEl.appendChild(textEl.cloneNode(true));
-        }
-        return wrapperEl;
-    }
-
     function appendLatestPostsInFeed(itemEl) {
         const latestPostsEl = document.getElementById('latestPosts');
         if (!latestPostsEl) {
@@ -418,14 +395,6 @@
         }
     }
 
-    function appendFeedAdAndLatestPosts(itemEl) {
-        const coupangEl = createCoupangBannerClone();
-        if (coupangEl) {
-            itemEl.appendChild(coupangEl);
-            itemEl.appendChild(createDivider());
-        }
-        appendLatestPostsInFeed(itemEl);
-    }
 
     function refreshLatestSearches() {
         if (window.scLatestSearches && typeof window.scLatestSearches.load === 'function') {
@@ -1032,7 +1001,7 @@
 
         syncCommentAreaDivider();
 
-        appendFeedAdAndLatestPosts(itemEl);
+        appendLatestPostsInFeed(itemEl);
 
         itemEl.appendChild(titleEl);
         itemEl.appendChild(infoEl);
@@ -1455,7 +1424,7 @@
         layoutEl.appendChild(sidebarColEl);
         layoutEl.appendChild(contentColEl);
 
-        appendFeedAdAndLatestPosts(itemEl);
+        appendLatestPostsInFeed(itemEl);
         itemEl.appendChild(titleEl);
         itemEl.appendChild(metaEl);
         itemEl.appendChild(createDivider());
@@ -1845,7 +1814,7 @@
             relatedEl.className = 'sc-feed__content sc-feed__chat-related';
             relatedEl.hidden = true;
 
-            appendFeedAdAndLatestPosts(itemEl);
+            appendLatestPostsInFeed(itemEl);
             itemEl.appendChild(titleEl);
             itemEl.appendChild(metaEl);
             itemEl.appendChild(questionEl);

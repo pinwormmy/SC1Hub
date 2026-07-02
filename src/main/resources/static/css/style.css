@@ -360,23 +360,6 @@ textarea:focus-visible {
     margin-bottom: 0px;
     min-height: calc(100svh - 190px);
 }
-.ad-banners {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 120px));
-    justify-content: center;
-    max-height: 240px;
-    overflow: hidden;
-    margin-top: 20px;
-}
-.ad-banners a {
-    display: block;
-    width: 120px;
-}
-.ad-banners img {
-    display: block;
-    width: 120px;
-    height: auto;
-}
 .coupang-banner-text {
     width: 100%;
     text-align: center;
@@ -757,21 +740,6 @@ textarea.cke_source {
 .sc-feed__recommend {
     margin: 10px 0;
 }
-.sc-feed__ad .ad-banners {
-    margin-top: 0;
-    padding-left: 0;
-    padding-right: 0;
-}
-.sc-feed__ad .coupang-banner-text {
-    padding-left: 0;
-    padding-right: 0;
-}
-@media screen and (max-width: 768px) {
-    .sc-feed__ad .ad-banners {
-        display: grid;
-    }
-}
-
 .latest-posts {
     color: var(--sc-text-dim);
     border-bottom: 1px dashed var(--sc-line);
