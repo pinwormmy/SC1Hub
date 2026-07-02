@@ -12,27 +12,6 @@
                 margin: 10px 0 10px 0;
                 width: 100%;
             }
-
-            .terran-field {
-                background-image: url('https://sc1hub.cdn1.cafe24.com/marine1.jpg');
-                background-size: cover;
-                background-repeat: no-repeat;
-                background-position: center;
-            }
-
-            .zerg-field {
-                background-image: url('https://sc1hub.cdn1.cafe24.com/hydralisk_center1.jpg');
-                background-size: cover;
-                background-repeat: no-repeat;
-                background-position: center;
-            }
-
-            .protoss-field {
-                background-image: url('https://sc1hub.cdn1.cafe24.com/zeratull1.jpg');
-                background-size: cover;
-                background-repeat: no-repeat;
-                background-position: center;
-            }
         </style>
         <%@include file="./include/header.jspf" %>
     </head>
@@ -47,7 +26,7 @@
                             <c:forEach var="section" items="${popularSections}">
                                 <div class="sc-col-3">
                                     <fieldset class="${section.cssClass}">
-                                        <legend style="color:${section.legendColor};">
+                                        <legend>
                                             <c:out value="${section.title}" />
                                         </legend>
                                         <table class="boardList sc-ellipsis-table" style="width: 100%;">

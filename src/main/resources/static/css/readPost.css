@@ -2,14 +2,14 @@
     padding: 0.5rem 0.65rem;
     font-size: clamp(1.35rem, 3.2vw, 1.8rem);
     font-weight: 400;
-    border-color: #bbb;
+    border-color: var(--sc-line-soft);
     line-height: 1.22;
     overflow-wrap: anywhere;
 }
 .info-row {
     padding: 0.35rem 0.65rem 0.3rem;
     border-bottom: 1px solid;
-    border-color: #bbb;
+    border-color: var(--sc-line-soft);
     font-size: 0.94rem;
     font-weight: 400;
     overflow: hidden;
@@ -64,8 +64,8 @@
 }
 #commentContent {
     background-color: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--sc-line-soft);
     padding: 10px;
-    color: #ffffff;
-    caret-color: #ffffff;
+    color: var(--sc-text);
+    caret-color: var(--sc-text);
 }

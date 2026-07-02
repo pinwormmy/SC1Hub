@@ -23,7 +23,7 @@
 
 .strategy-tip-form__writer {
     align-self: center;
-    color: #75f94c;
+    color: var(--sc-accent);
 }
 
 .strategy-tip-tabs {
@@ -34,14 +34,14 @@
 }
 
 .strategy-tip-tab {
-    border: 1px solid rgba(117, 249, 76, 0.42);
+    border: 1px solid var(--sc-line-soft);
     padding: 0.22rem 0.45rem;
     color: inherit;
 }
 
 .strategy-tip-tab.is-active {
-    color: #75f94c;
-    border-color: #75f94c;
+    color: var(--sc-accent);
+    border-color: var(--sc-accent);
 }
 
 .strategy-tip-list {
@@ -64,7 +64,7 @@
 
 .strategy-tip-item__category {
     display: inline-block;
-    color: #75f94c;
+    color: var(--sc-accent);
     margin-bottom: 0.18rem;
 }
 
@@ -90,7 +90,7 @@
 
 .strategy-tip-like,
 .strategy-tip-delete {
-    border: 1px solid rgba(117, 249, 76, 0.42);
+    border: 1px solid var(--sc-line-soft);
     background: rgba(0, 0, 0, 0.22);
     color: inherit;
     padding: 0.25rem 0.45rem;
@@ -99,8 +99,8 @@
 
 .strategy-tip-like:hover,
 .strategy-tip-delete:hover {
-    color: #75f94c;
-    border-color: #75f94c;
+    color: var(--sc-accent);
+    border-color: var(--sc-accent);
 }
 
 .strategy-tip-empty {

@@ -25,22 +25,10 @@
     </c:otherwise>
 </c:choose>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="preload" href="https://sc1hub.cdn1.cafe24.com/home-wallpaper-dark.jpg" as="image">
 <link rel="stylesheet" href="/css/sc1hub-layout.css">
 <link rel="stylesheet" href="/css/style.css">
 <!-- Neo둥근모 Pro -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
-<script>
-(function () {
-    var cdnWallpaperUrl = "https://sc1hub.cdn1.cafe24.com/home-wallpaper-dark.jpg";
-    var fallbackWallpaper = 'url("/images/home-wallpaper-dark.jpg")';
-    var wallpaperProbe = new Image();
-    wallpaperProbe.onerror = function () {
-        document.documentElement.style.setProperty("--sc-home-wallpaper-image", fallbackWallpaper);
-    };
-    wallpaperProbe.src = cdnWallpaperUrl;
-})();
-</script>
 <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
 
 <style>
@@ -84,7 +72,7 @@
     font-size: clamp(32px, 3.35vw, 48px);
     line-height: 1.06;
     letter-spacing: -0.03em;
-    text-shadow: 0 0 14px rgba(117, 249, 76, 0.28), 2px 0 0 rgba(0, 255, 255, 0.08);
+    text-shadow: none;
 }
 .title-container .short-title {
     display: none;
@@ -93,13 +81,22 @@
     letter-spacing: -0.04em;
 }
 .navbar-wrapper {
-    border-bottom: 1px solid rgba(117, 249, 76, 0.36);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12), 0 12px 30px rgba(0, 0, 0, 0.22);
-    background-color: rgba(0, 0, 0, 0.34);
-    background-size: cover;
-    background-repeat: no-repeat;
-    background-position: center;
+    border-bottom: 3px double var(--sc-line);
+    box-shadow: none;
+    background-color: var(--sc-statusbar-bg);
+    color: var(--sc-statusbar-text);
     min-height: 76px;
+    text-shadow: none;
+}
+.navbar-wrapper a {
+    color: var(--sc-statusbar-text);
+    text-shadow: none;
+}
+.navbar-wrapper a:hover,
+.navbar-wrapper a:focus-visible,
+.navbar-wrapper a:active {
+    background-color: var(--sc-statusbar-text);
+    color: var(--sc-statusbar-bg);
 }
 @media (max-width: 768px) {
     .navbar-wrapper {

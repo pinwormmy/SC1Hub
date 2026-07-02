@@ -114,8 +114,8 @@
     white-space: nowrap;
 }
 .sc-paging__page.is-current {
-    color: #75f94c;
-    border-color: #75f94c;
+    color: var(--sc-accent);
+    border-color: var(--sc-accent);
 }
 .sc-paging .btn-theme {
     border: none;
