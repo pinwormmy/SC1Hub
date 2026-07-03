@@ -16,11 +16,11 @@
     let hiddenPollIntervalMillis = 10000;
     let errorBackoffMillis = 0;
     let self = null;
-    // 광고는 페이지 로드 후 실시간으로 도착한 메시지에만 붙인다.
-    // (첫 폴링이 과거 대화를 한꺼번에 렌더링할 때 광고가 도배되는 것을 방지)
-    let historyLoaded = false;
-    let liveMessageCount = 0;
-    let lastAdAtCount = 0;
+    // 광고 위치는 메시지 id/역할만으로 결정적으로 계산한다.
+    // 페이지를 이동해도 서버 버퍼가 같은 순서로 재렌더링되므로 광고가 같은 자리에 유지된다.
+    let recentRoles = [];
+    let sinceLastAd = Number.POSITIVE_INFINITY;
+    let adObserver = null;
 
     function getMemberMeta() {
         const metaEl = document.getElementById('scMemberMeta');
@@ -40,10 +40,8 @@
             outputEl.insertBefore(logEl, outputEl.firstChild);
             renderedIds.clear();
             lastSeq = 0;
-            // 히스토리 재렌더링에 광고가 도배되지 않도록 광고 상태도 리셋한다.
-            historyLoaded = false;
-            liveMessageCount = 0;
-            lastAdAtCount = 0;
+            recentRoles = [];
+            sinceLastAd = Number.POSITIVE_INFINITY;
         }
         return logEl;
     }
@@ -81,7 +79,29 @@
             width: Number.parseInt((useMobile ? metaEl.dataset.mobileWidth : metaEl.dataset.pcWidth) || '680', 10),
             height: Number.parseInt((useMobile ? metaEl.dataset.mobileHeight : metaEl.dataset.pcHeight) || '140', 10),
             messageInterval: Number.parseInt(metaEl.dataset.messageInterval || '20', 10),
+            aiRecentWindow: Number.parseInt(metaEl.dataset.aiRecentWindow || '5', 10),
         };
+    }
+
+    // 히스토리 재렌더링으로 광고가 여러 개 생겨도 화면에 보일 때만 iframe을 로드한다.
+    function getAdObserver() {
+        if (adObserver || typeof IntersectionObserver === 'undefined') {
+            return adObserver;
+        }
+        adObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) {
+                    return;
+                }
+                const iframeEl = entry.target;
+                if (iframeEl.dataset.src) {
+                    iframeEl.src = iframeEl.dataset.src;
+                    delete iframeEl.dataset.src;
+                }
+                adObserver.unobserve(iframeEl);
+            });
+        }, { root: outputEl, rootMargin: '200px 0px' });
+        return adObserver;
     }
 
     // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
@@ -94,7 +114,7 @@
         lineEl.className = 'sc-chat__line sc-chat__ad';
 
         const iframeEl = document.createElement('iframe');
-        iframeEl.src = 'https://ads-partners.coupang.com/widgets.html'
+        const adSrc = 'https://ads-partners.coupang.com/widgets.html'
             + '?id=' + encodeURIComponent(config.id)
             + '&template=carousel'
             + '&trackingCode=' + encodeURIComponent(config.trackingCode)
@@ -113,6 +133,15 @@
         lineEl.appendChild(iframeEl);
         lineEl.appendChild(noticeEl);
         logEl.appendChild(lineEl);
+
+        const observer = getAdObserver();
+        if (observer) {
+            iframeEl.dataset.src = adSrc;
+            observer.observe(iframeEl);
+        } else {
+            iframeEl.src = adSrc;
+        }
+
         if (shouldScroll) {
             scrollToBottom();
             // iframe 로드로 높이가 늘어난 뒤에도 하단 고정을 유지한다.
@@ -125,19 +154,26 @@
     }
 
     function maybeInsertAd(message) {
-        if (!historyLoaded) {
-            return;
-        }
         const config = getChatAdConfig();
         if (!config) {
             return;
         }
-        liveMessageCount += 1;
-        const dueByInterval = config.messageInterval > 0
-            && liveMessageCount - lastAdAtCount >= config.messageInterval;
-        if (message.role === 'AI' || dueByInterval) {
+        // AI 답변: 직전 N개(기본 5) 채팅에 AI 답변이 없을 때만 광고를 붙인다.
+        const hadRecentAi = recentRoles.includes('AI');
+        recentRoles.push(message.role);
+        if (recentRoles.length > config.aiRecentWindow) {
+            recentRoles.shift();
+        }
+        sinceLastAd += 1;
+
+        const aiAdDue = message.role === 'AI' && !hadRecentAi;
+        // 대화 N회(기본 20)마다: 전역 메시지 id 기준이라 재렌더링해도 같은 자리에 붙는다.
+        const intervalAdDue = config.messageInterval > 0
+            && message.id % config.messageInterval === 0;
+        // 광고끼리 최소 N개 메시지 간격을 두어 연달아 붙는 것을 막는다.
+        if ((aiAdDue || intervalAdDue) && sinceLastAd >= config.aiRecentWindow) {
             insertAdLine(config);
-            lastAdAtCount = liveMessageCount;
+            sinceLastAd = 0;
         }
     }
 
@@ -270,7 +306,6 @@
             const result = await fetchJson('/api/chat/messages?afterSeq=' + lastSeq);
             if (result.ok && result.data) {
                 applyPollResponse(result.data);
-                historyLoaded = true;
                 errorBackoffMillis = 0;
             } else if (result.status === 503) {
                 errorBackoffMillis = 30000;
