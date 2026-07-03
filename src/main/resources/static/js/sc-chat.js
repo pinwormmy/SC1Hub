@@ -1,7 +1,6 @@
 (() => {
     const terminalEl = document.getElementById('scTerminal');
     const outputEl = document.getElementById('scTerminalOutput');
-    const inputEl = document.getElementById('scTerminalInput');
     if (!terminalEl || !outputEl) {
         return;
     }
@@ -429,16 +428,9 @@
     }
 
     function init() {
-        const isHomePage = document.body.classList.contains('sc-home-page');
-        if (isHomePage) {
-            openTerminal();
-            start();
-            return;
-        }
-        // 다른 페이지에서는 터미널을 처음 사용할 때만 폴링을 시작해 부하를 줄인다.
-        if (inputEl) {
-            inputEl.addEventListener('focus', () => start(), { once: true });
-        }
+        // 모든 페이지에서 채팅창을 기본 표시하고 폴링을 시작한다.
+        openTerminal();
+        start();
     }
 
     document.addEventListener('visibilitychange', () => {

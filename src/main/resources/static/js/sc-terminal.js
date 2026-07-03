@@ -277,15 +277,15 @@
         terminalEl.classList.add(COLLAPSED_CLASS);
     }
 
-    const EXPANDED_CLASS = 'is-expanded';
+    const FULLSCREEN_CLASS = 'sc-chat-fullscreen';
     const expandButtonEl = document.getElementById('scTerminalExpandBtn');
     if (expandButtonEl) {
         expandButtonEl.addEventListener('click', () => {
             openTerminal();
-            const expanded = terminalEl.classList.toggle(EXPANDED_CLASS);
+            const expanded = document.body.classList.toggle(FULLSCREEN_CLASS);
             expandButtonEl.textContent = expanded ? '채팅창 축소' : '채팅창 확장';
             expandButtonEl.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            scrollOutputToBottom();
+            outputEl.scrollTop = outputEl.scrollHeight;
         });
     }
 

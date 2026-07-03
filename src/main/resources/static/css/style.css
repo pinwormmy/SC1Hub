@@ -507,19 +507,37 @@ textarea.cke_source {
 
 /* 공개 채팅 (터미널 영역) */
 .sc-terminal__output {
-    max-height: 40vh;
+    /* 기본 높이: 채팅 4줄 정도. 모든 페이지에서 동일하게 유지하고,
+       첫 진입 시 하단 "선택 >" 프롬프트까지 보이도록 낮게 잡는다. */
+    height: clamp(114px, 15vh, 170px);
+    max-height: none;
     overflow-y: auto;
 }
-.sc-home-page .sc-terminal__output {
-    /* 기본 높이는 낮게 유지해 첫 진입 시 하단 "선택 >" 프롬프트까지 보이게 한다. */
-    height: clamp(48px, 8vh, 110px);
-    max-height: none;
+
+/* 채팅창 확장: 페이지의 다른 요소를 모두 가리고 화면을 가득 채운다 */
+body.sc-chat-fullscreen {
+    overflow: hidden;
 }
-.sc-home-page .sc-terminal.is-expanded .sc-terminal__output {
-    height: clamp(240px, 45vh, 520px);
+body.sc-chat-fullscreen .sc-terminal-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    margin: 0;
+    padding: 10px clamp(10px, 2vw, 24px) 14px;
+    background: var(--sc-bg-deep);
+    display: flex;
+    flex-direction: column;
 }
-.sc-terminal.is-expanded .sc-terminal__output {
-    max-height: 70vh;
+body.sc-chat-fullscreen .sc-terminal {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+body.sc-chat-fullscreen .sc-terminal__output {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
 }
 .sc-chat__line {
     padding: 1px 0;

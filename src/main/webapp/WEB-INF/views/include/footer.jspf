@@ -27,7 +27,7 @@
         <div class="col-sm-12">
                 <div class="sc-terminal-wrap">
                     <div class="sc-terminal__notice"><span>대화입력(공개채팅) &nbsp /ai 질문(AI답변 공유) &nbsp 숫자입력(게시물이동) &nbsp 단축키(ALT+키)</span><button type="button" id="scTerminalExpandBtn" class="sc-terminal__expand" aria-expanded="false">채팅창 확장</button></div>
-                    <div id="scTerminal" class="sc-terminal is-collapsed" aria-label="SC1Hub Terminal">
+                    <div id="scTerminal" class="sc-terminal" aria-label="SC1Hub Terminal">
                         <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"><div id="scChatLog" class="sc-chat__log"></div></div>
                         <div class="sc-terminal__prompt">
                             <span class="sc-terminal__label">선택 &gt;&nbsp;</span>
