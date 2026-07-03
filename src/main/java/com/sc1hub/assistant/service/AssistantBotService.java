@@ -18,6 +18,8 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.service.BoardService;
+import com.sc1hub.chat.dto.ChatMessageDTO;
+import com.sc1hub.chat.service.ChatRoomService;
 import com.sc1hub.common.util.BlockedWordMatcher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +51,8 @@ public class AssistantBotService {
 
     private static final String MODE_POST = "post";
     private static final String MODE_COMMENT = "comment";
+    private static final String MODE_CHAT = "chat";
+    private static final int CHAT_BODY_MAX_CHARS = 200;
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_SKIPPED = "skipped";
     private static final String STATUS_PUBLISHED = "published";
@@ -73,6 +77,7 @@ public class AssistantBotService {
     private final AssistantBotMapper assistantBotMapper;
     private final GeminiClient geminiClient;
     private final ObjectMapper objectMapper;
+    private final ChatRoomService chatRoomService;
     private final Clock clock;
     private LocalDate generateCallBudgetDate;
     private int generateCallBudgetUsed;
@@ -84,9 +89,10 @@ public class AssistantBotService {
                                BoardMapper boardMapper,
                                AssistantBotMapper assistantBotMapper,
                                GeminiClient geminiClient,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               ChatRoomService chatRoomService) {
         this(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper, geminiClient, objectMapper,
-                Clock.systemDefaultZone());
+                chatRoomService, Clock.systemDefaultZone());
     }
 
     AssistantBotService(AssistantBotProperties botProperties,
@@ -96,6 +102,7 @@ public class AssistantBotService {
                                AssistantBotMapper assistantBotMapper,
                                GeminiClient geminiClient,
                                ObjectMapper objectMapper,
+                               ChatRoomService chatRoomService,
                                Clock clock) {
         this.botProperties = botProperties;
         this.assistantProperties = assistantProperties;
@@ -104,6 +111,7 @@ public class AssistantBotService {
         this.assistantBotMapper = assistantBotMapper;
         this.geminiClient = geminiClient;
         this.objectMapper = objectMapper;
+        this.chatRoomService = chatRoomService;
         this.clock = clock;
     }
 
@@ -393,6 +401,7 @@ public class AssistantBotService {
         status.setAutoPublishZone(botProperties.getAutoPublishZone());
         status.setPostDailyLimit(Math.max(0, botProperties.getAutoPublishPostDailyLimit()));
         status.setCommentDailyLimit(Math.max(0, botProperties.getAutoPublishCommentDailyLimit()));
+        status.setChatDailyLimit(Math.max(0, botProperties.getAutoPublishChatDailyLimit()));
         status.setDate(today);
         status.setServerNow(now);
 
@@ -423,6 +432,28 @@ public class AssistantBotService {
             return personaStatus;
         }
 
+        if (isChatPersona(persona)) {
+            personaStatus.setPublishChannel(MODE_CHAT);
+            int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+            int handledChatToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, since);
+            int handledChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, minuteStart);
+            personaStatus.setHandledChatToday(handledChatToday);
+            personaStatus.setHandledChatThisMinute(handledChatThisMinute);
+
+            List<Integer> chatSlots = resolveChatAutoPublishSlots(persona, today, chatDailyLimit);
+            personaStatus.setChatSlots(formatMinuteSlots(chatSlots));
+            Integer nextChatSlot = resolveNextUpcomingChatSlot(persona, today, now.toLocalTime(), chatDailyLimit);
+            personaStatus.setNextChatSlot(nextChatSlot == null ? null : formatMinuteOfDay(nextChatSlot));
+
+            boolean chatDue = isPublishMinute(chatSlots, toMinuteOfDay(now.toLocalTime()), handledChatToday, handledChatThisMinute);
+            personaStatus.setDueModes(chatDue ? Collections.singletonList(MODE_CHAT) : Collections.emptyList());
+            personaStatus.setWaitingDetail(chatDue
+                    ? "due_now"
+                    : buildChatWaitingDetail(persona, today, now.toLocalTime(), handledChatToday, chatDailyLimit));
+            return personaStatus;
+        }
+
+        personaStatus.setPublishChannel("board");
         int handledPostToday = assistantBotMapper.countPublishedSinceByMode(persona.getName(), boardTitle, MODE_POST, since);
         int handledCommentToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_COMMENT, since);
         int handledPostThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_POST, minuteStart);
@@ -582,6 +613,10 @@ public class AssistantBotService {
             return AutoPublishResult.skipped(persona.getName(), "invalid_board");
         }
 
+        if (isChatPersona(persona)) {
+            return autoPublishChatOnce(persona, boardTitle);
+        }
+
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         LocalDateTime since = today.atStartOfDay();
@@ -663,6 +698,256 @@ public class AssistantBotService {
             return AutoPublishResult.failed(persona.getName(), lastFailureDetail);
         }
         return AutoPublishResult.skipped(persona.getName(), lastSkippedDetail == null ? "no_due_candidate" : lastSkippedDetail);
+    }
+
+    AutoPublishResult autoPublishChatOnce(PersonaProperties persona, String boardTitle) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
+        LocalDateTime since = today.atStartOfDay();
+        LocalDateTime minuteStart = now.withSecond(0).withNano(0);
+
+        int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+        int handledChatToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, since);
+        int handledChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, minuteStart);
+        List<Integer> chatSlots = resolveChatAutoPublishSlots(persona, today, chatDailyLimit);
+        if (!isPublishMinute(chatSlots, toMinuteOfDay(now.toLocalTime()), handledChatToday, handledChatThisMinute)) {
+            return AutoPublishResult.skipped(persona.getName(),
+                    buildChatWaitingDetail(persona, today, now.toLocalTime(), handledChatToday, chatDailyLimit));
+        }
+
+        try {
+            List<ChatMessageDTO> recentChats = safeList(
+                    chatRoomService.getRecentMessages(Math.max(1, botProperties.getChatContextMessageLimit())));
+            List<AssistantBotHistoryDTO> recentHistory = safeList(
+                    assistantBotMapper.selectRecentHistory(persona.getName(), boardTitle, Math.max(1, botProperties.getRecentHistoryLimit())));
+
+            int maxAttempts = Math.max(1, botProperties.getAutoPublishMaxGenerateAttempts());
+            String retryFeedback = null;
+            ChatCandidate acceptedCandidate = null;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                GenerateCallBudgetResult budgetResult = tryConsumeGenerateCallBudget();
+                if (!budgetResult.isAllowed()) {
+                    return AutoPublishResult.skipped(persona.getName(), AUTO_DRAFT_BUDGET_EXCEEDED);
+                }
+                String prompt = buildChatPrompt(persona, recentChats, recentHistory, retryFeedback, attempt, maxAttempts);
+                String rawJson = geminiClient.generateAnswer(
+                        prompt,
+                        Math.max(1, botProperties.getMaxOutputTokens()),
+                        resolveModel(persona)
+                );
+                ChatCandidate candidate = validateChatCandidate(persona, parseJson(rawJson), recentHistory);
+                if (candidate.accepted) {
+                    acceptedCandidate = candidate;
+                    break;
+                }
+                retryFeedback = candidate.feedback;
+                log.info("봇 채팅 재시도. personaName={}, attempt={}, feedback={}", persona.getName(), attempt, retryFeedback);
+            }
+
+            if (acceptedCandidate == null) {
+                insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null,
+                        StringUtils.hasText(retryFeedback) ? "chat_rejected:" + safeText(retryFeedback, 60) : "chat_rejected");
+                return AutoPublishResult.failed(persona.getName(), "chat_draft_rejected");
+            }
+
+            ChatMessageDTO posted = chatRoomService.postBotMessage(persona.getName(), acceptedCandidate.body);
+            if (posted == null) {
+                insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_post_failed");
+                return AutoPublishResult.failed(persona.getName(), "chat_post_failed");
+            }
+
+            AssistantBotHistoryDTO history = new AssistantBotHistoryDTO();
+            history.setPersonaName(persona.getName());
+            history.setBoardTitle(boardTitle);
+            history.setGenerationMode(MODE_CHAT);
+            history.setTargetPostNum(null);
+            history.setTopic(acceptedCandidate.topic);
+            history.setDraftTitle(null);
+            history.setDraftBody(acceptedCandidate.body);
+            history.setRawJson(acceptedCandidate.result.toString());
+            history.setStatus(STATUS_PUBLISHED);
+            assistantBotMapper.insertHistory(history);
+            return AutoPublishResult.published(persona.getName(), MODE_CHAT, history.getId(), null, null);
+        } catch (GeminiException e) {
+            log.error("봇 채팅 Gemini 호출 실패. personaName={}", persona.getName(), e);
+            insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_gemini_error");
+            return AutoPublishResult.failed(persona.getName(), "chat_gemini_error");
+        } catch (Exception e) {
+            log.error("봇 채팅 발행 실패. personaName={}", persona.getName(), e);
+            return AutoPublishResult.failed(persona.getName(), "chat_error");
+        }
+    }
+
+    private List<Integer> resolveChatAutoPublishSlots(PersonaProperties persona, LocalDate date, int dailyLimit) {
+        if (persona == null || date == null || dailyLimit <= 0) {
+            return Collections.emptyList();
+        }
+        return botProperties.buildDailyAutoPublishSlots(date, MODE_CHAT, dailyLimit, persona.getBoardTitle(), persona.getName());
+    }
+
+    private String buildChatWaitingDetail(PersonaProperties persona,
+                                          LocalDate date,
+                                          LocalTime now,
+                                          int handledChatToday,
+                                          int chatDailyLimit) {
+        Integer nextSlot = resolveNextUpcomingChatSlot(persona, date, now, chatDailyLimit);
+        if (nextSlot == null) {
+            return handledChatToday >= chatDailyLimit ? "daily_limits_reached" : "no_remaining_slot_today";
+        }
+        return "waiting_random_slot:chat=" + formatMinuteOfDay(nextSlot);
+    }
+
+    private Integer resolveNextUpcomingChatSlot(PersonaProperties persona, LocalDate date, LocalTime now, int chatDailyLimit) {
+        int nowMinuteOfDay = toMinuteOfDay(now);
+        for (Integer slot : resolveChatAutoPublishSlots(persona, date, chatDailyLimit)) {
+            if (slot != null && slot > nowMinuteOfDay) {
+                return slot;
+            }
+        }
+        return null;
+    }
+
+    String buildChatPrompt(PersonaProperties persona,
+                           List<ChatMessageDTO> recentChats,
+                           List<AssistantBotHistoryDTO> recentHistory,
+                           String retryFeedback,
+                           int attempt,
+                           int maxAttempts) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("너는 SC1Hub 공개채팅방 전용 AI 유저 '")
+                .append(persona.getName())
+                .append("'의 채팅 에이전트다.\n");
+        sb.append("중요: 실제 사람으로 위장하지 말고, 채팅방의 말투와 리듬만 자연스럽게 반영하라.\n");
+        sb.append("닉네임은 이미 봇 계정이므로 특정 실존 유저를 흉내 내지 말라.\n");
+        sb.append("현재 시도 횟수: ").append(attempt).append('/').append(maxAttempts).append("\n\n");
+
+        sb.append("페르소나 규칙:\n");
+        appendLine(sb, "- " + buildPersonaPromptRule(persona));
+        sb.append("\n");
+
+        sb.append("목표:\n");
+        sb.append("- 공개채팅방에 페르소나 말투로 짧은 채팅 한 줄을 남긴다.\n");
+        sb.append("- 아래 최신 채팅을 읽고 자연스럽게 반응하거나, 이어갈 화제가 없으면 페르소나다운 혼잣말을 던진다.\n");
+        if (isRaceGamePersona(persona)) {
+            sb.append("- ").append(persona.getName()).append("은 스타크래프트 게임 이야기 관점을 유지한다. 채팅 화제가 게임이 아니어도 맞장구 대신 ")
+                    .append(resolveRaceLabel(persona)).append(" 시점의 게임 한마디로 반응한다.\n");
+        } else if (hasPersonaName(persona, "훈훈봇")) {
+            sb.append("- 훈훈봇은 상대 채팅의 감정이나 상황을 받아주고 부담 없는 응원이나 재치 있는 한마디로 반응한다.\n");
+        }
+        sb.append("\n");
+
+        sb.append("금지:\n");
+        sb.append("- 정치, 혐오, 성적 표현, 실존 유저 공격, 패드립, 과한 분쟁 유도\n");
+        sb.append("- 너무 반듯한 AI 문체, 링크, 해시태그\n");
+        sb.append("- 최근 자기 채팅과 같은 문장, 같은 어미 반복\n");
+        sb.append("- 금칙어 사용\n\n");
+
+        sb.append("형식 규칙:\n");
+        sb.append("- 반드시 한 줄만 쓴다. 줄바꿈을 쓰지 않는다.\n");
+        if (isSingleSentenceOnlyPersona(persona)) {
+            sb.append("- 한 문장만 짧고 건조하게 쓴다.\n");
+        } else {
+            sb.append("- 1~2문장, 120자 이내로 짧게 쓴다.\n");
+        }
+        sb.append("\n");
+
+        if (StringUtils.hasText(retryFeedback)) {
+            sb.append("직전 시도 보정 지시:\n");
+            appendLine(sb, "- " + retryFeedback);
+            sb.append("- 이번 시도에서는 문장과 화제를 분명히 바꾼다.\n\n");
+        }
+
+        sb.append("최신 채팅:\n");
+        List<ChatMessageDTO> safeChats = safeList(recentChats);
+        if (safeChats.isEmpty()) {
+            sb.append("- 없음 (조용한 채팅방이니 혼잣말로 시작한다)\n");
+        } else {
+            int index = 1;
+            for (ChatMessageDTO chat : safeChats) {
+                if (chat == null) {
+                    continue;
+                }
+                String nickname = StringUtils.hasText(chat.getNickname()) ? chat.getNickname() : "익명";
+                appendLine(sb, index + ". [" + nickname + "] " + safeText(chat.getContent(), 120));
+                index++;
+            }
+        }
+
+        sb.append("\n최근 ").append(persona.getName()).append(" 채팅:\n");
+        int historyIndex = 1;
+        for (AssistantBotHistoryDTO history : safeList(recentHistory)) {
+            if (history == null || !MODE_CHAT.equals(normalizeMode(history.getGenerationMode()))
+                    || !StringUtils.hasText(history.getDraftBody())) {
+                continue;
+            }
+            appendLine(sb, historyIndex + ". " + safeText(history.getDraftBody(), 120));
+            historyIndex++;
+            if (historyIndex > 8) {
+                break;
+            }
+        }
+        if (historyIndex == 1) {
+            sb.append("- 없음\n");
+        }
+
+        sb.append("\n출력은 반드시 JSON 하나만 반환한다.\n");
+        sb.append("{\"analysis\":{\"topic\":\"\",\"risk_notes\":[]},\"chat\":{\"body\":\"\"}}\n");
+        sb.append("JSON 이외의 설명, 코드블록, 사족은 절대 출력하지 마라.\n");
+
+        return truncatePrompt(sb.toString());
+    }
+
+    private ChatCandidate validateChatCandidate(PersonaProperties persona,
+                                                JsonNode result,
+                                                List<AssistantBotHistoryDTO> recentHistory) {
+        if (result == null || result.isMissingNode() || result.isNull()) {
+            return ChatCandidate.rejected("AI가 유효한 JSON을 반환하지 않았습니다.");
+        }
+
+        String body = normalizeChatBody(persona, textOrNull(result.path("chat").path("body")));
+        if (!StringUtils.hasText(body)) {
+            return ChatCandidate.rejected("채팅 본문이 비어 있습니다.");
+        }
+        String matchedBlockedWord = findBlockedWord(body);
+        if (matchedBlockedWord != null) {
+            return ChatCandidate.rejected("금칙어가 포함됐습니다: " + matchedBlockedWord);
+        }
+
+        double threshold = clampThreshold(botProperties.getDuplicateSimilarityThreshold());
+        String normalizedBody = normalizeText(body);
+        for (AssistantBotHistoryDTO history : safeList(recentHistory)) {
+            if (history == null || !MODE_CHAT.equals(normalizeMode(history.getGenerationMode()))) {
+                continue;
+            }
+            if (isTooSimilar(normalizedBody, normalizeText(history.getDraftBody()), threshold)) {
+                return ChatCandidate.rejected("최근 봇 채팅과 너무 비슷합니다.");
+            }
+        }
+
+        return ChatCandidate.accepted(result, body, textOrNull(result.path("analysis").path("topic")));
+    }
+
+    private String normalizeChatBody(PersonaProperties persona, String body) {
+        if (!StringUtils.hasText(body)) {
+            return null;
+        }
+        String normalized = body.trim()
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replace('\n', ' ')
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (isSingleSentenceOnlyPersona(persona)) {
+            normalized = firstSentenceOnly(normalized);
+        }
+        if (normalized != null && normalized.length() > CHAT_BODY_MAX_CHARS) {
+            normalized = normalized.substring(0, CHAT_BODY_MAX_CHARS).trim();
+        }
+        return normalized;
+    }
+
+    private boolean isChatPersona(PersonaProperties persona) {
+        return persona != null && !isRepetitiveByDesignPersona(persona) && !isHealthPersona(persona);
     }
 
     private List<AutoPublishCandidate> resolveDueAutoPublishCandidates(PersonaProperties persona,
@@ -2723,6 +3008,30 @@ public class AssistantBotService {
             draft.accepted = false;
             draft.feedback = feedback;
             return draft;
+        }
+    }
+
+    private static final class ChatCandidate {
+        private boolean accepted;
+        private JsonNode result;
+        private String body;
+        private String topic;
+        private String feedback;
+
+        static ChatCandidate accepted(JsonNode result, String body, String topic) {
+            ChatCandidate candidate = new ChatCandidate();
+            candidate.accepted = true;
+            candidate.result = result;
+            candidate.body = body;
+            candidate.topic = topic;
+            return candidate;
+        }
+
+        static ChatCandidate rejected(String feedback) {
+            ChatCandidate candidate = new ChatCandidate();
+            candidate.accepted = false;
+            candidate.feedback = feedback;
+            return candidate;
         }
     }
 

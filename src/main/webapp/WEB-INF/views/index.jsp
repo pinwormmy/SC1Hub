@@ -12,6 +12,13 @@
                 margin: 10px 0 10px 0;
                 width: 100%;
             }
+
+            /* 모바일에서는 종족 네트워크 최신글을 게시판당 2개만 보여 세로 스크롤을 줄인다 */
+            @media screen and (max-width: 600px) {
+                .sc-home-post-extra {
+                    display: none;
+                }
+            }
         </style>
         <%@include file="./include/header.jspf" %>
     </head>
@@ -43,8 +50,8 @@
                                                         <c:set var="boardColorClass" value="sc-title-clip--vsP" />
                                                     </c:when>
                                                 </c:choose>
-                                                <c:forEach var="post" items="${board.posts}" end="2">
-                                                    <tr>
+                                                <c:forEach var="post" items="${board.posts}" end="2" varStatus="postStatus">
+                                                    <tr class="${postStatus.index ge 2 ? 'sc-home-post-extra' : ''}">
                                                         <td class="sc-title-cell">
                                                             <a class="sc-title-clip ${boardColorClass}"
                                                                href="/boards/${board.boardTitle}/readPost?postNum=${post.postNum}"
