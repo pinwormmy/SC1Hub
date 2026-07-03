@@ -28,8 +28,6 @@ public class AssistantProperties {
     private List<String> excludedBoards = new ArrayList<>();
     private List<String> factBoards = new ArrayList<>(Collections.singletonList("tipBoard"));
     private int boardListCacheSeconds = 60;
-    private int searchLogLimit = 5;
-    private int searchLogRetentionDays = 7;
     private List<String> blockedWords = new ArrayList<>();
 
     private int anonymousDailyLimit = 3;

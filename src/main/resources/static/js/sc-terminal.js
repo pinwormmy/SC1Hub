@@ -277,6 +277,18 @@
         terminalEl.classList.add(COLLAPSED_CLASS);
     }
 
+    const EXPANDED_CLASS = 'is-expanded';
+    const expandButtonEl = document.getElementById('scTerminalExpandBtn');
+    if (expandButtonEl) {
+        expandButtonEl.addEventListener('click', () => {
+            openTerminal();
+            const expanded = terminalEl.classList.toggle(EXPANDED_CLASS);
+            expandButtonEl.textContent = expanded ? '채팅창 축소' : '채팅창 확장';
+            expandButtonEl.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            scrollOutputToBottom();
+        });
+    }
+
     function scrollOutputToBottom() {
         outputEl.scrollTop = outputEl.scrollHeight;
         terminalEl.scrollIntoView({ block: 'end' });
@@ -395,12 +407,6 @@
         }
     }
 
-
-    function refreshLatestSearches() {
-        if (window.scLatestSearches && typeof window.scLatestSearches.load === 'function') {
-            window.scLatestSearches.load();
-        }
-    }
 
     function formatMmDd(dateText) {
         const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateText ?? ''));
@@ -1901,7 +1907,6 @@
             if (stopLoadingDots) {
                 stopLoadingDots();
             }
-            refreshLatestSearches();
         }
     }
 

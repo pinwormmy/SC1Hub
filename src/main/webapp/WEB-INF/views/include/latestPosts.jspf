@@ -29,6 +29,9 @@
         if (!boardTitle || Number.isNaN(postNum)) {
             return null;
         }
+        if (boardTitle === 'strategyTip') {
+            return '/strategy-tips/';
+        }
         return (
             '/boards/'
             + encodeURIComponent(boardTitle)

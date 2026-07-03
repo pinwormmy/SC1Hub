@@ -4,7 +4,6 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
 import com.sc1hub.assistant.service.AssistantRateLimiter;
-import com.sc1hub.assistant.service.AssistantSearchLogService;
 import com.sc1hub.assistant.service.AssistantService;
 import com.sc1hub.chat.config.ChatProperties;
 import com.sc1hub.chat.dto.ChatAiRequestDTO;
@@ -47,22 +46,19 @@ public class ChatController {
     private final AssistantService assistantService;
     private final AssistantProperties assistantProperties;
     private final AssistantRateLimiter assistantRateLimiter;
-    private final AssistantSearchLogService searchLogService;
 
     public ChatController(ChatRoomService chatRoomService,
                           ChatModerationService moderationService,
                           ChatProperties chatProperties,
                           AssistantService assistantService,
                           AssistantProperties assistantProperties,
-                          AssistantRateLimiter assistantRateLimiter,
-                          AssistantSearchLogService searchLogService) {
+                          AssistantRateLimiter assistantRateLimiter) {
         this.chatRoomService = chatRoomService;
         this.moderationService = moderationService;
         this.chatProperties = chatProperties;
         this.assistantService = assistantService;
         this.assistantProperties = assistantProperties;
         this.assistantRateLimiter = assistantRateLimiter;
-        this.searchLogService = searchLogService;
     }
 
     @GetMapping(value = "/messages", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -155,10 +151,6 @@ public class ChatController {
             if (!rateLimit.isAllowed()) {
                 response.setError(response.getUsageText() + " - 일일 한도 초과");
                 return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
-            }
-
-            if (searchLogService != null) {
-                searchLogService.recordSearch(question);
             }
 
             String nickname = chatRoomService.resolveNickname(member, session);

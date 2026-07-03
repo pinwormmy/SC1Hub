@@ -396,6 +396,23 @@ textarea.cke_source {
     font-size: 0.82rem;
     margin-bottom: 4px;
     white-space: normal;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+.sc-terminal__expand {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--sc-accent);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sc-terminal__expand:hover,
+.sc-terminal__expand:focus {
+    text-decoration: underline;
 }
 
 #scFooterMeta hr {
@@ -494,8 +511,15 @@ textarea.cke_source {
     overflow-y: auto;
 }
 .sc-home-page .sc-terminal__output {
-    height: clamp(240px, 38vh, 420px);
+    /* 기본 높이는 낮게 유지해 첫 진입 시 하단 "선택 >" 프롬프트까지 보이게 한다. */
+    height: clamp(90px, 13vh, 180px);
     max-height: none;
+}
+.sc-home-page .sc-terminal.is-expanded .sc-terminal__output {
+    height: clamp(240px, 45vh, 520px);
+}
+.sc-terminal.is-expanded .sc-terminal__output {
+    max-height: 70vh;
 }
 .sc-chat__line {
     padding: 1px 0;

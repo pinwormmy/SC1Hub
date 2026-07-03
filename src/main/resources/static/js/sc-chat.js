@@ -61,6 +61,23 @@
         }
     }
 
+    // AI 답변 끝의 "관련: <제목> <URL>" 줄은 URL을 숨기고 제목에 링크를 건다.
+    const RELATED_LINE_PATTERN = /\n관련: ([\s\S]+) ((?:https?:\/\/|\/)\S+)\s*$/;
+
+    function fillMessageContent(contentEl, message) {
+        const text = ' ' + (message.content || '');
+        const match = message.role === 'AI' ? RELATED_LINE_PATTERN.exec(text) : null;
+        if (!match) {
+            contentEl.textContent = text;
+            return;
+        }
+        contentEl.textContent = text.slice(0, match.index) + '\n관련: ';
+        const linkEl = document.createElement('a');
+        linkEl.href = match[2];
+        linkEl.textContent = match[1];
+        contentEl.appendChild(linkEl);
+    }
+
     function renderMessage(message) {
         if (!message || typeof message.id !== 'number' || renderedIds.has(message.id)) {
             return;
@@ -85,7 +102,7 @@
 
         const contentEl = document.createElement('span');
         contentEl.className = 'sc-chat__content';
-        contentEl.textContent = ' ' + (message.content || '');
+        fillMessageContent(contentEl, message);
 
         lineEl.appendChild(timeEl);
         lineEl.appendChild(nickEl);

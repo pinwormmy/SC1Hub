@@ -182,6 +182,7 @@
 		        union all select post_num, title, reg_date, 'zVsPBoard' as board_title from zvspboard
 		        union all select post_num, title, reg_date, 'zVsTBoard' as board_title from zvstboard
 		        union all select post_num, title, reg_date, 'zVsZBoard' as board_title from zvszboard
+		        union all select tip_num as post_num, content as title, reg_date, 'strategyTip' as board_title from one_line_strategy
             order by reg_date desc
             limit 5;
     </select>
