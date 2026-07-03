@@ -488,6 +488,53 @@ textarea.cke_source {
     animation: sc-terminal-blink 1s step-end infinite;
 }
 
+/* 공개 채팅 (터미널 영역) */
+.sc-terminal__output {
+    max-height: 40vh;
+    overflow-y: auto;
+}
+.sc-home-page .sc-terminal__output {
+    height: clamp(240px, 38vh, 420px);
+    max-height: none;
+}
+.sc-chat__line {
+    padding: 1px 0;
+    line-height: 1.45;
+    word-break: break-word;
+}
+.sc-chat__time {
+    color: var(--sc-text-dim);
+    font-size: 0.82rem;
+    margin-right: 6px;
+}
+.sc-chat__nick {
+    margin-right: 2px;
+}
+.sc-chat__nick--member {
+    color: var(--sc-text);
+}
+.sc-chat__nick--guest {
+    color: var(--sc-text-dim);
+}
+.sc-chat__nick--admin {
+    color: var(--sc-accent);
+}
+.sc-chat__nick--ai {
+    color: var(--sc-cyan);
+}
+.sc-chat__content {
+    white-space: pre-wrap;
+}
+.sc-chat__line--deleted,
+.sc-chat__line--system {
+    color: var(--sc-text-dim);
+}
+.sc-chat__admin-del {
+    color: var(--sc-magenta);
+    margin-left: 6px;
+    cursor: pointer;
+}
+
 .sc-feed__list {
     display: flex;
     flex-direction: column;
@@ -746,8 +793,9 @@ textarea.cke_source {
     padding-bottom: 0.35rem;
 }
 
+/* 초기화면: 3줄 피드로 줄어든 공간을 하단 공개채팅에 양보한다 */
 .sc-home-page .section-inner {
-    min-height: calc(100svh - 180px);
+    min-height: 0;
 }
 
 .sc-home-page .terran-field,

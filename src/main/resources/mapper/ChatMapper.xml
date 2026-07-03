@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sc1hub.chat.mapper.ChatMapper">
+
+    <insert id="insertMessages">
+        insert into chat_message(id, member_id, nickname, role, content, ip, deleted, reg_date)
+        values
+        <foreach collection="messages" item="m" separator=",">
+            (#{m.id}, #{m.memberId}, #{m.nickname}, #{m.role}, #{m.content}, #{m.ip}, #{m.deleted}, #{m.createdAt})
+        </foreach>
+    </insert>
+
+    <select id="selectRecentMessages" resultType="com.sc1hub.chat.dto.ChatMessageDTO">
+        select id, member_id as memberId, nickname, role, content, ip, deleted, reg_date as createdAt
+        from chat_message
+        where deleted=0
+        order by id desc
+        limit #{limit}
+    </select>
+
+    <select id="selectMaxId" resultType="Long">
+        select max(id) from chat_message
+    </select>
+
+    <update id="markDeleted">
+        update chat_message set deleted=1 where id=#{id}
+    </update>
+
+    <insert id="insertSanction" useGeneratedKeys="true" keyProperty="id">
+        insert into chat_sanction(sanction_type, member_id, ip, nickname, reason, expires_at, revoked, created_by, reg_date)
+        values(#{sanctionType}, #{memberId}, #{ip}, #{nickname}, #{reason}, #{expiresAt}, 0, #{createdBy}, now())
+    </insert>
+
+    <select id="selectActiveSanctions" resultType="com.sc1hub.chat.dto.ChatSanctionDTO">
+        select id, sanction_type as sanctionType, member_id as memberId, ip, nickname, reason,
+               expires_at as expiresAt, revoked, created_by as createdBy, reg_date as regDate
+        from chat_sanction
+        where revoked=0 and (expires_at is null or expires_at > now())
+        order by id desc
+    </select>
+
+    <update id="revokeSanction">
+        update chat_sanction set revoked=1 where id=#{id}
+    </update>
+
+</mapper>

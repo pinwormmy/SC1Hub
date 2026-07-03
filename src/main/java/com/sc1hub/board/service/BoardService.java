@@ -59,6 +59,8 @@ public interface BoardService {
 
     List<BoardDTO> getPopularPosts(String boardTitle, int limit) throws Exception;
 
+    List<BoardDTO> getRecentPosts(String boardTitle, int limit) throws Exception;
+
     void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception;
 
     void increaseViewCount(String boardTitle, int postNum, String ip) throws Exception;

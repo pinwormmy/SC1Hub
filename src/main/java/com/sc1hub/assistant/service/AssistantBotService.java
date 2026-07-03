@@ -18,6 +18,7 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.service.BoardService;
+import com.sc1hub.common.util.BlockedWordMatcher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -1639,32 +1640,7 @@ public class AssistantBotService {
     }
 
     private String findBlockedWord(String... texts) {
-        List<String> blockedWords = assistantProperties.getBlockedWords();
-        if (blockedWords == null || blockedWords.isEmpty()) {
-            return null;
-        }
-
-        for (String text : texts) {
-            if (!StringUtils.hasText(text)) {
-                continue;
-            }
-
-            String normalized = normalizeText(text);
-            for (String blocked : blockedWords) {
-                String token = normalizeText(blocked);
-                if (!StringUtils.hasText(token)) {
-                    continue;
-                }
-                // Single-syllable substring matching overblocks natural Korean sentences.
-                if (token.length() <= 1) {
-                    continue;
-                }
-                if (normalized.contains(token)) {
-                    return blocked;
-                }
-            }
-        }
-        return null;
+        return BlockedWordMatcher.findBlockedWord(assistantProperties.getBlockedWords(), texts);
     }
 
     private String truncatePrompt(String prompt) {

@@ -42,7 +42,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(new AdminInterceptor())
                 .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
                         "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",
-                        "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**")
+                        "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**", "/api/admin/chat/**")
                 .excludePathPatterns("/boards/supportBoard/**", "/boards/videoLinkBoard/**", "/boards/promotionBoard/**",
                         "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",
                         "/boards/funBoard/**", "/boards/funboard/**", "/boards/userGuideBoard/**", "/boards/userguideboard/**");

@@ -22,7 +22,7 @@
                 <div class="sc-row">
                     <%@include file="./include/latestPosts.jspf" %>
                         <%@include file="./include/sidebar.jspf" %>
-                            <c:set var="menuIndex" value="21" />
+                            <c:set var="menuIndex" value="22" />
                             <c:forEach var="section" items="${popularSections}">
                                 <div class="sc-col-3">
                                     <fieldset class="${section.cssClass}">
@@ -43,7 +43,7 @@
                                                         <c:set var="boardColorClass" value="sc-title-clip--vsP" />
                                                     </c:when>
                                                 </c:choose>
-                                                <c:forEach var="post" items="${board.posts}" end="4">
+                                                <c:forEach var="post" items="${board.posts}" end="2">
                                                     <tr>
                                                         <td class="sc-title-cell">
                                                             <a class="sc-title-clip ${boardColorClass}"

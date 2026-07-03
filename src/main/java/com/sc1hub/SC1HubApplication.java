@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @MapperScan(basePackages = {"com.sc1hub.board.mapper", "com.sc1hub.member.mapper", "com.sc1hub.visitor.mapper",
-        "com.sc1hub.assistant.mapper", "com.sc1hub.strategytip.mapper"},
+        "com.sc1hub.assistant.mapper", "com.sc1hub.strategytip.mapper", "com.sc1hub.chat.mapper"},
         annotationClass = Mapper.class)
 @SpringBootApplication
 @EnableScheduling

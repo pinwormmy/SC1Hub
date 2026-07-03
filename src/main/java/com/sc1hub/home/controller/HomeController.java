@@ -21,7 +21,7 @@ import java.util.List;
 @Slf4j
 public class HomeController {
 
-    private static final int POPULAR_POST_LIMIT = 5;
+    private static final int RECENT_POST_LIMIT = 3;
 
     private final VisitorCountService visitorCountService;
     private final BoardService boardService;
@@ -83,18 +83,18 @@ public class HomeController {
             board.setBoardTitle(boardTitle);
             String koreanTitle = boardService.getKoreanTitle(boardTitle);
             board.setKoreanTitle(koreanTitle != null ? koreanTitle : boardTitle);
-            board.setPosts(fetchPopularPosts(boardTitle));
+            board.setPosts(fetchRecentPosts(boardTitle));
             boards.add(board);
         }
         return boards;
     }
 
-    private List<BoardDTO> fetchPopularPosts(String boardTitle) {
+    private List<BoardDTO> fetchRecentPosts(String boardTitle) {
         try {
-            List<BoardDTO> posts = boardService.getPopularPosts(boardTitle, POPULAR_POST_LIMIT);
+            List<BoardDTO> posts = boardService.getRecentPosts(boardTitle, RECENT_POST_LIMIT);
             return posts == null ? Collections.emptyList() : posts;
         } catch (Exception e) {
-            log.error("메인 인기글 조회 중 오류 발생. boardTitle={}", boardTitle, e);
+            log.error("메인 최신글 조회 중 오류 발생. boardTitle={}", boardTitle, e);
             return Collections.emptyList();
         }
     }

@@ -118,8 +118,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 화면 너비를 기준으로 PC 환경과 모바일 환경을 구분
-    if(window.innerWidth > 600) {
+    // 초기화면은 항상 접힌 상태로 시작, 그 외 페이지는 화면 너비 기준으로 구분
+    var isHomePage = document.body.classList.contains('sc-home-page');
+    if(!isHomePage && window.innerWidth > 600) {
         document.getElementById('basicMenuContent').style.display = "block";
         document.querySelector('#basicMenu .menu-toggle-hint').style.display = "none";
         document.getElementById('strategyMenuContent').style.display = "block";

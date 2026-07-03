@@ -245,6 +245,18 @@ public class BoardServiceImpl implements BoardService {
         return boardMapper.selectPopularPosts(boardTitle, limit);
     }
 
+    @Override
+    public List<BoardDTO> getRecentPosts(String boardTitle, int limit) throws Exception {
+        if (limit < 1) {
+            return Collections.emptyList();
+        }
+        if (boardTitle == null) {
+            return Collections.emptyList();
+        }
+        boardTitle = normalizeBoardTitle(boardTitle);
+        return boardMapper.selectRecentPosts(boardTitle, limit);
+    }
+
     private void preparePostForPersistence(BoardDTO post) {
         if (post == null) {
             return;
