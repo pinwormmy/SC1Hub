@@ -138,7 +138,7 @@
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">dailyLimit</div>
-                                <div class="ops-value">post ${autoPublishStatus.postDailyLimit} / comment ${autoPublishStatus.commentDailyLimit}</div>
+                                <div class="ops-value">post ${autoPublishStatus.postDailyLimit} / comment ${autoPublishStatus.commentDailyLimit} / chat ${autoPublishStatus.chatDailyLimit}</div>
                             </div>
                         </div>
                     </div>
@@ -161,11 +161,11 @@
                                 <tbody>
                                     <c:forEach var="persona" items="${autoPublishStatus.personas}">
                                         <tr>
-                                            <td>${persona.personaName}</td>
+                                            <td>${persona.personaName}<br>(${persona.publishChannel})</td>
                                             <td>${persona.boardTitle}</td>
                                             <td>${persona.model}</td>
-                                            <td>post ${persona.handledPostToday}, comment ${persona.handledCommentToday}</td>
-                                            <td>post ${persona.nextPostSlot}<br>comment ${persona.nextCommentSlot}</td>
+                                            <td>post ${persona.handledPostToday}, comment ${persona.handledCommentToday}, chat ${persona.handledChatToday}</td>
+                                            <td>post ${persona.nextPostSlot}<br>comment ${persona.nextCommentSlot}<br>chat ${persona.nextChatSlot}</td>
                                             <td>${persona.dueModes}</td>
                                             <td>${persona.waitingDetail}</td>
                                         </tr>

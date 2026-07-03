@@ -13,6 +13,8 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.service.BoardService;
+import com.sc1hub.chat.dto.ChatMessageDTO;
+import com.sc1hub.chat.service.ChatRoomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +65,9 @@ class AssistantBotServiceTest {
     @Mock
     private GeminiClient geminiClient;
 
+    @Mock
+    private ChatRoomService chatRoomService;
+
     private AssistantBotProperties botProperties;
     private AssistantBotService assistantBotService;
 
@@ -88,6 +93,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 new ObjectMapper(),
+                chatRoomService,
                 fixedClock
         );
     }
@@ -192,6 +198,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 new ObjectMapper(),
+                chatRoomService,
                 Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
                 resultsByPersona
         );
@@ -219,6 +226,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 new ObjectMapper(),
+                chatRoomService,
                 Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
                 resultsByPersona
         );
@@ -243,22 +251,41 @@ class AssistantBotServiceTest {
         assertEquals(4, status.getPersonas().size());
         assertEquals("프징징봇", status.getPersonas().get(0).getPersonaName());
         assertEquals("funboard", status.getPersonas().get(0).getBoardTitle());
-        assertEquals(botProperties.getAutoPublishPostDailyLimit() + botProperties.getAutoPublishCatchUpPostRetrySlots(),
-                status.getPersonas().get(0).getPostSlots().size());
-        assertEquals(botProperties.getAutoPublishCommentDailyLimit(),
-                status.getPersonas().get(0).getCommentSlots().size());
+        assertEquals("chat", status.getPersonas().get(0).getPublishChannel());
+        assertEquals(botProperties.getAutoPublishChatDailyLimit(),
+                status.getPersonas().get(0).getChatSlots().size());
+        assertTrue(status.getPersonas().get(0).getPostSlots().isEmpty());
+        assertTrue(status.getPersonas().get(0).getCommentSlots().isEmpty());
         assertTrue(status.getPersonas().get(0).getWaitingDetail() != null);
     }
 
     @Test
+    void getAutoPublishStatus_keepsBoardChannelForHealthPersona() {
+        botProperties.setPersonas(Arrays.asList(persona("건강봇"), persona("프징징봇")));
+
+        AssistantBotAutoPublishStatusDTO status = assistantBotService.getAutoPublishStatus();
+
+        AssistantBotAutoPublishStatusDTO.PersonaStatusDTO healthStatus = status.getPersonas().get(0);
+        assertEquals("건강봇", healthStatus.getPersonaName());
+        assertEquals("board", healthStatus.getPublishChannel());
+        assertEquals(botProperties.getAutoPublishPostDailyLimit() + botProperties.getAutoPublishCatchUpPostRetrySlots(),
+                healthStatus.getPostSlots().size());
+        assertEquals(botProperties.getAutoPublishCommentDailyLimit(),
+                healthStatus.getCommentSlots().size());
+        assertTrue(healthStatus.getChatSlots().isEmpty());
+    }
+
+    @Test
     void autoPublishPostDailyLimit_ignoresPreviousSkippedDrafts() throws Exception {
+        // 게시판 발행 경로는 이제 채팅 전환 대상이 아닌 건강봇으로 검증한다.
+        botProperties.setPersonas(Arrays.asList(persona("건강봇")));
         botProperties.setAutoPublishPostDailyLimit(3);
         botProperties.setAutoPublishCommentDailyLimit(0);
         LocalDate date = LocalDate.of(2026, 3, 9);
-        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
+        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "건강봇");
         while (postSlots.get(0) <= 60) {
             date = date.plusDays(1);
-            postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "프징징봇");
+            postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "건강봇");
         }
         int firstPostSlot = postSlots.get(0);
         LocalTime slotTime = LocalTime.of(firstPostSlot / 60, firstPostSlot % 60);
@@ -272,6 +299,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 new ObjectMapper(),
+                chatRoomService,
                 slotClock
         );
 
@@ -286,31 +314,106 @@ class AssistantBotServiceTest {
             return null;
         }).when(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
 
-        when(assistantBotMapper.countPublishedSinceByMode("프징징봇", "funboard", "post", since)).thenReturn(0);
-        lenient().when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", since)).thenReturn(1);
-        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", minuteStart)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "post", recoverySince)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "comment", since)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "comment", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countPublishedSinceByMode("건강봇", "funboard", "post", since)).thenReturn(0);
+        lenient().when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", since)).thenReturn(1);
+        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", recoverySince)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "comment", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "comment", minuteStart)).thenReturn(0);
         when(boardMapper.selectRecentPostsForBot("funboard", botProperties.getRecentPostLimit()))
                 .thenReturn(Collections.emptyList());
         when(boardMapper.selectRecentCommentsForBot("funboard", null, botProperties.getRecentCommentLimit()))
                 .thenReturn(Collections.emptyList());
-        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+        when(assistantBotMapper.selectRecentHistory("건강봇", "funboard", botProperties.getRecentHistoryLimit()))
                 .thenReturn(Collections.emptyList());
         when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
                 .thenReturn(validPostDraftJson());
         when(assistantBotMapper.selectHistoryById(77L)).thenAnswer(invocation -> insertedHistory.get());
         when(boardMapper.selectRecentPostsForBot("funboard", 5))
-                .thenReturn(Collections.singletonList(post(701, "프징징봇", 0, "프로토스 래더 한 판만 더 해야지")));
+                .thenReturn(Collections.singletonList(post(701, "건강봇", 0, "프로토스 래더 한 판만 더 해야지")));
 
-        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("건강봇");
 
         assertEquals("published", result.getOutcome());
         assertEquals("post", result.getMode());
         assertEquals(Integer.valueOf(701), result.getPublishedPostNum());
-        verify(assistantBotMapper).countPublishedSinceByMode("프징징봇", "funboard", "post", since);
+        verify(assistantBotMapper).countPublishedSinceByMode("건강봇", "funboard", "post", since);
         verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void autoPublishOnce_forChatPersonaPostsToChatInsteadOfBoard() throws Exception {
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "프징징봇");
+        int firstChatSlot = chatSlots.get(0);
+        LocalTime slotTime = LocalTime.of(firstChatSlot / 60, firstChatSlot % 60);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        Clock slotClock = Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                chatRoomService,
+                slotClock
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = LocalDateTime.of(date, slotTime);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", minuteStart)).thenReturn(0);
+        when(chatRoomService.getRecentMessages(botProperties.getChatContextMessageLimit()))
+                .thenReturn(Arrays.asList(chatMessage("일반유저", "요즘 테란 밸런스 어떰?")));
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validChatDraftJson());
+        AtomicReference<AssistantBotHistoryDTO> insertedHistory = new AtomicReference<>();
+        doAnswer(invocation -> {
+            AssistantBotHistoryDTO history = invocation.getArgument(0);
+            history.setId(88L);
+            insertedHistory.set(history);
+            return null;
+        }).when(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
+        when(chatRoomService.postBotMessage(anyString(), anyString())).thenAnswer(invocation -> {
+            ChatMessageDTO message = new ChatMessageDTO();
+            message.setId(10L);
+            message.setContent(invocation.getArgument(1));
+            return message;
+        });
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+
+        assertEquals("published", result.getOutcome());
+        assertEquals("chat", result.getMode());
+        assertEquals(Long.valueOf(88L), result.getHistoryId());
+        verify(chatRoomService).postBotMessage("프징징봇", "드라군이 벌처한테 또 녹았는데 이게 맞냐");
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+        assertEquals("chat", insertedHistory.get().getGenerationMode());
+        assertEquals("published", insertedHistory.get().getStatus());
+        assertEquals("드라군이 벌처한테 또 녹았는데 이게 맞냐", insertedHistory.get().getDraftBody());
+    }
+
+    @Test
+    void buildChatPrompt_includesLatestChatLinesAndPersonaRule() {
+        String prompt = assistantBotService.buildChatPrompt(
+                persona("프징징봇"),
+                Arrays.asList(chatMessage("일반유저", "테란 요즘 사기 아니냐"), chatMessage("Guest1234", "ㅋㅋ 인정")),
+                Collections.emptyList(),
+                null,
+                1,
+                1
+        );
+
+        assertTrue(prompt.contains("공개채팅방 전용 AI 유저 '프징징봇'"));
+        assertTrue(prompt.contains("[일반유저] 테란 요즘 사기 아니냐"));
+        assertTrue(prompt.contains("[Guest1234] ㅋㅋ 인정"));
+        assertTrue(prompt.contains("반드시 한 줄만 쓴다"));
+        assertTrue(prompt.contains("프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이다"));
     }
 
     @Test
@@ -1264,6 +1367,18 @@ class AssistantBotServiceTest {
                 + "\"self_review\":{\"naturalness\":90,\"novelty\":90,\"engagement\":90,\"needs_revision\":false}}";
     }
 
+    private ChatMessageDTO chatMessage(String nickname, String content) {
+        ChatMessageDTO message = new ChatMessageDTO();
+        message.setNickname(nickname);
+        message.setContent(content);
+        return message;
+    }
+
+    private String validChatDraftJson() {
+        return "{\"analysis\":{\"topic\":\"밸런스\",\"risk_notes\":[]},"
+                + "\"chat\":{\"body\":\"드라군이 벌처한테 또 녹았는데 이게 맞냐\"}}";
+    }
+
     private String validMeowPostDraftJson() {
         return "{\"analysis\":{\"topic\":\"야옹\",\"post_strategy\":\"fresh\",\"risk_notes\":[]},"
                 + "\"post\":{\"title\":\"야옹 야~~옹~~~~\",\"body\":\"야옹 야~~옹~~~~. 야옹 야옹.\"},"
@@ -1314,9 +1429,10 @@ class AssistantBotServiceTest {
                                              AssistantBotMapper assistantBotMapper,
                                              GeminiClient geminiClient,
                                              ObjectMapper objectMapper,
+                                             ChatRoomService chatRoomService,
                                              Clock clock,
                                              Map<String, AssistantBotService.AutoPublishResult> resultsByPersona) {
-            super(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper, geminiClient, objectMapper, clock);
+            super(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper, geminiClient, objectMapper, chatRoomService, clock);
             this.resultsByPersona = resultsByPersona;
         }
 

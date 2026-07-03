@@ -17,6 +17,7 @@ public class AssistantBotAutoPublishStatusDTO {
     private String autoPublishZone;
     private int postDailyLimit;
     private int commentDailyLimit;
+    private int chatDailyLimit;
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -28,15 +29,20 @@ public class AssistantBotAutoPublishStatusDTO {
         private String personaName;
         private String boardTitle;
         private String model;
+        private String publishChannel;
         private int handledPostToday;
         private int handledCommentToday;
+        private int handledChatToday;
         private int handledPostThisMinute;
         private int handledCommentThisMinute;
+        private int handledChatThisMinute;
         private int handledPostRecoveryCooldown;
         private List<String> postSlots = new ArrayList<>();
         private List<String> commentSlots = new ArrayList<>();
+        private List<String> chatSlots = new ArrayList<>();
         private String nextPostSlot;
         private String nextCommentSlot;
+        private String nextChatSlot;
         private List<String> dueModes = new ArrayList<>();
         private String waitingDetail;
     }

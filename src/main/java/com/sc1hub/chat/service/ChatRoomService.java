@@ -152,6 +152,41 @@ public class ChatRoomService {
         return appendMessage(memberId, nickname, role, ip, content);
     }
 
+    public ChatMessageDTO postBotMessage(String nickname, String content) {
+        if (!StringUtils.hasText(nickname)) {
+            return null;
+        }
+        String trimmed = content == null ? "" : content.trim();
+        if (!StringUtils.hasText(trimmed)) {
+            return null;
+        }
+        if (trimmed.length() > chatProperties.getMaxMessageLength()) {
+            trimmed = trimmed.substring(0, chatProperties.getMaxMessageLength());
+        }
+        return appendMessage(null, nickname.trim(), ROLE_AI, null, trimmed);
+    }
+
+    public List<ChatMessageDTO> getRecentMessages(int limit) {
+        if (limit <= 0) {
+            return Collections.emptyList();
+        }
+        List<ChatMessageDTO> recent = new ArrayList<>();
+        lock.lock();
+        try {
+            Iterator<ChatMessageDTO> iterator = buffer.descendingIterator();
+            while (iterator.hasNext() && recent.size() < limit) {
+                ChatMessageDTO message = iterator.next();
+                if (message != null && !message.isDeleted()) {
+                    recent.add(message);
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        Collections.reverse(recent);
+        return recent;
+    }
+
     public ChatMessageDTO postAiMessage(String content) {
         String trimmed = content == null ? "" : content.trim();
         if (!StringUtils.hasText(trimmed)) {

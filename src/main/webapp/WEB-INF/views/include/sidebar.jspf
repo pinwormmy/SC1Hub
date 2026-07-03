@@ -118,7 +118,7 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 초기화면은 항상 접힌 상태로 시작, 그 외 페이지는 화면 너비 기준으로 구분
+    // 지휘관회의실은 어디서든 기본으로 펼치고, 나머지는 화면 너비 기준으로 구분
     var isHomePage = document.body.classList.contains('sc-home-page');
     if(!isHomePage && window.innerWidth > 600) {
         document.getElementById('basicMenuContent').style.display = "block";
@@ -126,16 +126,14 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('strategyMenuContent').style.display = "block";
         document.querySelector('#strategyMenu .menu-toggle-hint').style.display = "none";
     } else {
-        // 모바일 환경: 모든 메뉴를 닫은 상태로 설정
-        var allMenuContents = document.querySelectorAll('.menu-content');
-        var allMenuHints = document.querySelectorAll('.menu-toggle-hint');
-
-        allMenuContents.forEach(function(menu) {
-            menu.style.display = "none"; // 모든 메뉴 내용 숨기기
-        });
-
-        allMenuHints.forEach(function(hint) {
-            hint.style.display = "block"; // 모든 메뉴 힌트 표시
+        // 모바일/초기화면: 지휘관회의실만 펼치고 나머지 메뉴는 닫은 상태로 설정
+        document.querySelectorAll('.menu-content').forEach(function(menu) {
+            var isBasicMenu = menu.id === 'basicMenuContent';
+            menu.style.display = isBasicMenu ? "block" : "none";
+            var hint = menu.previousElementSibling;
+            if (hint && hint.classList.contains('menu-toggle-hint')) {
+                hint.style.display = isBasicMenu ? "none" : "block";
+            }
         });
     }
 });
