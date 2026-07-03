@@ -3,8 +3,8 @@
 <html lang="ko">
 <head>
     <title>${koreanTitle}</title>
-    <link rel="stylesheet" type="text/css" href="/css/postList.css">
-    <link rel="stylesheet" type="text/css" href="/css/strategyTip.css">
+    <link rel="stylesheet" type="text/css" href="/css/postList.css?v=${applicationScope.assetVersion}">
+    <link rel="stylesheet" type="text/css" href="/css/strategyTip.css?v=${applicationScope.assetVersion}">
     <%@include file="../include/header.jspf" %>
 </head>
 <body>

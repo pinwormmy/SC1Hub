@@ -25,8 +25,8 @@
     </c:otherwise>
 </c:choose>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/css/sc1hub-layout.css">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/sc1hub-layout.css?v=${applicationScope.assetVersion}">
+<link rel="stylesheet" href="/css/style.css?v=${applicationScope.assetVersion}">
 <!-- Neo둥근모 Pro -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
 <script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>

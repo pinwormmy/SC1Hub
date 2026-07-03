@@ -4,7 +4,7 @@
 <html lang="ko">
 <head>
 <title>${post.title} - ${koreanTitle}</title>
-<link rel="stylesheet" type="text/css" href="/css/readPost.css">
+<link rel="stylesheet" type="text/css" href="/css/readPost.css?v=${applicationScope.assetVersion}">
 <%@include file="../include/header.jspf" %>
 </head>
 <body>
@@ -19,7 +19,7 @@
     </div>
 </div>
 <%@include file="../include/readPostScript.jspf" %>
-<script src="/js/readPost.js"></script>
+<script src="/js/readPost.js?v=${applicationScope.assetVersion}"></script>
 <%@include file="../include/footer.jspf" %>
 </body>
 </html>

@@ -159,7 +159,7 @@
     });
 </script>
 
-<script src="/js/sc-terminal.js"></script>
-<script src="/js/sc-chat.js"></script>
+<script src="/js/sc-terminal.js?v=${applicationScope.assetVersion}"></script>
+<script src="/js/sc-chat.js?v=${applicationScope.assetVersion}"></script>
 
 <script src="https://code.jquery.com/jquery-latest.js"></script>
