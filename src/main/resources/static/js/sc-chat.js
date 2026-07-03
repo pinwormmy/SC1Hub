@@ -16,6 +16,11 @@
     let hiddenPollIntervalMillis = 10000;
     let errorBackoffMillis = 0;
     let self = null;
+    // 광고는 페이지 로드 후 실시간으로 도착한 메시지에만 붙인다.
+    // (첫 폴링이 과거 대화를 한꺼번에 렌더링할 때 광고가 도배되는 것을 방지)
+    let historyLoaded = false;
+    let liveMessageCount = 0;
+    let lastAdAtCount = 0;
 
     function getMemberMeta() {
         const metaEl = document.getElementById('scMemberMeta');
@@ -35,6 +40,10 @@
             outputEl.insertBefore(logEl, outputEl.firstChild);
             renderedIds.clear();
             lastSeq = 0;
+            // 히스토리 재렌더링에 광고가 도배되지 않도록 광고 상태도 리셋한다.
+            historyLoaded = false;
+            liveMessageCount = 0;
+            lastAdAtCount = 0;
         }
         return logEl;
     }
@@ -57,6 +66,78 @@
             case 'AI': return 'sc-chat__nick sc-chat__nick--ai';
             case 'GUEST': return 'sc-chat__nick sc-chat__nick--guest';
             default: return 'sc-chat__nick sc-chat__nick--member';
+        }
+    }
+
+    function getChatAdConfig() {
+        const metaEl = document.getElementById('scChatAdMeta');
+        if (!metaEl || !metaEl.dataset.trackingCode || !metaEl.dataset.pcId) {
+            return null;
+        }
+        const useMobile = metaEl.dataset.mobileId && window.matchMedia('(max-width: 768px)').matches;
+        return {
+            trackingCode: metaEl.dataset.trackingCode,
+            id: useMobile ? metaEl.dataset.mobileId : metaEl.dataset.pcId,
+            width: Number.parseInt((useMobile ? metaEl.dataset.mobileWidth : metaEl.dataset.pcWidth) || '680', 10),
+            height: Number.parseInt((useMobile ? metaEl.dataset.mobileHeight : metaEl.dataset.pcHeight) || '140', 10),
+            messageInterval: Number.parseInt(metaEl.dataset.messageInterval || '20', 10),
+        };
+    }
+
+    // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
+    // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
+    function insertAdLine(config) {
+        const logEl = ensureChatLog();
+        const shouldScroll = isNearBottom();
+
+        const lineEl = document.createElement('div');
+        lineEl.className = 'sc-chat__line sc-chat__ad';
+
+        const iframeEl = document.createElement('iframe');
+        iframeEl.src = 'https://ads-partners.coupang.com/widgets.html'
+            + '?id=' + encodeURIComponent(config.id)
+            + '&template=carousel'
+            + '&trackingCode=' + encodeURIComponent(config.trackingCode)
+            + '&subId=&width=' + config.width + '&height=' + config.height + '&tsource=';
+        iframeEl.width = String(config.width);
+        iframeEl.height = String(config.height);
+        iframeEl.setAttribute('frameborder', '0');
+        iframeEl.setAttribute('scrolling', 'no');
+        iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
+        iframeEl.title = '쿠팡 파트너스 광고';
+
+        const noticeEl = document.createElement('span');
+        noticeEl.className = 'sc-chat__ad-notice';
+        noticeEl.textContent = '* 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.';
+
+        lineEl.appendChild(iframeEl);
+        lineEl.appendChild(noticeEl);
+        logEl.appendChild(lineEl);
+        if (shouldScroll) {
+            scrollToBottom();
+            // iframe 로드로 높이가 늘어난 뒤에도 하단 고정을 유지한다.
+            iframeEl.addEventListener('load', () => {
+                if (isNearBottom()) {
+                    scrollToBottom();
+                }
+            });
+        }
+    }
+
+    function maybeInsertAd(message) {
+        if (!historyLoaded) {
+            return;
+        }
+        const config = getChatAdConfig();
+        if (!config) {
+            return;
+        }
+        liveMessageCount += 1;
+        const dueByInterval = config.messageInterval > 0
+            && liveMessageCount - lastAdAtCount >= config.messageInterval;
+        if (message.role === 'AI' || dueByInterval) {
+            insertAdLine(config);
+            lastAdAtCount = liveMessageCount;
         }
     }
 
@@ -120,6 +201,7 @@
         if (shouldScroll) {
             scrollToBottom();
         }
+        maybeInsertAd(message);
     }
 
     function markDeleted(messageId) {
@@ -188,6 +270,7 @@
             const result = await fetchJson('/api/chat/messages?afterSeq=' + lastSeq);
             if (result.ok && result.data) {
                 applyPollResponse(result.data);
+                historyLoaded = true;
                 errorBackoffMillis = 0;
             } else if (result.status === 503) {
                 errorBackoffMillis = 30000;

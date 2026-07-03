@@ -576,6 +576,23 @@ body.sc-chat-fullscreen .sc-terminal__output {
     margin-left: 6px;
     cursor: pointer;
 }
+.sc-chat__ad {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 0;
+    max-width: 100%;
+    overflow: hidden; /* 고정폭 iframe이 채팅창보다 넓어도 레이아웃을 밀지 않도록 클리핑 */
+}
+.sc-chat__ad iframe {
+    max-width: 100%;
+    border: 0;
+}
+.sc-chat__ad-notice {
+    color: var(--sc-text-dim);
+    font-size: 0.78rem;
+}
 
 .sc-feed__list {
     display: flex;

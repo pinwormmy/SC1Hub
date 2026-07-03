@@ -22,6 +22,15 @@
      data-grade="<c:out value='${member.grade}'/>"
      hidden></div>
 
+<%-- 채팅창 인라인 쿠팡 배너 설정. 배너 id/trackingCode는 coupangDynamicAd.jspf와 동일하게 유지한다.
+     tracking-code 또는 pc-id를 비우면 채팅 광고가 비활성화된다. --%>
+<div id="scChatAdMeta"
+     data-tracking-code="AF8324470"
+     data-pc-id="1002422" data-pc-width="680" data-pc-height="140"
+     data-mobile-id="1002496" data-mobile-width="300" data-mobile-height="250"
+     data-message-interval="20"
+     hidden></div>
+
 <div class="container">
 	    <div class="row">
         <div class="col-sm-12">
