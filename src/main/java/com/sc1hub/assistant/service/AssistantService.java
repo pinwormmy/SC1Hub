@@ -322,26 +322,7 @@ public class AssistantService {
         for (int i = quoteIndex + 1; i < raw.length(); i++) {
             char ch = raw.charAt(i);
             if (escape) {
-                switch (ch) {
-                    case 'n':
-                        sb.append('\n');
-                        break;
-                    case 'r':
-                        sb.append('\r');
-                        break;
-                    case 't':
-                        sb.append('\t');
-                        break;
-                    case '"':
-                        sb.append('"');
-                        break;
-                    case '\\':
-                        sb.append('\\');
-                        break;
-                    default:
-                        sb.append(ch);
-                        break;
-                }
+                appendJsonEscape(sb, ch);
                 escape = false;
                 continue;
             }
@@ -355,6 +336,29 @@ public class AssistantService {
             sb.append(ch);
         }
         return sb.toString();
+    }
+
+    private static void appendJsonEscape(StringBuilder sb, char ch) {
+        switch (ch) {
+            case 'n':
+                sb.append('\n');
+                break;
+            case 'r':
+                sb.append('\r');
+                break;
+            case 't':
+                sb.append('\t');
+                break;
+            case '"':
+                sb.append('"');
+                break;
+            case '\\':
+                sb.append('\\');
+                break;
+            default:
+                sb.append(ch);
+                break;
+        }
     }
 
     private void addSourceIdsFromLooseArray(Set<String> target, String raw, String fieldName, Set<String> allowedSourceIds) {
@@ -385,26 +389,7 @@ public class AssistantService {
             char ch = raw.charAt(i);
             if (inString) {
                 if (escape) {
-                    switch (ch) {
-                        case 'n':
-                            current.append('\n');
-                            break;
-                        case 'r':
-                            current.append('\r');
-                            break;
-                        case 't':
-                            current.append('\t');
-                            break;
-                        case '"':
-                            current.append('"');
-                            break;
-                        case '\\':
-                            current.append('\\');
-                            break;
-                        default:
-                            current.append(ch);
-                            break;
-                    }
+                    appendJsonEscape(current, ch);
                     escape = false;
                     continue;
                 }

@@ -1,5 +1,6 @@
 package com.sc1hub.assistant.config;
 
+import com.sc1hub.member.dto.MemberDTO;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -55,4 +56,19 @@ public class AssistantProperties {
     private int llmRelatedPostsExcerptChars = 200;
     private int llmRelatedPostsCacheSeconds = 600;
     private int llmRelatedPostsRateLimitPerMinute = 5;
+
+    /**
+     * Returns true when the given member is an assistant admin, matching either the configured
+     * admin grade or the configured admin id. Centralizes the check previously duplicated across
+     * the assistant admin controllers.
+     */
+    public boolean isAdmin(MemberDTO member) {
+        if (member == null) {
+            return false;
+        }
+        if (member.getGrade() == adminGrade) {
+            return true;
+        }
+        return adminId != null && adminId.equals(member.getId());
+    }
 }

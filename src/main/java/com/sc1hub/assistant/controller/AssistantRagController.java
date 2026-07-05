@@ -46,7 +46,7 @@ public class AssistantRagController {
         AssistantRagReindexResponseDTO response = new AssistantRagReindexResponseDTO();
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (isAdmin(member)) {
+        if (assistantProperties.isAdmin(member)) {
             if (async) {
                 AssistantRagIndexService.ReindexJobStatus status = ragIndexService.requestReindex();
                 response.setEnabled(status.isEnabled());
@@ -106,7 +106,7 @@ public class AssistantRagController {
         AssistantRagUpdateResponseDTO response = new AssistantRagUpdateResponseDTO();
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (isAdmin(member)) {
+        if (assistantProperties.isAdmin(member)) {
             try {
                 AssistantRagIndexService.UpdateResult result = ragIndexService.update();
                 response.setEnabled(result.isEnabled());
@@ -141,17 +141,6 @@ public class AssistantRagController {
 
         response.setError("관리자만 인덱스를 업데이트할 수 있습니다.");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-    }
-
-    private boolean isAdmin(MemberDTO member) {
-        if (member == null) {
-            return false;
-        }
-        if (member.getGrade() == assistantProperties.getAdminGrade()) {
-            return true;
-        }
-        String adminId = assistantProperties.getAdminId();
-        return adminId != null && adminId.equals(member.getId());
     }
 
     private String buildDetailedError(String baseMessage, Exception e) {

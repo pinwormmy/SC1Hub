@@ -74,7 +74,7 @@ public class GeminiClient {
                     String responseBody = restTemplate.postForObject(url, new HttpEntity<>(fallback, headers), String.class);
                     return extractTextFromResponse(responseBody);
                 } catch (HttpStatusCodeException fallbackException) {
-                    String body = safeShortBody(fallbackException);
+                    String body = GeminiHttpSupport.safeShortBody(objectMapper, fallbackException);
                     log.error("Gemini API 요청 실패. status={}, model={}, body={}", fallbackException.getStatusCode(), model, body);
                     throw new GeminiException("Gemini API request failed: " + fallbackException.getStatusCode() + (body == null ? "" : " " + body), fallbackException);
                 } catch (Exception fallbackException) {
@@ -82,7 +82,7 @@ public class GeminiClient {
                     throw new GeminiException("Gemini API request failed.", fallbackException);
                 }
             }
-            String body = safeShortBody(e);
+            String body = GeminiHttpSupport.safeShortBody(objectMapper, e);
             log.error("Gemini API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), model, body);
             throw new GeminiException("Gemini API request failed: " + e.getStatusCode() + (body == null ? "" : " " + body), e);
         } catch (Exception e) {
@@ -173,23 +173,6 @@ public class GeminiClient {
             return singleText.asText("");
         } catch (Exception e) {
             return "";
-        }
-    }
-
-    private String safeShortBody(HttpStatusCodeException e) {
-        try {
-            String raw = e.getResponseBodyAsString();
-            if (!StringUtils.hasText(raw)) {
-                return null;
-            }
-            Object json = objectMapper.readValue(raw, Object.class);
-            String normalized = objectMapper.writeValueAsString(json);
-            if (normalized.length() <= 500) {
-                return normalized;
-            }
-            return normalized.substring(0, 500) + "...";
-        } catch (Exception ignored) {
-            return null;
         }
     }
 }

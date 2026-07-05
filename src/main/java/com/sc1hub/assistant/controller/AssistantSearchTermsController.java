@@ -33,7 +33,7 @@ public class AssistantSearchTermsController {
     public ResponseEntity<AssistantSearchTermsStatusResponseDTO> status(HttpSession session) {
         AssistantSearchTermsStatusResponseDTO response = new AssistantSearchTermsStatusResponseDTO();
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (!isAdmin(member)) {
+        if (!assistantProperties.isAdmin(member)) {
             response.setSuccess(false);
             response.setError("관리자만 상태를 조회할 수 있습니다.");
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
@@ -47,7 +47,7 @@ public class AssistantSearchTermsController {
     public ResponseEntity<AssistantSearchTermsReindexResponseDTO> reindex(HttpSession session) {
         AssistantSearchTermsReindexResponseDTO response = new AssistantSearchTermsReindexResponseDTO();
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (!isAdmin(member)) {
+        if (!assistantProperties.isAdmin(member)) {
             response.setError("관리자만 재인덱싱을 실행할 수 있습니다.");
             response.setSuccess(false);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
@@ -68,16 +68,5 @@ public class AssistantSearchTermsController {
             response.setError("search_terms 재인덱싱 중 오류가 발생했습니다.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-    }
-
-    private boolean isAdmin(MemberDTO member) {
-        if (member == null) {
-            return false;
-        }
-        if (member.getGrade() == assistantProperties.getAdminGrade()) {
-            return true;
-        }
-        String adminId = assistantProperties.getAdminId();
-        return adminId != null && adminId.equals(member.getId());
     }
 }

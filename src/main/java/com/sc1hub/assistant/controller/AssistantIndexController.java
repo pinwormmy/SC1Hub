@@ -55,7 +55,7 @@ public class AssistantIndexController {
         AssistantIndexReindexResponseDTO response = new AssistantIndexReindexResponseDTO();
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (isAdmin(member)) {
+        if (assistantProperties.isAdmin(member)) {
             AssistantRagReindexResponseDTO ragResponse = new AssistantRagReindexResponseDTO();
             boolean ragSuccess = true;
             try {
@@ -143,7 +143,7 @@ public class AssistantIndexController {
         AssistantIndexUpdateResponseDTO response = new AssistantIndexUpdateResponseDTO();
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        if (isAdmin(member)) {
+        if (assistantProperties.isAdmin(member)) {
             AssistantRagUpdateResponseDTO ragResponse = new AssistantRagUpdateResponseDTO();
             boolean ragSuccess = true;
             try {
@@ -214,17 +214,6 @@ public class AssistantIndexController {
         response.setSuccess(false);
         response.setError("관리자만 업데이트를 실행할 수 있습니다.");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-    }
-
-    private boolean isAdmin(MemberDTO member) {
-        if (member == null) {
-            return false;
-        }
-        if (member.getGrade() == assistantProperties.getAdminGrade()) {
-            return true;
-        }
-        String adminId = assistantProperties.getAdminId();
-        return adminId != null && adminId.equals(member.getId());
     }
 
     private String buildDetailedError(String baseMessage, Exception e) {

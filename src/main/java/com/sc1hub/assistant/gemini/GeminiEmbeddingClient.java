@@ -74,7 +74,7 @@ public class GeminiEmbeddingClient {
             String responseBody = restTemplate.postForObject(url, requestEntity, String.class);
             return extractEmbeddingFromResponse(responseBody);
         } catch (HttpStatusCodeException e) {
-            String body = safeShortBody(e);
+            String body = GeminiHttpSupport.safeShortBody(objectMapper, e);
             log.error("Gemini Embedding API 요청 실패. status={}, model={}, body={}", e.getStatusCode(), embeddingModel, body);
             throw new GeminiException("Gemini Embedding API request failed: " + e.getStatusCode() + (body == null ? "" : " " + body), e);
         } catch (Exception e) {
@@ -112,22 +112,5 @@ public class GeminiEmbeddingClient {
             return normalized;
         }
         return normalized.substring(0, MAX_EMBED_TEXT_CHARS);
-    }
-
-    private String safeShortBody(HttpStatusCodeException e) {
-        try {
-            String raw = e.getResponseBodyAsString();
-            if (!StringUtils.hasText(raw)) {
-                return null;
-            }
-            Object json = objectMapper.readValue(raw, Object.class);
-            String normalized = objectMapper.writeValueAsString(json);
-            if (normalized.length() <= 500) {
-                return normalized;
-            }
-            return normalized.substring(0, 500) + "...";
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 }
