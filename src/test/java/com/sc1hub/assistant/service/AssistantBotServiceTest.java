@@ -16,6 +16,7 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.chat.dto.ChatMessageDTO;
 import com.sc1hub.chat.service.ChatRoomService;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -260,24 +261,24 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void getAutoPublishStatus_keepsBoardChannelForHealthPersona() {
+    void getAutoPublishStatus_usesChatChannelForHealthPersona() {
         botProperties.setPersonas(Arrays.asList(persona("건강봇"), persona("프징징봇")));
 
         AssistantBotAutoPublishStatusDTO status = assistantBotService.getAutoPublishStatus();
 
+        // 모든 페르소나가 공개채팅으로 라우팅되므로 건강봇도 chat 채널을 사용한다.
         AssistantBotAutoPublishStatusDTO.PersonaStatusDTO healthStatus = status.getPersonas().get(0);
         assertEquals("건강봇", healthStatus.getPersonaName());
-        assertEquals("board", healthStatus.getPublishChannel());
-        assertEquals(botProperties.getAutoPublishPostDailyLimit() + botProperties.getAutoPublishCatchUpPostRetrySlots(),
-                healthStatus.getPostSlots().size());
-        assertEquals(botProperties.getAutoPublishCommentDailyLimit(),
-                healthStatus.getCommentSlots().size());
-        assertTrue(healthStatus.getChatSlots().isEmpty());
+        assertEquals("chat", healthStatus.getPublishChannel());
+        assertEquals(botProperties.getAutoPublishChatDailyLimit(),
+                healthStatus.getChatSlots().size());
+        assertTrue(healthStatus.getPostSlots().isEmpty());
+        assertTrue(healthStatus.getCommentSlots().isEmpty());
     }
 
     @Test
+    @Disabled("게시판 자동 발행이 공개채팅 전환으로 은퇴됨(모든 페르소나 chat 라우팅). 게시판 발행 부활 시 재활성화.")
     void autoPublishPostDailyLimit_ignoresPreviousSkippedDrafts() throws Exception {
-        // 게시판 발행 경로는 이제 채팅 전환 대상이 아닌 건강봇으로 검증한다.
         botProperties.setPersonas(Arrays.asList(persona("건강봇")));
         botProperties.setAutoPublishPostDailyLimit(3);
         botProperties.setAutoPublishCommentDailyLimit(0);

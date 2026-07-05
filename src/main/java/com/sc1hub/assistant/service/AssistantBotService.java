@@ -833,6 +833,8 @@ public class AssistantBotService {
                     .append(resolveRaceLabel(persona)).append(" 시점의 게임 한마디로 반응한다.\n");
         } else if (hasPersonaName(persona, "훈훈봇")) {
             sb.append("- 훈훈봇은 상대 채팅의 감정이나 상황을 받아주고 부담 없는 응원이나 재치 있는 한마디로 반응한다.\n");
+        } else if (isHealthPersona(persona)) {
+            sb.append("- 건강봇은 채팅 흐름에 맞춰 실천할 수 있는 건강 상식 한 조각만 한 줄로 툭 건넨다. 줄바꿈·긴 설명·번호 나열 없이 짧게 쓴다.\n");
         }
         sb.append("\n");
 
@@ -947,7 +949,8 @@ public class AssistantBotService {
     }
 
     private boolean isChatPersona(PersonaProperties persona) {
-        return persona != null && !isRepetitiveByDesignPersona(persona) && !isHealthPersona(persona);
+        // 모든 페르소나를 공개채팅방으로 라우팅한다. 게시판 자동 발행은 사용하지 않는다.
+        return persona != null;
     }
 
     private List<AutoPublishCandidate> resolveDueAutoPublishCandidates(PersonaProperties persona,
