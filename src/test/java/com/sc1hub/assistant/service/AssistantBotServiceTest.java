@@ -16,7 +16,6 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.chat.dto.ChatMessageDTO;
 import com.sc1hub.chat.service.ChatRoomService;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -44,7 +43,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -274,72 +272,6 @@ class AssistantBotServiceTest {
                 healthStatus.getChatSlots().size());
         assertTrue(healthStatus.getPostSlots().isEmpty());
         assertTrue(healthStatus.getCommentSlots().isEmpty());
-    }
-
-    @Test
-    @Disabled("게시판 자동 발행이 공개채팅 전환으로 은퇴됨(모든 페르소나 chat 라우팅). 게시판 발행 부활 시 재활성화.")
-    void autoPublishPostDailyLimit_ignoresPreviousSkippedDrafts() throws Exception {
-        botProperties.setPersonas(Arrays.asList(persona("건강봇")));
-        botProperties.setAutoPublishPostDailyLimit(3);
-        botProperties.setAutoPublishCommentDailyLimit(0);
-        LocalDate date = LocalDate.of(2026, 3, 9);
-        List<Integer> postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "건강봇");
-        while (postSlots.get(0) <= 60) {
-            date = date.plusDays(1);
-            postSlots = botProperties.buildDailyAutoPublishSlots(date, "post", 3, "funboard", "건강봇");
-        }
-        int firstPostSlot = postSlots.get(0);
-        LocalTime slotTime = LocalTime.of(firstPostSlot / 60, firstPostSlot % 60);
-        ZoneId zone = ZoneId.of("Asia/Seoul");
-        Clock slotClock = Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone);
-        AssistantBotService service = new AssistantBotService(
-                botProperties,
-                new AssistantProperties(),
-                boardService,
-                boardMapper,
-                assistantBotMapper,
-                geminiClient,
-                new ObjectMapper(),
-                chatRoomService,
-                slotClock
-        );
-
-        LocalDateTime since = date.atStartOfDay();
-        LocalDateTime minuteStart = LocalDateTime.of(date, slotTime);
-        LocalDateTime recoverySince = minuteStart.minusMinutes(botProperties.getAutoPublishCatchUpRecoveryCooldownMinutes());
-        AtomicReference<AssistantBotHistoryDTO> insertedHistory = new AtomicReference<>();
-        doAnswer(invocation -> {
-            AssistantBotHistoryDTO history = invocation.getArgument(0);
-            history.setId(77L);
-            insertedHistory.set(history);
-            return null;
-        }).when(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
-
-        when(assistantBotMapper.countPublishedSinceByMode("건강봇", "funboard", "post", since)).thenReturn(0);
-        lenient().when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", since)).thenReturn(1);
-        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", minuteStart)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "post", recoverySince)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "comment", since)).thenReturn(0);
-        when(assistantBotMapper.countGeneratedSinceByMode("건강봇", "funboard", "comment", minuteStart)).thenReturn(0);
-        when(boardMapper.selectRecentPostsForBot("funboard", botProperties.getRecentPostLimit()))
-                .thenReturn(Collections.emptyList());
-        when(boardMapper.selectRecentCommentsForBot("funboard", null, botProperties.getRecentCommentLimit()))
-                .thenReturn(Collections.emptyList());
-        when(assistantBotMapper.selectRecentHistory("건강봇", "funboard", botProperties.getRecentHistoryLimit()))
-                .thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
-                .thenReturn(validPostDraftJson());
-        when(assistantBotMapper.selectHistoryById(77L)).thenAnswer(invocation -> insertedHistory.get());
-        when(boardMapper.selectRecentPostsForBot("funboard", 5))
-                .thenReturn(Collections.singletonList(post(701, "건강봇", 0, "프로토스 래더 한 판만 더 해야지")));
-
-        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("건강봇");
-
-        assertEquals("published", result.getOutcome());
-        assertEquals("post", result.getMode());
-        assertEquals(Integer.valueOf(701), result.getPublishedPostNum());
-        verify(assistantBotMapper).countPublishedSinceByMode("건강봇", "funboard", "post", since);
-        verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString());
     }
 
     @Test
