@@ -715,6 +715,18 @@ public class AssistantBotService {
                     buildChatWaitingDetail(persona, today, now.toLocalTime(), handledChatToday, chatDailyLimit));
         }
 
+        // 여러 페르소나의 무작위 슬롯이 같은/인접한 분에 몰리면 연달아 발행되어 부자연스럽다.
+        // 전 페르소나 공통 최소 간격을 두어, 직전 채팅 발행 후 일정 시간이 지나야 다음 봇이 발행하도록 분산한다.
+        // 캐치업이 켜져 있어 여기서 미룬 페르소나도 다음 분에 다시 due 상태가 되므로 발행이 유실되지 않는다.
+        int chatMinGapMinutes = Math.max(0, botProperties.getAutoPublishChatMinGapMinutes());
+        if (chatMinGapMinutes > 0) {
+            int recentChatPublishes = assistantBotMapper.countPublishedSinceAllPersonas(
+                    MODE_CHAT, now.minusMinutes(chatMinGapMinutes));
+            if (recentChatPublishes > 0) {
+                return AutoPublishResult.skipped(persona.getName(), "chat_min_gap_cooldown");
+            }
+        }
+
         try {
             List<ChatMessageDTO> recentChats = safeList(
                     chatRoomService.getRecentMessages(Math.max(1, botProperties.getChatContextMessageLimit())));

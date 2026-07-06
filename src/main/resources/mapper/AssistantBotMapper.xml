@@ -125,4 +125,12 @@
           AND status IN ('draft', 'skipped', 'published')
           AND created_at &gt;= #{since}
     </select>
+
+    <select id="countPublishedSinceAllPersonas" resultType="int">
+        SELECT count(*)
+        FROM assistant_bot_generation_history
+        WHERE generation_mode = #{generationMode}
+          AND status = 'published'
+          AND created_at &gt;= #{since}
+    </select>
 </mapper>

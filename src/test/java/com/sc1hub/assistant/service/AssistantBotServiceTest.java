@@ -332,6 +332,44 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void autoPublishOnce_forChatPersonaDefersWhenAnotherBotPublishedWithinMinGap() throws Exception {
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "프징징봇");
+        int firstChatSlot = chatSlots.get(0);
+        LocalTime slotTime = LocalTime.of(firstChatSlot / 60, firstChatSlot % 60);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        Clock slotClock = Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                chatRoomService,
+                slotClock
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = LocalDateTime.of(date, slotTime);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", minuteStart)).thenReturn(0);
+        // 다른 페르소나가 방금 채팅에 발행했다고 가정 → 최소 간격 쿨다운으로 이번 분에는 미뤄야 한다.
+        when(assistantBotMapper.countPublishedSinceAllPersonas(
+                "chat", minuteStart.minusMinutes(botProperties.getAutoPublishChatMinGapMinutes())))
+                .thenReturn(1);
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+
+        assertEquals("skipped", result.getOutcome());
+        assertEquals("chat_min_gap_cooldown", result.getDetail());
+        verify(chatRoomService, never()).postBotMessage(anyString(), anyString());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+    }
+
+    @Test
     void buildChatPrompt_includesLatestChatLinesAndPersonaRule() {
         String prompt = assistantBotService.buildChatPrompt(
                 persona("프징징봇"),
