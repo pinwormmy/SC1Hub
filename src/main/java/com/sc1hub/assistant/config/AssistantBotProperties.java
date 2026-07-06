@@ -41,7 +41,7 @@ public class AssistantBotProperties {
     private int autoPublishCatchUpRecoveryCooldownMinutes = 60;
     private int autoPublishPostDailyLimit = 3;
     private int autoPublishCommentDailyLimit = 5;
-    private int autoPublishChatDailyLimit = 2;
+    private int autoPublishChatDailyLimit = 1;
     private int autoPublishChatMinGapMinutes = 20;
     private int chatContextMessageLimit = 3;
     private int autoPublishCommentCandidatePosts = 10;
