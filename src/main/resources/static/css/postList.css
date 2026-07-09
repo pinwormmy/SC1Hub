@@ -7,7 +7,10 @@
 
 .boardList th {
     text-align: center;
-    border-bottom: 1px solid white;
+    border-bottom: 1px solid var(--sc-line-soft);
+    color: var(--sc-text-dim);
+    font-size: 0.9em;
+    letter-spacing: 0.04em;
 }
 .boardList tr:last-child {
     border: none;
@@ -19,8 +22,32 @@
 .boardList tr th {
     padding: 0.32rem 0.22rem;
 }
+.boardList tbody tr {
+    transition: background-color 0.12s ease;
+}
+.boardList tbody tr:hover {
+    background-color: var(--sc-hover-soft, rgba(196, 212, 255, 0.13));
+}
+.boardList .notice-tr .noticeTitle {
+    color: var(--sc-accent);
+}
+.boardList .sc-comment-count {
+    color: var(--sc-cyan);
+    font-size: 0.9em;
+}
+.boardList .writer,
+.boardList .date,
+.boardList .views,
+.boardList .recommend,
+.boardList .post-num {
+    color: var(--sc-text-dim);
+    font-size: 0.92em;
+}
 .post-heading {
     border-bottom: 1px solid var(--sc-line-soft, rgba(255, 255, 255, 0.5));
+    color: var(--sc-accent);
+    padding-bottom: 0.35rem;
+    letter-spacing: 0.02em;
 }
 .title {
     max-width: 470px;
@@ -113,12 +140,20 @@
     flex: 0 0 auto;
     white-space: nowrap;
 }
-.sc-paging__page.is-current {
-    color: var(--sc-accent);
-    border-color: var(--sc-accent);
-}
 .sc-paging .btn-theme {
     border: none;
+    background-color: transparent;
+}
+.sc-paging .sc-paging__page.is-current {
+    color: #241C00;
+    background-color: var(--sc-accent);
+    border-color: var(--sc-accent);
+}
+.sc-paging .sc-paging__page.is-current:hover,
+.sc-paging .sc-paging__page.is-current:focus-visible {
+    color: #241C00;
+    background-color: var(--sc-accent);
+    box-shadow: none;
 }
 .sc-write-button {
     border: none;

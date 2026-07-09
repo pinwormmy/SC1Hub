@@ -3,16 +3,18 @@
     font-size: clamp(1.35rem, 3.2vw, 1.8rem);
     font-weight: 400;
     border-color: var(--sc-line-soft);
-    line-height: 1.22;
+    line-height: 1.28;
     overflow-wrap: anywhere;
+    color: var(--sc-accent);
 }
 .info-row {
-    padding: 0.35rem 0.65rem 0.3rem;
+    padding: 0.35rem 0.65rem 0.4rem;
     border-bottom: 1px solid;
     border-color: var(--sc-line-soft);
     font-size: 0.94rem;
     font-weight: 400;
     overflow: hidden;
+    color: var(--sc-text-dim);
 }
 .btn-right {
     margin: 10px 0;
@@ -63,9 +65,10 @@
     }
 }
 #commentContent {
-    background-color: transparent;
     border: 1px solid var(--sc-line-soft);
     padding: 10px;
     color: var(--sc-text);
     caret-color: var(--sc-text);
+    width: 100%;
+    box-sizing: border-box;
 }

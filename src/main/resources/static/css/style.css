@@ -1,35 +1,56 @@
 html {
     font-size: clamp(16px, 1.15vw, 20px);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(158, 180, 255, 0.35) rgba(4, 7, 34, 0.9);
+}
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(158, 180, 255, 0.32);
+    border-radius: 5px;
+    border: 2px solid rgba(4, 7, 34, 0.9);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(158, 180, 255, 0.5);
+}
+::-webkit-scrollbar-track {
+    background: rgba(4, 7, 34, 0.9);
 }
 :root {
     --sc-font-family: "NeoDungGeunMo Pro", "NeoDungGeunMo", sans-serif;
-    /* 정통 PC통신(하이텔/천리안) ANSI 팔레트 */
-    --sc-bg-deep: #000042;               /* 화면 기본 파랑 (다크 모드용 딥 네이비. 정통 재현은 #0000A8) */
-    --sc-bg-panel: #000026;              /* 패널 내부 진파랑 */
-    --sc-text: #FFFFFF;
-    --sc-text-dim: #A8A8A8;              /* 메타정보(작성자·날짜·조회수·안내문) */
-    --sc-accent: #FFFF55;                /* 주 강조: bright yellow */
-    --sc-amber: #FFFF55;
-    --sc-cyan: #55FFFF;                  /* 테란 */
-    --sc-magenta: #FF55FF;               /* 저그 */
-    --sc-protoss: #FFFF55;               /* 프로토스 */
-    --sc-line: #FFFFFF;                  /* 이중선 프레임 */
-    --sc-line-soft: rgba(255, 255, 255, 0.55);
-    --sc-pc-invert-bg: #C0C0C0;          /* 호버 반전 = 회색 커서바 + 파랑 글자 */
-    --sc-pc-invert-text: #0000A8;
-    --sc-statusbar-bg: #C0C0C0;          /* 헤더 상태바 */
-    --sc-statusbar-text: #0000A8;
+    /* PC통신(하이텔/천리안) 무드를 유지한 모던 팔레트 */
+    --sc-bg-deep: #050a38;               /* 화면 기본 파랑 (정통 #0000A8 계열의 딥 네이비) */
+    --sc-bg-panel: rgba(4, 8, 40, 0.55); /* 패널 내부 진파랑 (유리질) */
+    --sc-text: #F2F5FF;
+    --sc-text-dim: #97A5D8;              /* 메타정보(작성자·날짜·조회수·안내문) — 파랑톤 딤 */
+    --sc-accent: #FFE066;                /* 주 강조: 차분한 옐로 */
+    --sc-amber: #FFE066;
+    --sc-cyan: #6FE3F0;                  /* 테란 */
+    --sc-magenta: #FF7ADE;               /* 저그 */
+    --sc-protoss: #FFE066;               /* 프로토스 */
+    --sc-line: rgba(178, 196, 255, 0.65);/* 프레임 선 */
+    --sc-line-soft: rgba(178, 196, 255, 0.32);
+    --sc-panel-border: rgba(158, 180, 255, 0.28);
+    --sc-pc-invert-bg: #D9E3FF;          /* 호버 커서바 = 연보라 실버 + 딥블루 글자 */
+    --sc-pc-invert-text: #101C7A;
+    --sc-hover-soft: rgba(196, 212, 255, 0.13); /* 표 행 등 은은한 호버 */
+    --sc-statusbar-bg: linear-gradient(180deg, #EAF0FF 0%, #CAD7F8 100%); /* 헤더 상태바 */
+    --sc-statusbar-solid: #D7E0F9;
+    --sc-statusbar-text: #14207A;
     --sc-terminal-glow: 0 0 10px rgba(255, 255, 255, 0.10);
-}
-*, *::before, *::after {
-    border-radius: 0 !important;
+    --sc-radius: 12px;                   /* 패널 라운드 */
+    --sc-radius-sm: 7px;                 /* 버튼·입력·커서바 라운드 */
+    --sc-shadow-panel: 0 12px 32px rgba(1, 3, 24, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --sc-focus-ring: 0 0 0 3px rgba(111, 227, 240, 0.28);
 }
 body {
     min-height: 100vh;
     position: relative;
     width: 100%;
     height: 100%;
-    line-height: 1.45;
+    line-height: 1.5;
     font-family: var(--sc-font-family);
     color: var(--sc-text);
     font-size: 1rem;
@@ -38,7 +59,12 @@ body {
     font-synthesis: none;
     padding-bottom: 0;
     background-color: var(--sc-bg-deep);
-    text-shadow: 0 0 6px rgba(160, 200, 255, 0.18);
+    background-image:
+        radial-gradient(1100px 520px at 50% -120px, rgba(64, 90, 220, 0.32), transparent 70%),
+        radial-gradient(900px 700px at 85% 110%, rgba(30, 48, 150, 0.20), transparent 65%),
+        linear-gradient(180deg, #060c42 0%, #04072c 100%);
+    background-attachment: fixed;
+    text-shadow: 0 0 6px rgba(160, 200, 255, 0.14);
 }
 body::before {
     content: "";
@@ -55,7 +81,7 @@ body::before {
             transparent 4px
         );
     mix-blend-mode: screen;
-    opacity: 0.16;
+    opacity: 0.10;
 }
 body > * {
     position: relative;
@@ -126,6 +152,7 @@ legend {
     margin: 0 auto;
     padding: 0 0.45rem;
     text-shadow: none;
+    letter-spacing: 0.02em;
 }
 legend::before {
     content: "\2524 ";
@@ -158,28 +185,34 @@ select {
     font-style: inherit;
 }
 option {
-    background-color: var(--sc-bg-panel);
+    background-color: #0A0F3E;
 }
-fieldset {
-    border: 3px double var(--sc-line);
-    padding: clamp(8px, 1.3vw, 13px);
-    background: var(--sc-bg-panel);
-    box-shadow: none;
+fieldset,
+.sc-panel {
+    border: 1px solid var(--sc-panel-border);
+    border-radius: var(--sc-radius);
+    padding: clamp(10px, 1.4vw, 16px);
+    background:
+        linear-gradient(180deg, rgba(26, 36, 110, 0.38) 0%, rgba(8, 13, 56, 0.55) 100%);
+    box-shadow: var(--sc-shadow-panel);
+}
+.sc-panel {
+    padding: clamp(12px, 1.6vw, 20px);
 }
 .terran-field {
-    border-color: var(--sc-cyan);
+    border-color: rgba(111, 227, 240, 0.42);
 }
 .terran-field legend {
     color: var(--sc-cyan);
 }
 .zerg-field {
-    border-color: var(--sc-magenta);
+    border-color: rgba(255, 122, 222, 0.42);
 }
 .zerg-field legend {
     color: var(--sc-magenta);
 }
 .protoss-field {
-    border-color: var(--sc-protoss);
+    border-color: rgba(255, 224, 102, 0.42);
 }
 .protoss-field legend {
     color: var(--sc-protoss);
@@ -194,6 +227,10 @@ li {
 a, a:focus, a:hover {
   text-decoration: none;
   outline: none;
+}
+a {
+  border-radius: var(--sc-radius-sm);
+  transition: background-color 0.13s ease, color 0.13s ease;
 }
 .sc-menu-link--terran {
     color: var(--sc-cyan);
@@ -215,14 +252,16 @@ a, a:focus, a:hover {
 }
 input {
     height: 2.5rem;
-    border: none;
+    border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-sm);
     margin: 2px;
     outline: none;
     padding-left: 10px;
-    background-color: transparent;
+    background-color: rgba(2, 5, 30, 0.42);
     color: inherit;
     font-family: inherit;
     font-size: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 input:focus {
     outline: none;
@@ -241,7 +280,7 @@ select:-webkit-autofill,
 select:-webkit-autofill:hover,
 select:-webkit-autofill:focus {
     -webkit-text-fill-color: #ffffff;
-    box-shadow: 0 0 0px 1000px var(--sc-bg-panel) inset;
+    box-shadow: 0 0 0px 1000px #0A0F3E inset;
     transition: background-color 5000s ease-in-out 0s;
 }
 input[type="checkbox"] {
@@ -251,14 +290,17 @@ button {
     min-height: 2.5rem;
     height: auto;
     border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-sm);
     margin: 2px;
-    color: white;
+    padding: 0.35rem 0.85rem;
+    color: var(--sc-text);
     font-family: inherit;
     font-size: inherit;
     font-weight: inherit;
     font-style: inherit;
-    background-color: transparent;
+    background-color: rgba(210, 224, 255, 0.07);
     cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 textarea {
     color: inherit;
@@ -266,6 +308,10 @@ textarea {
     font-size: inherit;
     font-weight: inherit;
     font-style: inherit;
+    border: 1px solid var(--sc-line-soft);
+    border-radius: var(--sc-radius-sm);
+    background-color: rgba(2, 5, 30, 0.42);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 button.cancel-btn {
     background: none;
@@ -299,7 +345,7 @@ summary:focus-visible {
     color: var(--sc-pc-invert-text);
     background-color: var(--sc-pc-invert-bg);
     border-color: transparent;
-    box-shadow: none;
+    box-shadow: 0 2px 10px rgba(2, 6, 40, 0.35);
     text-shadow: none;
     outline: none;
 }
@@ -325,6 +371,7 @@ summary:active {
     box-shadow: none;
     text-shadow: none;
     outline: none;
+    transform: translateY(1px);
 }
 
 a:active *,
@@ -334,16 +381,31 @@ summary:active * {
     color: inherit;
 }
 
+/* 텍스트 링크의 커서바는 글자 주변으로 3px 여유를 두어 답답하지 않게 */
+a:not(.btn):hover,
+a:not(.btn):focus-visible,
+a:not(.btn):active {
+    box-shadow: 0 0 0 3px var(--sc-pc-invert-bg);
+}
+
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-    color: var(--sc-pc-invert-text);
-    background-color: var(--sc-pc-invert-bg);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: rgba(111, 227, 240, 0.65);
+    box-shadow: var(--sc-focus-ring);
+    background-color: rgba(2, 5, 30, 0.6);
     text-shadow: none;
     outline: none;
-    caret-color: var(--sc-pc-invert-text);
+    caret-color: var(--sc-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    a, button, .btn, input, textarea {
+        transition: none;
+    }
+    a:active, .btn:active, button:active, summary:active {
+        transform: none;
+    }
 }
 .section {
   padding: clamp(32px, 7vw, 80px) 0;
@@ -382,14 +444,17 @@ textarea.cke_source {
     width: 100%;
     background: transparent;
     border: none;
-    padding: 6px clamp(0px, 1.2vw, 12px);
+    padding: 6px clamp(2px, 1.2vw, 12px);
     margin-top: 0;
 }
 .sc-terminal-wrap {
-    border-top: 1px solid var(--sc-line);
-    padding-top: 7px;
-    margin-top: 4px;
-    box-shadow: var(--sc-terminal-glow);
+    border: 1px solid var(--sc-panel-border);
+    border-radius: var(--sc-radius);
+    background: linear-gradient(180deg, rgba(14, 20, 76, 0.5) 0%, rgba(5, 9, 44, 0.62) 100%);
+    padding: 8px clamp(6px, 1vw, 12px) 6px;
+    margin-top: 10px;
+    margin-bottom: 12px;
+    box-shadow: var(--sc-shadow-panel);
 }
 .sc-terminal__notice {
     color: var(--sc-text-dim);
@@ -420,9 +485,21 @@ textarea.cke_source {
 }
 .sc-terminal__output {
     display: block;
-    padding: 6px 0;
-    border-bottom: 1px dashed var(--sc-line);
+    padding: 6px 2px 6px 0;
+    border-bottom: 1px dashed var(--sc-line-soft);
     margin-bottom: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(158, 180, 255, 0.35) transparent;
+}
+.sc-terminal__output::-webkit-scrollbar {
+    width: 6px;
+}
+.sc-terminal__output::-webkit-scrollbar-thumb {
+    background: rgba(158, 180, 255, 0.35);
+    border-radius: 3px;
+}
+.sc-terminal__output::-webkit-scrollbar-track {
+    background: transparent;
 }
 .sc-terminal.is-collapsed .sc-terminal__output {
     display: none;
@@ -527,6 +604,9 @@ body.sc-chat-fullscreen .sc-terminal-wrap {
     background: var(--sc-bg-deep);
     display: flex;
     flex-direction: column;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 body.sc-chat-fullscreen .sc-terminal {
     flex: 1 1 auto;
@@ -848,7 +928,7 @@ body.sc-chat-fullscreen .sc-terminal__output {
 }
 .latest-posts {
     color: var(--sc-text-dim);
-    border-bottom: 1px dashed var(--sc-line);
+    border-bottom: 1px dashed var(--sc-line-soft);
     padding-bottom: 0.35rem;
 }
 
@@ -946,7 +1026,7 @@ body.sc-chat-fullscreen .sc-terminal__output {
 }
 .sc-feed__comment {
     padding: 10px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid var(--sc-line-soft);
 }
 .sc-feed__comment:last-child {
     border-bottom: none;
@@ -974,14 +1054,13 @@ body.sc-chat-fullscreen .sc-terminal__output {
 .sc-feed__comment-input {
     flex: 1 1 180px;
     height: 40px;
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--sc-line-soft);
     padding-left: 10px;
 }
 .sc-feed__comment-textarea {
     width: 100%;
     min-height: 70px;
-    background-color: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--sc-line-soft);
     padding: 10px;
 }
 .sc-feed__comment-submit {

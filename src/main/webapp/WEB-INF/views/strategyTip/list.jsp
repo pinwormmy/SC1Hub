@@ -14,6 +14,7 @@
                 <%@include file="../include/latestPosts.jspf" %>
                 <%@include file="../include/sidebar.jspf" %>
                 <div class="col-sm-9">
+                    <div class="sc-panel">
                     <div class="post-heading mb">[한줄 공략]</div>
                     <c:if test="${not empty msg}">
                         <script>window.alert('${msg}');</script>
@@ -123,6 +124,7 @@
                             <a class="sc-paging__nav sc-paging__next btn btn-theme"
                                href="${nextPageUrl}">[다음]</a>
                         </c:if>
+                    </div>
                     </div>
                 </div>
             </div>

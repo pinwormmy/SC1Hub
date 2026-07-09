@@ -1,8 +1,9 @@
 .strategy-tip-form {
-    border: 1px solid var(--sc-line-soft, rgba(255, 255, 255, 0.35));
-    padding: 0.65rem;
+    border: 1px solid var(--sc-panel-border, rgba(255, 255, 255, 0.35));
+    border-radius: var(--sc-radius, 12px);
+    padding: 0.75rem;
     margin-bottom: 0.75rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(2, 5, 30, 0.3);
 }
 
 .strategy-tip-form__meta,
@@ -35,13 +36,21 @@
 
 .strategy-tip-tab {
     border: 1px solid var(--sc-line-soft);
-    padding: 0.22rem 0.45rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.6rem;
     color: inherit;
 }
 
 .strategy-tip-tab.is-active {
-    color: var(--sc-accent);
+    color: #241C00;
+    background-color: var(--sc-accent);
     border-color: var(--sc-accent);
+}
+.strategy-tip-tab.is-active:hover,
+.strategy-tip-tab.is-active:focus-visible {
+    color: #241C00;
+    background-color: var(--sc-accent);
+    box-shadow: none;
 }
 
 .strategy-tip-list {

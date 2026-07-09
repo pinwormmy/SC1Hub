@@ -11,7 +11,9 @@
         <div class="row">
             <%@include file="../include/latestPosts.jspf" %>
             <div class="col-sm-12">
-                <%@include file="../include/writePostContent.jspf" %>
+                <div class="sc-panel">
+                    <%@include file="../include/writePostContent.jspf" %>
+                </div>
             </div>
         </div>
     </div>

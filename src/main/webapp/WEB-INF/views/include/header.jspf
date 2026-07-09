@@ -81,9 +81,9 @@
     letter-spacing: -0.04em;
 }
 .navbar-wrapper {
-    border-bottom: 3px double var(--sc-line);
-    box-shadow: none;
-    background-color: var(--sc-statusbar-bg);
+    border-bottom: 1px solid rgba(20, 32, 122, 0.28);
+    box-shadow: 0 4px 18px rgba(2, 5, 32, 0.45);
+    background: var(--sc-statusbar-bg);
     color: var(--sc-statusbar-text);
     min-height: 76px;
     text-shadow: none;
@@ -96,7 +96,15 @@
 .navbar-wrapper a:focus-visible,
 .navbar-wrapper a:active {
     background-color: var(--sc-statusbar-text);
-    color: var(--sc-statusbar-bg);
+    color: #EAF0FF;
+    box-shadow: 0 0 0 3px var(--sc-statusbar-text);
+}
+@media (min-width: 769px) {
+    .navbar-wrapper {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    }
 }
 @media (max-width: 768px) {
     .navbar-wrapper {
