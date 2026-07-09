@@ -595,6 +595,12 @@ textarea.cke_source {
 body.sc-chat-fullscreen {
     overflow: hidden;
 }
+/* sticky 헤더(z-index:1000)는 body 직속이라 컨테이너(z-index:1) 내부의
+   전체화면 오버레이보다 위에 그려진다. 확장 중에는 헤더를 숨겨
+   상단 안내줄과 "채팅창 축소" 버튼이 가려지지 않게 한다. */
+body.sc-chat-fullscreen .navbar-wrapper {
+    display: none;
+}
 body.sc-chat-fullscreen .sc-terminal-wrap {
     position: fixed;
     inset: 0;
