@@ -166,23 +166,25 @@
     </select>
 
     <select id="showLatestPosts" resultType="com.sc1hub.board.dto.LatestPostDTO">
-        select post_num, title, reg_date, 'funboard' as board_title from funboard
-		        union all select post_num, title, reg_date, 'noticeboard' as board_title from noticeboard
-		        union all select post_num, title, reg_date, 'promotionboard' as board_title from promotionboard
-		        union all select post_num, title, reg_date, 'pvspboard' as board_title from pvspboard
-		        union all select post_num, title, reg_date, 'pvstboard' as board_title from pvstboard
-		        union all select post_num, title, reg_date, 'pvszboard' as board_title from pvszboard
-		        union all select post_num, title, reg_date, 'supportboard' as board_title from supportboard
-		        union all select post_num, title, reg_date, 'teamplayguideboard' as board_title from teamplayguideboard
-		        union all select post_num, title, reg_date, 'tipboard' as board_title from tipboard
-		        union all select post_num, title, reg_date, 'tvspboard' as board_title from tvspboard
-		        union all select post_num, title, reg_date, 'tvstboard' as board_title from tvstboard
-		        union all select post_num, title, reg_date, 'tvszboard' as board_title from tvszboard
-		        union all select post_num, title, reg_date, 'videolinkboard' as board_title from videolinkboard
-		        union all select post_num, title, reg_date, 'zvspboard' as board_title from zvspboard
-		        union all select post_num, title, reg_date, 'zvstboard' as board_title from zvstboard
-		        union all select post_num, title, reg_date, 'zvszboard' as board_title from zvszboard
-		        union all select tip_num as post_num, content as title, reg_date, 'strategyTip' as board_title from one_line_strategy
+        select p.post_num, p.title,
+               greatest(p.reg_date, coalesce((select max(c.reg_date) from funboard_comment c where c.post_num=p.post_num), p.reg_date)) as reg_date,
+               'funboard' as board_title from funboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from noticeboard_comment c where c.post_num=p.post_num), p.reg_date)), 'noticeboard' from noticeboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from promotionboard_comment c where c.post_num=p.post_num), p.reg_date)), 'promotionboard' from promotionboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvspboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvspboard' from pvspboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvstboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvstboard' from pvstboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvszboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvszboard' from pvszboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from supportboard_comment c where c.post_num=p.post_num), p.reg_date)), 'supportboard' from supportboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from teamplayguideboard_comment c where c.post_num=p.post_num), p.reg_date)), 'teamplayguideboard' from teamplayguideboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tipboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tipboard' from tipboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tvspboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tvspboard' from tvspboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tvstboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tvstboard' from tvstboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tvszboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tvszboard' from tvszboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from videolinkboard_comment c where c.post_num=p.post_num), p.reg_date)), 'videolinkboard' from videolinkboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from zvspboard_comment c where c.post_num=p.post_num), p.reg_date)), 'zvspboard' from zvspboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from zvstboard_comment c where c.post_num=p.post_num), p.reg_date)), 'zvstboard' from zvstboard p
+                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from zvszboard_comment c where c.post_num=p.post_num), p.reg_date)), 'zvszboard' from zvszboard p
+                union all select tip_num, content, reg_date, 'strategyTip' from one_line_strategy
             order by reg_date desc
             limit 5;
     </select>
