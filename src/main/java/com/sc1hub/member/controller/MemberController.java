@@ -11,6 +11,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.util.StringUtils;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -55,9 +56,12 @@ public class MemberController {
 
     @GetMapping("/isUniqueId")
     @ResponseBody
-    public String isUniqueId(String id) throws Exception {
+    public ResponseEntity<String> isUniqueId(@RequestParam(required = false) String id) throws Exception {
+        if (!StringUtils.hasText(id)) {
+            return ResponseEntity.badRequest().body("");
+        }
         log.debug("(중복확인용)ID 입력 확인: {}", id);
-        return memberService.isUniqueId(id);
+        return ResponseEntity.ok(memberService.isUniqueId(id));
     }
 
     @PostMapping("/submitSignUp")
@@ -129,23 +133,32 @@ public class MemberController {
 
     @GetMapping("/checkUniqueId")
     @ResponseBody
-    public String checkUniqueId(String id) throws Exception {
+    public ResponseEntity<String> checkUniqueId(@RequestParam(required = false) String id) throws Exception {
+        if (!StringUtils.hasText(id)) {
+            return ResponseEntity.badRequest().body("");
+        }
         log.info("아이디 중복 확인 컨트롤러 작동");
-        return memberService.isUniqueId(id);
+        return ResponseEntity.ok(memberService.isUniqueId(id));
     }
 
     @GetMapping("/checkUniqueEmail")
     @ResponseBody
-    public String checkUniqueEmail(String email) {
+    public ResponseEntity<String> checkUniqueEmail(@RequestParam(required = false) String email) {
+        if (!StringUtils.hasText(email)) {
+            return ResponseEntity.badRequest().body("");
+        }
         log.info("이멜 중복 확인 컨트롤러 작동");
-        return memberService.isUniqueEmail(email);
+        return ResponseEntity.ok(memberService.isUniqueEmail(email));
     }
 
     @GetMapping("/checkUniqueNickName")
     @ResponseBody
-    public String checkUniqueNickName(String nickName) {
+    public ResponseEntity<String> checkUniqueNickName(@RequestParam(required = false) String nickName) {
+        if (!StringUtils.hasText(nickName)) {
+            return ResponseEntity.badRequest().body("");
+        }
         log.info("별명 중복 확인 컨트롤러 작동");
-        return memberService.isUniqueNickName(nickName);
+        return ResponseEntity.ok(memberService.isUniqueNickName(nickName));
     }
 
     @GetMapping(value = "/adminPage")

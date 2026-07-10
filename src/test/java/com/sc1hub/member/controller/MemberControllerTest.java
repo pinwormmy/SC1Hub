@@ -8,11 +8,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.ui.ExtendedModelMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,5 +64,14 @@ class MemberControllerTest {
 
         assertEquals("redirect:/", view);
         assertEquals(loggedIn, session.getAttribute("member"));
+    }
+
+    @Test
+    void checkUniqueId_rejectsBlankIdWithoutQueryingDatabase() throws Exception {
+        ResponseEntity<String> response = controller.checkUniqueId(" ");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("", response.getBody());
+        verifyNoInteractions(memberService);
     }
 }
