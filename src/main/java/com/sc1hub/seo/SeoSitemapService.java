@@ -5,6 +5,7 @@ import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.BoardTitleNormalizer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -27,6 +28,7 @@ public class SeoSitemapService {
     private final Clock clock;
     private volatile CachedSitemap cachedSitemap;
 
+    @Autowired
     public SeoSitemapService(BoardService boardService) {
         this(boardService, Clock.systemDefaultZone());
     }
