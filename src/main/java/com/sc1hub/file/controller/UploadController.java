@@ -3,6 +3,7 @@ package com.sc1hub.file.controller;
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import com.sc1hub.file.util.UploadedImagePathResolver;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,14 +42,24 @@ import java.util.UUID;
 public class UploadController {
 
     // 슬래시 포함 여부가 또 중요해서 설정 경로 따로 만듬
-    @Value("${path.upload.ck}")
     private String uploadPath;
 
-    @Value("${path.upload.img:}")
     private String imageUploadPath;
 
     private volatile Path resolvedUploadPath;
     private volatile Path resolvedImageUploadPath;
+
+    @Autowired
+    public UploadController(
+            @Value("${path.upload.ck}") String uploadPath,
+            @Value("${path.upload.img:}") String imageUploadPath) {
+        this.uploadPath = uploadPath;
+        this.imageUploadPath = imageUploadPath;
+    }
+
+    UploadController() {
+        this("", "");
+    }
 
     @PostMapping(value = "/imageUpload", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody

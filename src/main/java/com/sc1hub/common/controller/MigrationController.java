@@ -3,8 +3,9 @@ package com.sc1hub.common.controller;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
+import com.sc1hub.board.support.BoardTitleNormalizer;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -21,7 +22,7 @@ public class MigrationController {
         this.boardMapper = boardMapper;
     }
 
-    @GetMapping("/migrate/comments")
+    @PostMapping("/migrate/comments")
     public String migrateComments() {
         return migrateCommentTables(
                 boardMapper::addCommentColumns,
@@ -31,7 +32,7 @@ public class MigrationController {
         );
     }
 
-    @GetMapping("/migrate/id-nullable")
+    @PostMapping("/migrate/id-nullable")
     public String migrateId() {
         return migrateCommentTables(
                 boardMapper::modifyIdColumn,
@@ -48,7 +49,7 @@ public class MigrationController {
         try {
             List<BoardListDTO> boards = boardService.getBoardList();
             for (BoardListDTO board : boards) {
-                String tableName = board.getBoardTitle() + "_comment";
+                String tableName = BoardTitleNormalizer.requireValid(board.getBoardTitle()) + "_comment";
                 try {
                     migrationAction.execute(tableName);
                     log.info(successMessage, tableName);

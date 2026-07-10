@@ -7,6 +7,7 @@ import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.dto.LatestPostDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.mapper.BoardMapper;
+import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.util.PageUtils;
 import com.sc1hub.member.dto.MemberDTO;
@@ -19,7 +20,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 @Slf4j
@@ -257,6 +257,12 @@ public class BoardServiceImpl implements BoardService {
         return boardMapper.selectRecentPosts(boardTitle, limit);
     }
 
+    @Override
+    public List<BoardDTO> getSitemapPosts(String boardTitle) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
+        return boardMapper.selectSitemapPosts(boardTitle);
+    }
+
     private void preparePostForPersistence(BoardDTO post) {
         if (post == null) {
             return;
@@ -322,9 +328,6 @@ public class BoardServiceImpl implements BoardService {
     }
 
     private String normalizeBoardTitle(String boardTitle) {
-        if (boardTitle == null) {
-            return null;
-        }
-        return boardTitle.trim().toLowerCase(Locale.ROOT);
+        return BoardTitleNormalizer.normalizeNullable(boardTitle);
     }
 }

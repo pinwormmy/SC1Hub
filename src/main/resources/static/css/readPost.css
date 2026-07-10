@@ -1,4 +1,5 @@
 .post-title {
+    margin: 0;
     padding: 0.5rem 0.65rem;
     font-size: clamp(1.35rem, 3.2vw, 1.8rem);
     font-weight: 400;

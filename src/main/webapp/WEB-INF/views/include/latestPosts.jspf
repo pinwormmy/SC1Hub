@@ -30,7 +30,7 @@
             return null;
         }
         if (boardTitle === 'strategyTip') {
-            return '/strategy-tips/';
+            return '/strategy-tips';
         }
         return (
             '/boards/'

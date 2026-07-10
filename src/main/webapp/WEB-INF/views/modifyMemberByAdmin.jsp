@@ -3,9 +3,10 @@
 <html lang="ko">
 <head>
 <title>SC1Hub - [관리자 모드]회원정보 수정</title>
-<%@ include file="/WEB-INF/views/include/header.jspf" %>
+<%@ include file="/WEB-INF/views/include/head.jspf" %>
 </head>
 <body>
+<%@ include file="/WEB-INF/views/include/header.jspf" %>
 <div class="section-inner">
     <div class="container">
         <div class="row">

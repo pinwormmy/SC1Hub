@@ -7,10 +7,13 @@ import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.dto.LatestPostDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.service.BoardService;
+import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
+import com.sc1hub.seo.SeoMetadataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +22,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,7 +36,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -49,24 +52,31 @@ public class BoardController {
 
     private final BoardService boardService;
     private final MemberService memberService;
+    private final SeoMetadataService seoMetadataService;
 
-    public BoardController(BoardService boardService, MemberService memberService) {
+    public BoardController(BoardService boardService, MemberService memberService,
+                           SeoMetadataService seoMetadataService) {
         this.boardService = boardService;
         this.memberService = memberService;
+        this.seoMetadataService = seoMetadataService;
     }
 
     @GetMapping(value = "/{boardTitle}")
-    public String list(@PathVariable String boardTitle, PageDTO page, Model model, HttpSession session)
+    public String list(@PathVariable String boardTitle, PageDTO page, Model model, HttpSession session,
+                       HttpServletRequest request)
             throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         String koreanTitle = boardService.getKoreanTitle(boardTitle);
+        requireBoard(koreanTitle);
         model.addAttribute("koreanTitle", koreanTitle);
-        model.addAttribute("metaDescription", buildBoardMetaDescription(koreanTitle));
         model.addAttribute("boardTitle", boardTitle);
-        model.addAttribute("page", boardService.pageSetting(boardTitle, page));
+        PageDTO resolvedPage = boardService.pageSetting(boardTitle, page);
+        model.addAttribute("page", resolvedPage);
         model.addAttribute("selfNoticeList", boardService.showSelfNoticeList(boardTitle));
         model.addAttribute("postList", boardService.showPostList(boardTitle, page));
 
         model.addAttribute("canWrite", canWrite(boardTitle, session));
+        seoMetadataService.applyBoardList(model, request, koreanTitle, resolvedPage);
 
         return "board/postList";
     }
@@ -75,9 +85,12 @@ public class BoardController {
     @ResponseBody
     public BoardListDataDTO listData(@PathVariable String boardTitle, PageDTO page, HttpSession session)
             throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         BoardListDataDTO response = new BoardListDataDTO();
         response.setBoardTitle(boardTitle);
-        response.setKoreanTitle(boardService.getKoreanTitle(boardTitle));
+        String koreanTitle = boardService.getKoreanTitle(boardTitle);
+        requireBoard(koreanTitle);
+        response.setKoreanTitle(koreanTitle);
         response.setPage(boardService.pageSetting(boardTitle, page));
         response.setSelfNoticeList(boardService.showSelfNoticeList(boardTitle));
         response.setPostList(boardService.showPostList(boardTitle, page));
@@ -88,17 +101,22 @@ public class BoardController {
     }
 
     @GetMapping("/{boardTitle}/readPost")
-    public String readPost(@PathVariable String boardTitle, Model model, HttpServletRequest request) throws Exception {
-        int postNum = Integer.parseInt(request.getParameter("postNum"));
+    public String readPost(@PathVariable String boardTitle, @RequestParam int postNum,
+                           Model model, HttpServletRequest request) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
+        String koreanTitle = boardService.getKoreanTitle(boardTitle);
+        requireBoard(koreanTitle);
+        BoardDTO post = boardService.readPost(boardTitle, postNum);
+        if (post == null) {
+            throw new ResourceNotFoundException("존재하지 않는 게시글입니다.");
+        }
         String ip = IpService.getRemoteIP(request);
         boardService.increaseViewCount(boardTitle, postNum, ip);
-        String koreanTitle = boardService.getKoreanTitle(boardTitle);
-        BoardDTO post = boardService.readPost(boardTitle, postNum);
         model.addAttribute("koreanTitle", koreanTitle);
         model.addAttribute("boardTitle", boardTitle);
         model.addAttribute("guestWritable", isGuestWritableBoard(boardTitle));
         model.addAttribute("post", post);
-        model.addAttribute("metaDescription", buildPostMetaDescription(koreanTitle, post));
+        seoMetadataService.applyPost(model, request, koreanTitle, post);
         return "board/readPost";
     }
 
@@ -106,13 +124,15 @@ public class BoardController {
     @ResponseBody
     public BoardDTO postData(@PathVariable String boardTitle, @RequestParam int postNum, HttpServletRequest request)
             throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         String ip = IpService.getRemoteIP(request);
         boardService.increaseViewCount(boardTitle, postNum, ip);
         return boardService.readPost(boardTitle, postNum);
     }
 
-    @RequestMapping("/{boardTitle}/writePost")
+    @GetMapping("/{boardTitle}/writePost")
     public String writePost(@PathVariable String boardTitle, Model model, HttpServletRequest request) {
+        boardTitle = normalizeBoardTitle(boardTitle);
         log.debug("세션 만료 시간 : {}", request.getSession().getMaxInactiveInterval());
         String koreanTitle = boardService.getKoreanTitle(boardTitle);
         model.addAttribute("koreanTitle", koreanTitle);
@@ -124,6 +144,7 @@ public class BoardController {
     @PostMapping("/{boardTitle}/submitPost")
     public String submitPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request, Model model)
             throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         MemberDTO member = getMember(request.getSession());
         if (!preparePostForSubmission(boardTitle, post, member)) {
             model.addAttribute("msg", buildSubmitDeniedMessage(boardTitle));
@@ -147,6 +168,7 @@ public class BoardController {
     @PostMapping("/{boardTitle}/deletePost")
     public String deletePost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             RedirectAttributes redirectAttributes) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         HttpSession session = request.getSession();
         MemberDTO member = getMember(session);
         BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
@@ -182,6 +204,7 @@ public class BoardController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> verifyGuestPostPassword(@PathVariable String boardTitle,
             @RequestParam int postNum, @RequestParam String guestPassword) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         Map<String, Object> response = new HashMap<>();
         BoardDTO post = boardService.readPost(boardTitle, postNum);
         if (!isGuestWritableBoard(boardTitle) || !isGuestPost(post)) {
@@ -198,9 +221,10 @@ public class BoardController {
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
-    @RequestMapping(value = "/{boardTitle}/modifyPost")
+    @GetMapping(value = "/{boardTitle}/modifyPost")
     public String modifyPost(@PathVariable String boardTitle, Model model, int postNum,
             @RequestParam(required = false) String guestPassword, HttpSession session) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         BoardDTO post = boardService.readPost(boardTitle, postNum);
         if (post == null) {
             model.addAttribute("msg", "존재하지 않는 게시글입니다.");
@@ -227,6 +251,7 @@ public class BoardController {
     @PostMapping("/{boardTitle}/submitModifyPost")
     public String submitModifyPost(@PathVariable String boardTitle, BoardDTO post, HttpServletRequest request,
             Model model) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         HttpSession session = request.getSession();
         MemberDTO member = getMember(session);
         BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
@@ -258,6 +283,7 @@ public class BoardController {
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle,
             @RequestBody CommentDTO comment, HttpSession session) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         log.info("댓글 인수 확인(댓글내용) : {}", comment.getContent());
         MemberDTO member = getMember(session);
         if (member == null) {
@@ -274,28 +300,32 @@ public class BoardController {
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
-    @RequestMapping(value = "/{boardTitle}/commentPageSetting")
+    @PostMapping(value = "/{boardTitle}/commentPageSetting")
     @ResponseBody
     public PageDTO commentPageSetting(@PathVariable String boardTitle, @RequestBody PageDTO page) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         return boardService.commentPageSetting(boardTitle, page);
     }
 
-    @RequestMapping("/{boardTitle}/showCommentList")
+    @PostMapping("/{boardTitle}/showCommentList")
     @ResponseBody
     public List<CommentDTO> showCommentList(@PathVariable String boardTitle, @RequestBody PageDTO page)
             throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         return boardService.showCommentList(boardTitle, page);
     }
 
     @PostMapping("/{boardTitle}/deleteComment")
     @ResponseBody
     public void deleteComment(@PathVariable String boardTitle, int commentNum) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         boardService.deleteComment(boardTitle, commentNum);
     }
 
-    @RequestMapping(value = "/{boardTitle}/updateCommentCount")
+    @PutMapping(value = "/{boardTitle}/updateCommentCount")
     @ResponseBody
     public void updateCommentCount(@PathVariable String boardTitle, int postNum) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         boardService.updateCommentCount(boardTitle, postNum);
     }
 
@@ -304,6 +334,7 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> addRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
         try {
+            boardTitle = normalizeBoardTitle(boardTitle);
             MemberDTO member = getMember(session);
             if (member == null || recommendDTO.getPostNum() == 0) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.BAD_REQUEST);
@@ -326,6 +357,7 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> cancelRecommendation(@PathVariable String boardTitle, HttpSession session,
             @RequestBody RecommendDTO recommendDTO) {
         try {
+            boardTitle = normalizeBoardTitle(boardTitle);
             MemberDTO member = getMember(session);
             if (member == null || recommendDTO.getPostNum() == 0) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.BAD_REQUEST);
@@ -348,6 +380,7 @@ public class BoardController {
     public ResponseEntity<RecommendDTO> checkRecommendation(@PathVariable String boardTitle, RecommendDTO recommendDTO,
             HttpSession session) {
         try {
+            boardTitle = normalizeBoardTitle(boardTitle);
             MemberDTO member = getMember(session);
             if (member == null) {
                 return new ResponseEntity<>(recommendDTO, HttpStatus.UNAUTHORIZED);
@@ -369,6 +402,7 @@ public class BoardController {
     public ResponseEntity<Integer> getRecommendCount(@PathVariable String boardTitle,
             @RequestParam("postNum") int postNum) {
         try {
+            boardTitle = normalizeBoardTitle(boardTitle);
             log.info("getRecommendCount 요청 받음. postNum: {}", postNum);
             int recommendCount = boardService.getRecommendCount(boardTitle, postNum);
             log.info("게시글 번호 {}의 추천 수: {}", postNum, recommendCount);
@@ -379,10 +413,11 @@ public class BoardController {
         }
     }
 
-    @RequestMapping("/{boardTitle}/movePost")
+    @PostMapping("/{boardTitle}/movePost")
     public String movePost(@PathVariable String boardTitle, @RequestBody Map<String, Object> payload) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
         int postNum = (int) payload.get("postNum");
-        String targetBoardTitle = (String) payload.get("moveToBoard");
+        String targetBoardTitle = normalizeBoardTitle((String) payload.get("moveToBoard"));
         log.debug("게시글 이동 기능 {} {}", postNum, targetBoardTitle);
 
         boardService.movePost(boardTitle, postNum, targetBoardTitle);
@@ -563,10 +598,7 @@ public class BoardController {
     }
 
     private String normalizeBoardTitle(String boardTitle) {
-        if (boardTitle == null) {
-            return null;
-        }
-        return boardTitle.trim().toLowerCase(Locale.ROOT);
+        return BoardTitleNormalizer.normalizeNullable(boardTitle);
     }
 
     private String trimToNull(String value) {
@@ -586,53 +618,9 @@ public class BoardController {
         return duplicateCount != null && !"0".equals(duplicateCount);
     }
 
-    private static String buildBoardMetaDescription(String koreanTitle) {
-        String title = koreanTitle == null ? "" : koreanTitle.trim();
-        if (title.isEmpty()) {
-            return "SC1Hub - 스타크래프트1 전문 공략 사이트";
+    private void requireBoard(String koreanTitle) {
+        if (koreanTitle == null || koreanTitle.trim().isEmpty()) {
+            throw new ResourceNotFoundException("존재하지 않는 게시판입니다.");
         }
-        return truncateMeta(title + " 게시판 - SC1Hub");
-    }
-
-    private static String buildPostMetaDescription(String koreanTitle, BoardDTO post) {
-        if (post == null) {
-            return buildBoardMetaDescription(koreanTitle);
-        }
-        String text = stripHtmlToText(post.getContent());
-        if (text.isEmpty()) {
-            text = post.getTitle() == null ? "" : post.getTitle().trim();
-        }
-        String prefix = koreanTitle == null ? "" : koreanTitle.trim();
-        if (!prefix.isEmpty()) {
-            text = prefix + " - " + text;
-        }
-        return truncateMeta(text);
-    }
-
-    private static String stripHtmlToText(String html) {
-        if (html == null) {
-            return "";
-        }
-        String text = html.replaceAll("(?s)<[^>]*>", " ");
-        text = text.replace("&nbsp;", " ");
-        text = text.replace("&amp;", "&");
-        text = text.replace("&lt;", "<");
-        text = text.replace("&gt;", ">");
-        text = text.replace("&quot;", "\"");
-        text = text.replace("&#39;", "'");
-        return text.replaceAll("\\s+", " ").trim();
-    }
-
-    private static final int META_DESCRIPTION_MAX_LENGTH = 160;
-
-    private static String truncateMeta(String text) {
-        if (text == null) {
-            return "";
-        }
-        String normalized = text.trim().replaceAll("\\s+", " ");
-        if (normalized.length() <= META_DESCRIPTION_MAX_LENGTH) {
-            return normalized;
-        }
-        return normalized.substring(0, Math.max(0, META_DESCRIPTION_MAX_LENGTH - 1)).trim() + "…";
     }
 }

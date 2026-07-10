@@ -1,6 +1,5 @@
 package com.sc1hub.common.config;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,26 +8,36 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 import java.util.Properties;
 
-@Slf4j
 @Configuration
 public class EmailConfig {
 
-    @Value("${mail.smtp.port}")
-    private int port;
-    @Value("${mail.smtp.socketFactory.port}")
-    private int socketPort;
-    @Value("${mail.smtp.auth}")
-    private boolean auth;
-    @Value("${mail.smtp.starttls.enable}")
-    private boolean starttls;
-    @Value("${mail.smtp.starttls.required}")
-    private boolean startlls_required;
-    @Value("${mail.smtp.socketFactory.fallback}")
-    private boolean fallback;
-    @Value("${AdminMail.id}")
-    private String id;
-    @Value("${AdminMail.password}")
-    private String password;
+    private final int port;
+    private final int socketPort;
+    private final boolean auth;
+    private final boolean startTls;
+    private final boolean startTlsRequired;
+    private final boolean fallback;
+    private final String id;
+    private final String password;
+
+    public EmailConfig(
+            @Value("${mail.smtp.port}") int port,
+            @Value("${mail.smtp.socketFactory.port}") int socketPort,
+            @Value("${mail.smtp.auth}") boolean auth,
+            @Value("${mail.smtp.starttls.enable}") boolean startTls,
+            @Value("${mail.smtp.starttls.required}") boolean startTlsRequired,
+            @Value("${mail.smtp.socketFactory.fallback}") boolean fallback,
+            @Value("${AdminMail.id}") String id,
+            @Value("${AdminMail.password}") String password) {
+        this.port = port;
+        this.socketPort = socketPort;
+        this.auth = auth;
+        this.startTls = startTls;
+        this.startTlsRequired = startTlsRequired;
+        this.fallback = fallback;
+        this.id = id;
+        this.password = password;
+    }
 
     @Bean
     public JavaMailSender javaMailService() {
@@ -46,8 +55,8 @@ public class EmailConfig {
         Properties pt = new Properties();
         pt.put("mail.smtp.socketFactory.port", socketPort);
         pt.put("mail.smtp.auth", auth);
-        pt.put("mail.smtp.starttls.enable", starttls);
-        pt.put("mail.smtp.starttls.required", startlls_required);
+        pt.put("mail.smtp.starttls.enable", startTls);
+        pt.put("mail.smtp.starttls.required", startTlsRequired);
         pt.put("mail.smtp.socketFactory.fallback",fallback);
         pt.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
         return pt;

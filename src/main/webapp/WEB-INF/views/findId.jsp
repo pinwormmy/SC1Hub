@@ -3,9 +3,10 @@
 <html lang="ko">
 <head>
 <title>SC1Hub - ID 찾기</title>
-<%@include file="./include/header.jspf" %>
+<%@include file="./include/head.jspf" %>
 </head>
 <body>
+<%@include file="./include/header.jspf" %>
     <div class="section-inner">
         <div class="container">
             <div class="row">

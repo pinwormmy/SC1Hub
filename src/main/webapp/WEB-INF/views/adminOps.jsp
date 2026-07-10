@@ -98,9 +98,10 @@
     }
 }
 </style>
-<%@ include file="./include/header.jspf" %>
+<%@ include file="./include/head.jspf" %>
 </head>
 <body>
+<%@ include file="./include/header.jspf" %>
 <div class="section-inner">
     <div class="container">
         <div class="row">

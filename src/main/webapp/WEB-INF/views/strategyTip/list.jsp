@@ -1,13 +1,15 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <title>${koreanTitle}</title>
+    <title><c:out value="${pageTitle}"/></title>
     <link rel="stylesheet" type="text/css" href="/css/postList.css?v=${applicationScope.assetVersion}">
     <link rel="stylesheet" type="text/css" href="/css/strategyTip.css?v=${applicationScope.assetVersion}">
-    <%@include file="../include/header.jspf" %>
+    <%@include file="../include/head.jspf" %>
 </head>
 <body>
+    <%@include file="../include/header.jspf" %>
     <div class="section-inner">
         <div class="container">
             <div class="row">
@@ -15,7 +17,7 @@
                 <%@include file="../include/sidebar.jspf" %>
                 <div class="col-sm-9">
                     <div class="sc-panel">
-                    <div class="post-heading mb">[한줄 공략]</div>
+                    <h1 class="post-heading mb">[한줄 공략]</h1>
                     <c:if test="${not empty msg}">
                         <script>window.alert('${msg}');</script>
                     </c:if>
@@ -23,8 +25,11 @@
                     <div class="strategy-tip-tabs" aria-label="한줄 공략 분류">
                         <a class="strategy-tip-tab ${empty category ? 'is-active' : ''}" href="/strategy-tips">전체</a>
                         <c:forEach var="tipCategory" items="${categories}">
+                            <c:url var="categoryUrl" value="/strategy-tips">
+                                <c:param name="category" value="${tipCategory.code}" />
+                            </c:url>
                             <a class="strategy-tip-tab ${category == tipCategory.code ? 'is-active' : ''}"
-                               href="/strategy-tips?category=${tipCategory.code}">${tipCategory.name}</a>
+                               href="${categoryUrl}"><c:out value="${tipCategory.name}"/></a>
                         </c:forEach>
                     </div>
 
@@ -32,10 +37,10 @@
                         <c:forEach var="tip" items="${tips}">
                             <article class="strategy-tip-item">
                                 <div class="strategy-tip-item__main">
-                                    <span class="strategy-tip-item__category">${tip.categoryName}</span>
+                                    <span class="strategy-tip-item__category"><c:out value="${tip.categoryName}"/></span>
                                     <p class="strategy-tip-item__content"><c:out value="${tip.content}"/></p>
                                     <div class="strategy-tip-item__meta">
-                                        <span>${tip.writer}</span>
+                                        <span><c:out value="${tip.writer}"/></span>
                                         <span><fmt:formatDate pattern="MM-dd HH:mm" value="${tip.regDate}"/></span>
                                     </div>
                                 </div>
@@ -71,12 +76,12 @@
                             <select name="category" class="form-control" aria-label="한줄 공략 분류" required>
                                 <option value="">분류 선택</option>
                                 <c:forEach var="tipCategory" items="${categories}">
-                                    <option value="${tipCategory.code}">${tipCategory.name}</option>
+                                    <option value="${tipCategory.code}"><c:out value="${tipCategory.name}"/></option>
                                 </c:forEach>
                             </select>
                             <c:choose>
                                 <c:when test="${not empty member}">
-                                    <span class="strategy-tip-form__writer">${member.nickName}</span>
+                                    <span class="strategy-tip-form__writer"><c:out value="${member.nickName}"/></span>
                                 </c:when>
                                 <c:otherwise>
                                     <input type="text" name="writer" class="form-control" placeholder="닉네임" required>

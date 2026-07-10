@@ -1,11 +1,13 @@
 package com.sc1hub.common.interceptor;
 
 import com.sc1hub.visitor.service.VisitorCountService;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+@Component
 public class VisitorCountInterceptor implements HandlerInterceptor {
 
     private final VisitorCountService visitorCountService;
@@ -16,6 +18,9 @@ public class VisitorCountInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        if ("GET".equalsIgnoreCase(request.getMethod())) {
+            visitorCountService.processVisitor(request, response);
+        }
         request.setAttribute("todayCount", visitorCountService.getTodayCount());
         request.setAttribute("totalCount", visitorCountService.getTotalCount());
         return true;

@@ -1246,26 +1246,26 @@
         sidebarEl.appendChild(
             createFieldset('[ 지휘관회의실 ]', [
                 { href: '/', label: '0. 초기화면(N)', accessKey: 'n' },
-                { href: '/boards/noticeBoard', label: '1. 공지사항' },
-                { href: '/boards/videoLinkBoard', label: '2. 영상자료실' },
-                { href: '/boards/promotionBoard', label: '3. 추천 및 홍보' },
-                { href: '/boards/funBoard', label: '4. 꿀잼놀이터' },
+                { href: '/boards/noticeboard', label: '1. 공지사항' },
+                { href: '/boards/videolinkboard', label: '2. 영상자료실' },
+                { href: '/boards/promotionboard', label: '3. 추천 및 홍보' },
+                { href: '/boards/funboard', label: '4. 꿀잼놀이터' },
             ]),
         );
 
         sidebarEl.appendChild(
             createFieldset('[ 공략게시판 ]', [
-                { href: '/boards/tVsZBoard', label: '10. 테저전 게시판', className: 'sc-menu-link--terran' },
-                { href: '/boards/tVsPBoard', label: '11. 테프전 게시판', className: 'sc-menu-link--terran' },
-                { href: '/boards/tVsTBoard', label: '12. 테테전 게시판', className: 'sc-menu-link--terran' },
-                { href: '/boards/zVsTBoard', label: '13. 저테전 게시판', className: 'sc-menu-link--zerg' },
-                { href: '/boards/zVsPBoard', label: '14. 저프전 게시판', className: 'sc-menu-link--zerg' },
-                { href: '/boards/zVsZBoard', label: '15. 저저전 게시판', className: 'sc-menu-link--zerg' },
-                { href: '/boards/pVsTBoard', label: '16. 프테전 게시판', className: 'sc-menu-link--protoss' },
-                { href: '/boards/pVsZBoard', label: '17. 프저전 게시판', className: 'sc-menu-link--protoss' },
-                { href: '/boards/pVsPBoard', label: '18. 프프전 게시판', className: 'sc-menu-link--protoss' },
-                { href: '/boards/teamPlayGuideBoard', label: '19. 팀플 게시판' },
-                { href: '/boards/tipBoard', label: '20. 꿀팁보급고(T)', accessKey: 't' },
+                { href: '/boards/tvszboard', label: '10. 테저전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/tvspboard', label: '11. 테프전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/tvstboard', label: '12. 테테전 게시판', className: 'sc-menu-link--terran' },
+                { href: '/boards/zvstboard', label: '13. 저테전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/zvspboard', label: '14. 저프전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/zvszboard', label: '15. 저저전 게시판', className: 'sc-menu-link--zerg' },
+                { href: '/boards/pvstboard', label: '16. 프테전 게시판', className: 'sc-menu-link--protoss' },
+                { href: '/boards/pvszboard', label: '17. 프저전 게시판', className: 'sc-menu-link--protoss' },
+                { href: '/boards/pvspboard', label: '18. 프프전 게시판', className: 'sc-menu-link--protoss' },
+                { href: '/boards/teamplayguideboard', label: '19. 팀플 게시판' },
+                { href: '/boards/tipboard', label: '20. 꿀팁보급고(T)', accessKey: 't' },
             ]),
         );
 

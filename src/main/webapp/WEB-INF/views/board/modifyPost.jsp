@@ -3,9 +3,11 @@
 <html lang="ko">
 <head>
 <title>글수정 - ${koreanTitle}</title>
-<%@include file="../include/header.jspf" %>
+<%@include file="../include/head.jspf" %>
+<script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
 </head>
 <body>
+<%@include file="../include/header.jspf" %>
 <div class="section-inner">
     <div class="container">
         <div class="row">

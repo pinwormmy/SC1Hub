@@ -6,10 +6,10 @@
 <c:set var="canManageGuestPost" value="${guestWritable and isGuestPost and not isAdminMember}" />
 
 <div class="title-row">
-    <div class="post-title">${post.title}</div>
+    <h1 class="post-title"><c:out value="${post.title}"/></h1>
 </div>
 <div class="info-row">
-    <span>작성자 : ${post.writer} </span> &nbsp;
+    <span>작성자 : <c:out value="${post.writer}"/> </span> &nbsp;
     <span>날 짜 : <fmt:formatDate value="${post.regDate}" pattern="yyyy-MM-dd HH:mm"/> </span> &nbsp;
     <span>조 회 : ${post.views} </span> &nbsp;
 </div>
@@ -36,7 +36,7 @@
                 <c:choose>
                     <c:when test="${not empty member}">
                         <div class="sc-col-6">
-                            작성자 : ${member.nickName}
+                            작성자 : <c:out value="${member.nickName}"/>
                         </div>
                     </c:when>
                     <c:otherwise>
@@ -59,7 +59,7 @@
             </div>
         </div><!--/#comment-form-->
 </div><!--/#comments-->
-    <div class="post-navigation "">
+    <div class="post-navigation">
         <hr>
         <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px;">
             <c:if test="${canManageGuestPost}">
@@ -94,8 +94,9 @@
     </div>
 </div>
 
+<div id="scFlashMessage" data-message="<c:out value='${msg}'/>" hidden></div>
 <script type="text/javascript">
-var flashMessage = "${msg}";
+var flashMessage = document.getElementById('scFlashMessage').dataset.message;
 if (flashMessage) {
     window.alert(flashMessage);
 }

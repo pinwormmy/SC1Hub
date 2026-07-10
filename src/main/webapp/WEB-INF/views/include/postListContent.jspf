@@ -1,8 +1,6 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 
-<div class="post-heading mb">
-    [${koreanTitle}]
-</div>
+<h1 class="post-heading mb">[<c:out value="${koreanTitle}"/>]</h1>
 <div class="row">
     <div id="comments" class="col-xs-12">
         <div id="comments-list" class="gap">
@@ -27,14 +25,14 @@
                            <td class="title mobile-visible sc-title-cell">
                                <div class="sc-post-title-row">
                                    <a class="noticeTitle sc-post-title-link" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">
-                                       <span class="sc-post-title-text">[공지] ${notice.title}</span>
+                                       <span class="sc-post-title-text">[공지] <c:out value="${notice.title}"/></span>
                                    </a>
                                    <c:if test="${notice.commentCount > 0}">
                                        <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">( ${notice.commentCount} )</a>
                                    </c:if>
                                </div>
                            </td>
-                           <td class="writer hide-on-mobile">${notice.writer}</td>
+                           <td class="writer hide-on-mobile"><c:out value="${notice.writer}"/></td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${notice.regDate}"/></td>
                            <td class="views hide-on-mobile">${notice.views}</td>
                            <td class="recommend hide-on-mobile">${notice.recommendCount}</td>
@@ -47,14 +45,14 @@
                            <td class="title mobile-visible sc-title-cell">
                                <div class="sc-post-title-row">
                                    <a class="postTitle sc-post-title-link" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">
-                                       <span class="sc-post-title-text">${post.title}</span>
+                                       <span class="sc-post-title-text"><c:out value="${post.title}"/></span>
                                    </a>
                                    <c:if test="${post.commentCount > 0}">
                                        <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">( ${post.commentCount} )</a>
                                    </c:if>
                                </div>
                            </td>
-                           <td class="writer hide-on-mobile">${post.writer}</td>
+                           <td class="writer hide-on-mobile"><c:out value="${post.writer}"/></td>
                            <td class="date hide-on-mobile"><fmt:formatDate pattern="MM-dd" value="${post.regDate}"/></td>
                            <td class="views hide-on-mobile">${post.views}</td>
                            <td class="recommend hide-on-mobile">${post.recommendCount}</td>

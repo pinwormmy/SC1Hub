@@ -2,6 +2,10 @@ package com.sc1hub.file.controller;
 
 import com.sc1hub.common.config.WebConfig;
 import com.sc1hub.common.interceptor.CanonicalInterceptor;
+import com.sc1hub.common.interceptor.AdminInterceptor;
+import com.sc1hub.common.interceptor.BoardLvInterceptor;
+import com.sc1hub.common.interceptor.VisitorCountInterceptor;
+import com.sc1hub.seo.SeoUrlPolicy;
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import com.sc1hub.visitor.service.VisitorCountService;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,8 +49,13 @@ class UploadControllerWebMvcTest {
         }
 
         @Bean
-        CanonicalInterceptor canonicalInterceptor() {
-            return new CanonicalInterceptor();
+        SeoUrlPolicy seoUrlPolicy() {
+            return new SeoUrlPolicy();
+        }
+
+        @Bean
+        CanonicalInterceptor canonicalInterceptor(SeoUrlPolicy seoUrlPolicy) {
+            return new CanonicalInterceptor(seoUrlPolicy);
         }
 
         @Bean
@@ -55,8 +64,27 @@ class UploadControllerWebMvcTest {
         }
 
         @Bean
-        WebConfig webConfig(VisitorCountService visitorCountService, CanonicalInterceptor canonicalInterceptor) {
-            return new WebConfig(visitorCountService, canonicalInterceptor);
+        VisitorCountInterceptor visitorCountInterceptor(VisitorCountService visitorCountService) {
+            return new VisitorCountInterceptor(visitorCountService);
+        }
+
+        @Bean
+        BoardLvInterceptor boardLvInterceptor() {
+            return new BoardLvInterceptor();
+        }
+
+        @Bean
+        AdminInterceptor adminInterceptor() {
+            return new AdminInterceptor();
+        }
+
+        @Bean
+        WebConfig webConfig(VisitorCountInterceptor visitorCountInterceptor,
+                            CanonicalInterceptor canonicalInterceptor,
+                            BoardLvInterceptor boardLvInterceptor,
+                            AdminInterceptor adminInterceptor) {
+            return new WebConfig(visitorCountInterceptor, canonicalInterceptor,
+                    boardLvInterceptor, adminInterceptor);
         }
     }
 

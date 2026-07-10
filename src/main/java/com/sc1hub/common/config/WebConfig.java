@@ -4,7 +4,6 @@ import com.sc1hub.common.interceptor.AdminInterceptor;
 import com.sc1hub.common.interceptor.BoardLvInterceptor;
 import com.sc1hub.common.interceptor.CanonicalInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
-import com.sc1hub.visitor.service.VisitorCountService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -15,12 +14,19 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Slf4j
 public class WebConfig implements WebMvcConfigurer {
 
-    private final VisitorCountService visitorCountService;
+    private final VisitorCountInterceptor visitorCountInterceptor;
     private final CanonicalInterceptor canonicalInterceptor;
+    private final BoardLvInterceptor boardLvInterceptor;
+    private final AdminInterceptor adminInterceptor;
 
-    public WebConfig(VisitorCountService visitorCountService, CanonicalInterceptor canonicalInterceptor) {
-        this.visitorCountService = visitorCountService;
+    public WebConfig(VisitorCountInterceptor visitorCountInterceptor,
+                     CanonicalInterceptor canonicalInterceptor,
+                     BoardLvInterceptor boardLvInterceptor,
+                     AdminInterceptor adminInterceptor) {
+        this.visitorCountInterceptor = visitorCountInterceptor;
         this.canonicalInterceptor = canonicalInterceptor;
+        this.boardLvInterceptor = boardLvInterceptor;
+        this.adminInterceptor = adminInterceptor;
     }
 
     @Override
@@ -32,16 +38,25 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new VisitorCountInterceptor(visitorCountService))
-                .addPathPatterns("/**");
+        registry.addInterceptor(visitorCountInterceptor)
+                .addPathPatterns(
+                        "/", "/guidelines", "/login", "/signAgreement", "/signUp",
+                        "/findId", "/findPassword", "/myPage", "/modifyMyInfo",
+                        "/adminPage/**", "/boards/*", "/boards/*/readPost",
+                        "/boards/*/writePost", "/boards/*/modifyPost", "/strategy-tips");
         registry.addInterceptor(canonicalInterceptor)
-                .addPathPatterns("/**");
-        registry.addInterceptor(new BoardLvInterceptor())
+                .addPathPatterns("/**")
+                .excludePathPatterns(
+                        "/css/**", "/js/**", "/images/**", "/ckeditor/**",
+                        "/favicon.ico", "/robots.txt", "/ads.txt", "/sitemap.xml",
+                        "/img/**", "/uploadedImg/**", "/ckImgSubmit");
+        registry.addInterceptor(boardLvInterceptor)
                 .addPathPatterns("/**/writePost", "/**/modifyPost/**", "/**/deletePost/**")
                 .excludePathPatterns("/boards/funBoard/**", "/boards/funboard/**");
-        registry.addInterceptor(new AdminInterceptor())
+        registry.addInterceptor(adminInterceptor)
                 .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
                         "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",
+                        "/**/movePost", "/migrate/**",
                         "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**", "/api/admin/chat/**")
                 .excludePathPatterns("/boards/supportBoard/**", "/boards/videoLinkBoard/**", "/boards/promotionBoard/**",
                         "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",

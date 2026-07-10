@@ -1,7 +1,10 @@
 package com.sc1hub.strategytip.controller;
 
 import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.member.dto.MemberDTO;
+import com.sc1hub.seo.SeoMetadataService;
+import com.sc1hub.strategytip.dto.StrategyTipCategoryDTO;
 import com.sc1hub.strategytip.dto.StrategyTipDTO;
 import com.sc1hub.strategytip.service.StrategyTipService;
 import org.springframework.http.HttpStatus;
@@ -16,6 +19,9 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.Locale;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,19 +31,29 @@ import java.util.Map;
 public class StrategyTipController {
 
     private final StrategyTipService strategyTipService;
+    private final SeoMetadataService seoMetadataService;
 
-    public StrategyTipController(StrategyTipService strategyTipService) {
+    public StrategyTipController(StrategyTipService strategyTipService, SeoMetadataService seoMetadataService) {
         this.strategyTipService = strategyTipService;
+        this.seoMetadataService = seoMetadataService;
     }
 
     @GetMapping
-    public String list(PageDTO page, @RequestParam(required = false) String category, Model model) {
+    public String list(PageDTO page, @RequestParam(required = false) String category,
+                       Model model, HttpServletRequest request) {
+        String normalizedCategory = trimToNull(category);
+        List<StrategyTipCategoryDTO> categories = strategyTipService.getCategories();
+        String categoryName = findCategoryName(categories, normalizedCategory);
+        if (normalizedCategory != null && categoryName == null) {
+            throw new ResourceNotFoundException("존재하지 않는 한줄 공략 분류입니다.");
+        }
         model.addAttribute("koreanTitle", "한줄 공략");
-        model.addAttribute("metaDescription", "스타크래프트 종족전, 팀플, 꿀팁을 짧게 공유하는 한줄 공략");
-        model.addAttribute("category", category);
-        model.addAttribute("categories", strategyTipService.getCategories());
-        model.addAttribute("page", strategyTipService.pageSetting(page, category));
-        model.addAttribute("tips", strategyTipService.getTips(page, category));
+        model.addAttribute("category", normalizedCategory);
+        model.addAttribute("categories", categories);
+        PageDTO resolvedPage = strategyTipService.pageSetting(page, normalizedCategory);
+        model.addAttribute("page", resolvedPage);
+        model.addAttribute("tips", strategyTipService.getTips(page, normalizedCategory));
+        seoMetadataService.applyStrategyTips(model, request, categoryName, resolvedPage);
         return "strategyTip/list";
     }
 
@@ -79,5 +95,25 @@ public class StrategyTipController {
 
     private MemberDTO getMember(HttpSession session) {
         return session == null ? null : (MemberDTO) session.getAttribute("member");
+    }
+
+    private String findCategoryName(List<StrategyTipCategoryDTO> categories, String category) {
+        if (category == null || categories == null) {
+            return null;
+        }
+        for (StrategyTipCategoryDTO candidate : categories) {
+            if (candidate != null && category.equals(candidate.getCode())) {
+                return candidate.getName();
+            }
+        }
+        return null;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim().toLowerCase(Locale.ROOT);
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

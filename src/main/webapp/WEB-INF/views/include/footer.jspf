@@ -72,22 +72,22 @@
     function buildPageMap() {
         var map = {
             // 사이드바
-            '1': '/boards/noticeBoard/',
-            '2': '/boards/videoLinkBoard/',
-            '3': '/boards/promotionBoard/',
-            '4': '/boards/funBoard/',
-            '10': '/boards/tVsZBoard/',
-            '11': '/boards/tVsPBoard/',
-            '12': '/boards/tVsTBoard/',
-            '13': '/boards/zVsTBoard/',
-            '14': '/boards/zVsPBoard/',
-            '15': '/boards/zVsZBoard/',
-            '16': '/boards/pVsTBoard/',
-            '17': '/boards/pVsZBoard/',
-            '18': '/boards/pVsPBoard/',
-            '19': '/boards/teamPlayGuideBoard/',
-            '20': '/boards/tipBoard/',
-            '21': '/strategy-tips/',
+            '1': '/boards/noticeboard',
+            '2': '/boards/videolinkboard',
+            '3': '/boards/promotionboard',
+            '4': '/boards/funboard',
+            '10': '/boards/tvszboard',
+            '11': '/boards/tvspboard',
+            '12': '/boards/tvstboard',
+            '13': '/boards/zvstboard',
+            '14': '/boards/zvspboard',
+            '15': '/boards/zvszboard',
+            '16': '/boards/pvstboard',
+            '17': '/boards/pvszboard',
+            '18': '/boards/pvspboard',
+            '19': '/boards/teamplayguideboard',
+            '20': '/boards/tipboard',
+            '21': '/strategy-tips',
         };
 
         var dynamicLinks = document.querySelectorAll('[data-menu-number]');

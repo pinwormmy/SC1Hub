@@ -4,6 +4,7 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDataDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -69,8 +71,8 @@ class BoardControllerTest {
 
         String view = boardController.submitPost("funBoard", post, request, model);
 
-        assertEquals("redirect:/boards/funBoard", view);
-        verify(boardService).submitPost("funBoard", post);
+        assertEquals("redirect:/boards/funboard", view);
+        verify(boardService).submitPost("funboard", post);
     }
 
     @Test
@@ -85,7 +87,7 @@ class BoardControllerTest {
 
         assertEquals("alert", view);
         assertEquals("이름과 비밀번호를 확인해주세요", model.asMap().get("msg"));
-        assertEquals("/boards/funBoard/writePost", model.asMap().get("url"));
+        assertEquals("/boards/funboard/writePost", model.asMap().get("url"));
         verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
     }
 
@@ -94,15 +96,27 @@ class BoardControllerTest {
         PageDTO page = new PageDTO();
         MockHttpSession session = new MockHttpSession();
 
-        when(boardService.getKoreanTitle("funBoard")).thenReturn("꿀잼놀이터");
-        when(boardService.pageSetting("funBoard", page)).thenReturn(page);
-        when(boardService.showSelfNoticeList("funBoard")).thenReturn(Collections.emptyList());
-        when(boardService.showPostList("funBoard", page)).thenReturn(Collections.emptyList());
+        when(boardService.getKoreanTitle("funboard")).thenReturn("꿀잼놀이터");
+        when(boardService.pageSetting("funboard", page)).thenReturn(page);
+        when(boardService.showSelfNoticeList("funboard")).thenReturn(Collections.emptyList());
+        when(boardService.showPostList("funboard", page)).thenReturn(Collections.emptyList());
 
         BoardListDataDTO response = boardController.listData("funBoard", page, session);
 
         assertTrue(response.isCanWrite());
         verify(boardService, never()).canWrite(anyString(), any(MemberDTO.class));
+    }
+
+    @Test
+    void readPost_returnsRealNotFoundBeforeUpdatingViews() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/boards/tipboard/readPost");
+        when(boardService.getKoreanTitle("tipboard")).thenReturn("꿀팁보급고");
+        when(boardService.readPost("tipboard", 999)).thenReturn(null);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> boardController.readPost("tipBoard", 999, new ExtendedModelMap(), request));
+
+        verify(boardService, never()).increaseViewCount(anyString(), anyInt(), anyString());
     }
 
     @Test
@@ -115,8 +129,8 @@ class BoardControllerTest {
         MockHttpSession session = new MockHttpSession();
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("funBoard", 7)).thenReturn(post);
-        when(boardService.getKoreanTitle("funBoard")).thenReturn("꿀잼놀이터");
+        when(boardService.readPost("funboard", 7)).thenReturn(post);
+        when(boardService.getKoreanTitle("funboard")).thenReturn("꿀잼놀이터");
 
         String view = boardController.modifyPost("funBoard", model, 7, "1234", session);
 
@@ -144,14 +158,14 @@ class BoardControllerTest {
         request.setSession(session);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("funBoard", 7)).thenReturn(existingPost);
+        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
 
         String view = boardController.submitModifyPost("funBoard", modifiedPost, request, model);
 
-        assertEquals("redirect:/boards/funBoard/readPost?postNum=7", view);
+        assertEquals("redirect:/boards/funboard/readPost?postNum=7", view);
         assertEquals("비회원작성자", modifiedPost.getWriter());
         assertEquals("1234", modifiedPost.getGuestPassword());
-        verify(boardService).submitModifyPost("funBoard", modifiedPost);
+        verify(boardService).submitModifyPost("funboard", modifiedPost);
     }
 
     @Test
@@ -168,12 +182,12 @@ class BoardControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
-        when(boardService.readPost("funBoard", 7)).thenReturn(existingPost);
+        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
 
         String view = boardController.deletePost("funBoard", requestPost, request, redirectAttributes);
 
-        assertEquals("redirect:/boards/funBoard", view);
-        verify(boardService).deletePost("funBoard", 7);
+        assertEquals("redirect:/boards/funboard", view);
+        verify(boardService).deletePost("funboard", 7);
         verify(boardService, never()).deletePost(anyString(), anyInt(), any(MemberDTO.class));
     }
 
@@ -197,7 +211,7 @@ class BoardControllerTest {
         request.setSession(session);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("freeBoard", 3)).thenReturn(existingPost);
+        when(boardService.readPost("freeboard", 3)).thenReturn(existingPost);
 
         String view = boardController.submitModifyPost("freeBoard", post, request, model);
 

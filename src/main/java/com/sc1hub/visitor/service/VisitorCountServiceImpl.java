@@ -3,7 +3,6 @@ package com.sc1hub.visitor.service;
 import com.sc1hub.visitor.dto.VisitorCountDTO;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +25,6 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     private final VisitorCountMapper visitorCountMapper;
     private final Clock clock;
 
-    @Autowired
     public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
         this(visitorCountMapper, Clock.systemDefaultZone());
     }

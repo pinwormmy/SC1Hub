@@ -16,12 +16,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -36,24 +37,23 @@ public class MemberController {
         this.emailService = emailService;
     }
 
-    @RequestMapping("/login")
+    @GetMapping("/login")
     public String login(HttpServletRequest request) {
-        // 로그인 이전 페이지 정보 세션에 저장
-        request.getSession().setAttribute("pageBeforeLogin", request.getHeader("Referer"));
+        request.getSession().setAttribute("pageBeforeLogin", resolveSafeReturnPath(request.getHeader("Referer")));
         return "login";
     }
 
-    @RequestMapping("/signUp")
+    @GetMapping("/signUp")
     public String signUp() {
         return "signUp";
     }
 
-    @RequestMapping("/signAgreement")
+    @GetMapping("/signAgreement")
     public String signAgreement() {
         return "signAgreement";
     }
 
-    @RequestMapping("/isUniqueId")
+    @GetMapping("/isUniqueId")
     @ResponseBody
     public String isUniqueId(String id) throws Exception {
         log.debug("(중복확인용)ID 입력 확인: {}", id);
@@ -77,21 +77,23 @@ public class MemberController {
         }
         session.setAttribute("member", loginData);
         log.debug("로그인 확인: {}", memberDTO);
-        return "redirect:" + session.getAttribute("pageBeforeLogin");
+        Object returnPath = session.getAttribute("pageBeforeLogin");
+        String target = returnPath instanceof String ? (String) returnPath : "/";
+        return "redirect:" + target;
     }
 
-    @RequestMapping(value = "/logout")
+    @GetMapping(value = "/logout")
     public String logout(HttpSession httpSession) {
         httpSession.invalidate();
         return "redirect:/";
     }
 
-    @RequestMapping(value = "/myPage")
+    @GetMapping(value = "/myPage")
     public String myPage() {
         return "myPage";
     }
 
-    @RequestMapping(value = "/modifyMyInfo")
+    @GetMapping(value = "/modifyMyInfo")
     public String modifyMyInfo() {
         return "modifyMyInfo";
     }
@@ -103,7 +105,7 @@ public class MemberController {
         return "myPage";
     }
 
-    @RequestMapping(value = "/modifyMember")
+    @GetMapping(value = "/modifyMember")
     public String modifyMember() {
         return "modifyMember";
     }
@@ -160,7 +162,7 @@ public class MemberController {
         return "adminPage";
     }
 
-    @RequestMapping(value = "/modifyMemberByAdmin")
+    @GetMapping(value = "/modifyMemberByAdmin")
     public String modifyMemberByAdmin(Model model, String id) {
         log.info("관리자의 회원수정 페이지");
         model.addAttribute("member", memberService.getMemberInfo(id));
@@ -264,6 +266,27 @@ public class MemberController {
     public void extendLogin(HttpServletRequest request) {
         log.info("로그인 시간을 연장합니다.");
         request.getSession().setMaxInactiveInterval(1800);
+    }
+
+    private String resolveSafeReturnPath(String referer) {
+        if (referer == null || referer.trim().isEmpty()) {
+            return "/";
+        }
+        try {
+            URI uri = new URI(referer.trim());
+            if (uri.getHost() != null
+                    && !"sc1hub.com".equalsIgnoreCase(uri.getHost())
+                    && !"www.sc1hub.com".equalsIgnoreCase(uri.getHost())) {
+                return "/";
+            }
+            String path = uri.getRawPath();
+            if (path == null || !path.startsWith("/") || path.startsWith("//")) {
+                return "/";
+            }
+            return uri.getRawQuery() == null ? path : path + "?" + uri.getRawQuery();
+        } catch (URISyntaxException e) {
+            return "/";
+        }
     }
 
 }

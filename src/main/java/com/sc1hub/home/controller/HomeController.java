@@ -2,16 +2,15 @@ package com.sc1hub.home.controller;
 
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.service.BoardService;
-import com.sc1hub.visitor.service.VisitorCountService;
 import com.sc1hub.home.dto.HomePopularBoardDTO;
 import com.sc1hub.home.dto.HomePopularSectionDTO;
+import com.sc1hub.seo.SeoMetadataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,27 +22,29 @@ public class HomeController {
 
     private static final int RECENT_POST_LIMIT = 3;
 
-    private final VisitorCountService visitorCountService;
     private final BoardService boardService;
+    private final SeoMetadataService seoMetadataService;
 
-    public HomeController(VisitorCountService visitorCountService, BoardService boardService) {
-        this.visitorCountService = visitorCountService;
+    public HomeController(BoardService boardService, SeoMetadataService seoMetadataService) {
         this.boardService = boardService;
+        this.seoMetadataService = seoMetadataService;
     }
 
     @GetMapping("/")
-    public String home(Model model, HttpServletRequest request, HttpServletResponse response) {
-        visitorCountService.processVisitor(request, response);
-
-        model.addAttribute("todayCount", visitorCountService.getTodayCount());
-        model.addAttribute("totalCount", visitorCountService.getTotalCount());
+    public String home(Model model, HttpServletRequest request) {
         model.addAttribute("popularSections", buildPopularSections());
+        seoMetadataService.applyHome(model, request);
 
         return "index";
     }
 
     @GetMapping("/guidelines")
-    public String showGuidelines() {
+    public String showGuidelines(Model model, HttpServletRequest request) {
+        seoMetadataService.applyContentPage(
+                model,
+                request,
+                "SC1Hub 이용 안내 | 게시판 운영 원칙",
+                "SC1Hub 게시판 유형, 글 작성 원칙과 서비스 이용에 필요한 안내를 확인하세요.");
         return "guidelines";
     }
 
@@ -52,17 +53,17 @@ public class HomeController {
         sections.add(buildSection(
                 "테란 네트워크",
                 "terran-field",
-                Arrays.asList("tVsZBoard", "tVsPBoard", "tVsTBoard")
+                Arrays.asList("tvszboard", "tvspboard", "tvstboard")
         ));
         sections.add(buildSection(
                 "저그 네트워크",
                 "zerg-field",
-                Arrays.asList("zVsTBoard", "zVsPBoard", "zVsZBoard")
+                Arrays.asList("zvstboard", "zvspboard", "zvszboard")
         ));
         sections.add(buildSection(
                 "프로토스 네트워크",
                 "protoss-field",
-                Arrays.asList("pVsTBoard", "pVsZBoard", "pVsPBoard")
+                Arrays.asList("pvstboard", "pvszboard", "pvspboard")
         ));
         return sections;
     }

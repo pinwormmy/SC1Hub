@@ -1,11 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
 <title>SC1Hub - 마이 페이지</title>
-<%@include file="./include/header.jspf" %>
+<%@include file="./include/head.jspf" %>
 </head>
 <body>
+<%@include file="./include/header.jspf" %>
 <div class="section-inner">
     <div class="container">
         <div class="row">

@@ -1,7 +1,7 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
 <title>SC1Hub - alias_dictionary 관리</title>
 <style>
@@ -164,9 +164,10 @@
 }
 </style>
 
-<%@ include file="./include/header.jspf" %>
+<%@ include file="./include/head.jspf" %>
 </head>
 <body>
+<%@ include file="./include/header.jspf" %>
 <div class="section-inner">
     <div class="container">
         <div class="row">

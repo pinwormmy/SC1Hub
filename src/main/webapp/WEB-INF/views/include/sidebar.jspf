@@ -86,10 +86,10 @@
             <div id="basicMenuContent" class="menu-content" style="display: block;">
                 <ul>
                     <li><a href="/" accesskey="n">0. 초기화면(N)</a></li>
-                    <li><a href="/boards/noticeBoard">1. 공지사항</a></li>
-                    <li><a href="/boards/videoLinkBoard">2. 영상자료실</a></li>
-                    <li><a href="/boards/promotionBoard">3. 추천 및 홍보</a></li>
-                    <li><a href="/boards/funBoard">4. 꿀잼놀이터</a></li>
+                    <li><a href="/boards/noticeboard">1. 공지사항</a></li>
+                    <li><a href="/boards/videolinkboard">2. 영상자료실</a></li>
+                    <li><a href="/boards/promotionboard">3. 추천 및 홍보</a></li>
+                    <li><a href="/boards/funboard">4. 꿀잼놀이터</a></li>
                 </ul>
             </div>
         </fieldset>
@@ -98,17 +98,17 @@
             <p class="menu-toggle-hint">클릭시 펼치기↑</p>
             <div id="strategyMenuContent" class="menu-content">
                 <ul>
-                    <li><a href="/boards/tVsZBoard" class="sc-menu-link sc-menu-link--terran">10. 테저전 게시판</a></li>
-                    <li><a href="/boards/tVsPBoard" class="sc-menu-link sc-menu-link--terran">11. 테프전 게시판</a></li>
-                    <li><a href="/boards/tVsTBoard" class="sc-menu-link sc-menu-link--terran">12. 테테전 게시판</a></li>
-                    <li><a href="/boards/zVsTBoard" class="sc-menu-link sc-menu-link--zerg">13. 저테전 게시판</a></li>
-                    <li><a href="/boards/zVsPBoard" class="sc-menu-link sc-menu-link--zerg">14. 저프전 게시판</a></li>
-                    <li><a href="/boards/zVsZBoard" class="sc-menu-link sc-menu-link--zerg">15. 저저전 게시판</a></li>
-                    <li><a href="/boards/pVsTBoard" class="sc-menu-link sc-menu-link--protoss">16. 프테전 게시판</a></li>
-                    <li><a href="/boards/pVsZBoard" class="sc-menu-link sc-menu-link--protoss">17. 프저전 게시판</a></li>
-                    <li><a href="/boards/pVsPBoard" class="sc-menu-link sc-menu-link--protoss">18. 프프전 게시판</a></li>
-                    <li><a href="/boards/teamPlayGuideBoard">19. 팀플 게시판</a></li>
-                    <li><a href="/boards/tipBoard" accesskey="t">20. 꿀팁보급고(T)</a></li>
+                    <li><a href="/boards/tvszboard" class="sc-menu-link sc-menu-link--terran">10. 테저전 게시판</a></li>
+                    <li><a href="/boards/tvspboard" class="sc-menu-link sc-menu-link--terran">11. 테프전 게시판</a></li>
+                    <li><a href="/boards/tvstboard" class="sc-menu-link sc-menu-link--terran">12. 테테전 게시판</a></li>
+                    <li><a href="/boards/zvstboard" class="sc-menu-link sc-menu-link--zerg">13. 저테전 게시판</a></li>
+                    <li><a href="/boards/zvspboard" class="sc-menu-link sc-menu-link--zerg">14. 저프전 게시판</a></li>
+                    <li><a href="/boards/zvszboard" class="sc-menu-link sc-menu-link--zerg">15. 저저전 게시판</a></li>
+                    <li><a href="/boards/pvstboard" class="sc-menu-link sc-menu-link--protoss">16. 프테전 게시판</a></li>
+                    <li><a href="/boards/pvszboard" class="sc-menu-link sc-menu-link--protoss">17. 프저전 게시판</a></li>
+                    <li><a href="/boards/pvspboard" class="sc-menu-link sc-menu-link--protoss">18. 프프전 게시판</a></li>
+                    <li><a href="/boards/teamplayguideboard">19. 팀플 게시판</a></li>
+                    <li><a href="/boards/tipboard" accesskey="t">20. 꿀팁보급고(T)</a></li>
                     <li><a href="/strategy-tips" accesskey="o">21. 한줄 공략(O)</a></li>
                 </ul>
             </div>

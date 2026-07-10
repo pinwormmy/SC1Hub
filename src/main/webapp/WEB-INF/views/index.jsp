@@ -1,10 +1,11 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
 <%@ taglib uri="http://java.sun.com/jsp/jstl/functions" prefix="fn" %>
     <!DOCTYPE html>
-    <html>
+    <html lang="ko">
 
     <head>
-        <title>SC1Hub - 스타크래프트1 전문 커뮤니티</title>
+        <title><c:out value="${pageTitle}"/></title>
         <style>
             .boardList {
                 border-collapse: collapse;
@@ -20,10 +21,12 @@
                 }
             }
         </style>
-        <%@include file="./include/header.jspf" %>
+        <%@include file="./include/head.jspf" %>
     </head>
 
     <body class="sc-home-page">
+        <%@include file="./include/header.jspf" %>
+        <h1 class="sc-visually-hidden">스타크래프트1 빌드·전략 커뮤니티 SC1Hub</h1>
         <div class="section-inner">
             <div class="sc-container">
                 <div class="sc-row">
@@ -40,13 +43,13 @@
                                             <c:forEach var="board" items="${section.boards}">
                                                 <c:set var="boardColorClass" value="" />
                                                 <c:choose>
-                                                    <c:when test="${fn:contains(board.boardTitle, 'VsT')}">
+                                                    <c:when test="${fn:contains(board.boardTitle, 'vst')}">
                                                         <c:set var="boardColorClass" value="sc-title-clip--vsT" />
                                                     </c:when>
-                                                    <c:when test="${fn:contains(board.boardTitle, 'VsZ')}">
+                                                    <c:when test="${fn:contains(board.boardTitle, 'vsz')}">
                                                         <c:set var="boardColorClass" value="sc-title-clip--vsZ" />
                                                     </c:when>
-                                                    <c:when test="${fn:contains(board.boardTitle, 'VsP')}">
+                                                    <c:when test="${fn:contains(board.boardTitle, 'vsp')}">
                                                         <c:set var="boardColorClass" value="sc-title-clip--vsP" />
                                                     </c:when>
                                                 </c:choose>

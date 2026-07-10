@@ -1,243 +1,26 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
-<%@ taglib uri='http://java.sun.com/jsp/jstl/core' prefix='c'%>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<c:set var="scMetaDescription" value="${not empty metaDescription ? metaDescription : '스타크래프트1 전문 공략 사이트. 종족별 운영 및 전략 총정리'}" />
-<meta name="description" content="<c:out value='${scMetaDescription}'/>">
-<link rel="canonical" href="${canonical}" />
-<meta property="og:site_name" content="SC1Hub">
-<meta property="og:url" content="${canonical}">
-<meta property="og:description" content="<c:out value='${scMetaDescription}'/>">
-<c:choose>
-    <c:when test="${not empty post}">
-        <meta property="og:type" content="article">
-        <meta property="og:title" content="<c:out value='${post.title}'/>">
-    </c:when>
-    <c:when test="${not empty koreanTitle}">
-        <meta property="og:type" content="website">
-        <meta property="og:title" content="<c:out value='${koreanTitle}'/>">
-    </c:when>
-    <c:otherwise>
-        <meta property="og:type" content="website">
-        <meta property="og:title" content="SC1Hub - 스타크래프트1 전문 공략 사이트">
-    </c:otherwise>
-</c:choose>
-<link rel="icon" href="/favicon.ico" type="image/x-icon">
-<link rel="stylesheet" href="/css/sc1hub-layout.css?v=${applicationScope.assetVersion}">
-<link rel="stylesheet" href="/css/style.css?v=${applicationScope.assetVersion}">
-<!-- Neo둥근모 Pro -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
-<script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
-
-<style>
-.this-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 18px;
-    align-items: center;
-    position: relative;
-    padding: 10px 0 8px;
-}
-.navbar-wrapper .container {
-    max-width: min(1240px, 94vw);
-}
-.title-container {
-    text-align: left;
-    min-width: 0;
-}
-.super-top-menu {
-    display: flex;
-    min-width: 0;
-}
-.super-top-menu ul {
-    display: flex;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-.super-top-menu ul li {
-    margin: 0 0 0 18px;
-    white-space: nowrap;
-}
-.title-container .full-title {
-    display: inline-block;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: clamp(32px, 3.35vw, 48px);
-    line-height: 1.06;
-    letter-spacing: -0.03em;
-    text-shadow: none;
-}
-.title-container .short-title {
-    display: none;
-    font-size: clamp(30px, 10vw, 44px);
-    line-height: 1;
-    letter-spacing: -0.04em;
-}
-.navbar-wrapper {
-    border-bottom: 1px solid rgba(20, 32, 122, 0.28);
-    box-shadow: 0 4px 18px rgba(2, 5, 32, 0.45);
-    background: var(--sc-statusbar-bg);
-    color: var(--sc-statusbar-text);
-    min-height: 76px;
-    text-shadow: none;
-}
-.navbar-wrapper a {
-    color: var(--sc-statusbar-text);
-    text-shadow: none;
-}
-.navbar-wrapper a:hover,
-.navbar-wrapper a:focus-visible,
-.navbar-wrapper a:active {
-    background-color: var(--sc-statusbar-text);
-    color: #EAF0FF;
-    box-shadow: 0 0 0 3px var(--sc-statusbar-text);
-}
-@media (min-width: 769px) {
-    .navbar-wrapper {
-        position: sticky;
-        top: 0;
-        z-index: 1000;
-    }
-}
-@media (max-width: 768px) {
-    .navbar-wrapper {
-        min-height: 0;
-    }
-    .this-header {
-        width: 100%;
-        grid-template-columns: 1fr;
-        row-gap: 4px;
-        align-items: flex-start;
-        padding: 8px 0 7px;
-    }
-    .title-container {
-        text-align: left;
-        width: 100%;
-    }
-    .title-container .full-title {
-        display: none;
-    }
-    .title-container .short-title {
-        display: block;
-    }
-    .super-top-menu {
-        width: 100%;
-        display: flex;
-        justify-content: flex-end;
-        padding-right: 0;
-        margin-top: 0;
-    }
-    .super-top-menu ul {
-        justify-content: flex-end;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        row-gap: 2px;
-    }
-    .super-top-menu ul li {
-        margin: 2px 0 2px 8px;
-        font-size: 0.95rem;
-        line-height: 1.2;
-        white-space: nowrap;
-        text-align: right;
-    }
-    .super-top-menu ul li a {
-        font-size: 0.95rem;
-    }
-    .super-top-menu ul li.login-status {
-        flex: 0 0 100%;
-        margin: 0 0 2px 0;
-        text-align: right;
-    }
-}
-@media (min-width: 769px) and (max-width: 1024px) {
-    .navbar-wrapper {
-        min-height: 66px;
-    }
-    .this-header {
-        padding: 8px 0;
-        column-gap: 12px;
-    }
-    .title-container .full-title {
-        font-size: clamp(30px, 4.3vw, 38px);
-    }
-    .super-top-menu ul {
-        flex-wrap: wrap;
-        row-gap: 4px;
-    }
-    .super-top-menu ul li {
-        margin-left: 12px;
-        font-size: 0.94rem;
-        line-height: 1.2;
-        white-space: nowrap;
-    }
-    .super-top-menu ul li a {
-        font-size: 0.94rem;
-    }
-}
-</style>
-
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802"
-      crossorigin="anonymous"></script>
-
-<div class="navbar-wrapper">
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<header id="scSiteHeader" class="navbar-wrapper" data-logged-in="${not empty member}">
     <div class="container">
         <div class="this-header">
             <div class="title-container">
                 <span class="full-title"><a href="/">SC1Hub - 스타크래프트1 전문 공략 사이트</a></span>
                 <span class="short-title"><a href="/">SC1Hub</a></span>
             </div>
-            <div class="super-top-menu">
+            <nav class="super-top-menu" aria-label="회원 메뉴">
                 <ul>
                     <c:if test="${member == null}">
                         <li><a href="/login">[로그인]</a></li>
                         <li><a href="/signAgreement">[회원가입]</a></li>
                     </c:if>
                     <c:if test="${member != null}">
-                        <li class="login-status">${member.nickName}님 로그인 중 :</li>
+                        <li class="login-status"><c:out value="${member.nickName}"/>님 로그인 중 :</li>
                         <li class="login-action"><a href="/logout">[로그아웃]</a></li>
-                        <li class="login-action"><a href="javascript:goMyPage()">[회원정보]</a></li>
+                        <li class="login-action"><a href="/myPage">[회원정보]</a></li>
                     </c:if>
                 </ul>
-            </div>
+            </nav>
         </div>
     </div>
-</div>
-
-<script>
-    function checkExtendLogin() {
-        if(${member != null}) {
-            let loginAction = confirm("장시간 한 페이지에 머무르고 있습니다. 로그인을 연장할까요?");
-            if(loginAction) {
-                fetch("/extendLogin", {
-                  method: "PUT",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                })
-                  .then((response) => response.json())
-                  .then((data) => console.log(data))
-                  alert("로그인 시간을 연장합니다.");
-            }else{
-                alert("로그아웃. 초기화면으로 이동합니다.");
-                location.href="/logout";
-            }
-        }
-    }
-
-    setInterval(checkExtendLogin, 15000000); // 로그인연장(25분마다 메세지. 확인누르면 30분 연장)
-
-    function goMyPage() {
-        if(${member == null}) {
-            alert("로그인이 필요합니다.");
-            return false;
-        }
-        location.href="/myPage?id=${member.id}";
-    }
-</script>
+</header>
+<script src="/js/site-header.js?v=${applicationScope.assetVersion}" defer></script>
