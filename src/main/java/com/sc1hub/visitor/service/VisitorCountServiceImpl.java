@@ -10,11 +10,16 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -22,6 +27,12 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     private static final String VISITOR_COOKIE_NAME = "visitor";
     private static final String VISITOR_COOKIE_VALUE = "true";
     private static final String ROOT_PATH = "/";
+    private static final Pattern BOT_USER_AGENT = Pattern.compile(
+            "bot|crawler|spider|slurp|bingpreview|headless|facebookexternalhit|" +
+                    "whatsapp|telegrambot|discordbot|curl|wget|python-requests|go-http-client|" +
+                    "httpclient|java/|okhttp|scanner|scrapy|semrush|ahrefs|mj12bot",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private final VisitorCountMapper visitorCountMapper;
     private final Clock clock;
@@ -65,10 +76,19 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     }
 
     @Override
+    @Transactional
     public void processVisitor(HttpServletRequest request, HttpServletResponse response) {
-        if (!hasVisitorCookie(request.getCookies())) {
-            createVisitorCookie(response);
+        if (hasVisitorCookie(request.getCookies()) || isBot(request.getHeader("User-Agent"))) {
+            return;
+        }
+
+        LocalDate today = LocalDate.now(clock);
+        String visitorHash = createVisitorHash(request, today);
+        createVisitorCookie(response);
+
+        if (visitorCountMapper.insertDailyVisitor(today, visitorHash) == 1) {
             incrementVisitorCount();
+            visitorCountMapper.deleteDailyVisitorsBefore(today.minusDays(1));
         }
     }
 
@@ -90,6 +110,35 @@ public class VisitorCountServiceImpl implements VisitorCountService {
         visitorCookie.setMaxAge(secondsUntilTomorrow());
         visitorCookie.setPath(ROOT_PATH);
         response.addCookie(visitorCookie);
+    }
+
+    private boolean isBot(String userAgent) {
+        return userAgent == null || userAgent.trim().isEmpty() || BOT_USER_AGENT.matcher(userAgent).find();
+    }
+
+    private String createVisitorHash(HttpServletRequest request, LocalDate date) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        String clientAddress = forwardedFor == null || forwardedFor.trim().isEmpty()
+                ? request.getRemoteAddr()
+                : forwardedFor.split(",", 2)[0].trim();
+        String userAgent = request.getHeader("User-Agent");
+        String source = date + "|" + normalize(clientAddress) + "|" + normalize(userAgent);
+
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(source.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hash = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                hash.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+            }
+            return hash.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private int secondsUntilTomorrow() {

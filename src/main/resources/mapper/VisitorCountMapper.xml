@@ -28,4 +28,13 @@
     <select id="getTodayCount" resultType="int">
         SELECT daily_count FROM visitor_count WHERE date = #{date}
     </select>
+
+    <insert id="insertDailyVisitor">
+        INSERT IGNORE INTO visitor_daily_identity (visit_date, visitor_hash)
+        VALUES (#{date}, #{visitorHash})
+    </insert>
+
+    <delete id="deleteDailyVisitorsBefore">
+        DELETE FROM visitor_daily_identity WHERE visit_date &lt; #{date}
+    </delete>
 </mapper>

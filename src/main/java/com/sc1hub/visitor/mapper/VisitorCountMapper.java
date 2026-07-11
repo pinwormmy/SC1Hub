@@ -14,5 +14,6 @@ public interface VisitorCountMapper {
     void insertNewRecord(@Param("date") LocalDate date, @Param("totalCount") int totalCount);
     Integer getTotalCount();
     Integer getTodayCount(@Param("date") LocalDate date);
+    int insertDailyVisitor(@Param("date") LocalDate date, @Param("visitorHash") String visitorHash);
+    void deleteDailyVisitorsBefore(@Param("date") LocalDate date);
 }
-

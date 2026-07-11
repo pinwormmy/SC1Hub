@@ -71,8 +71,11 @@ class VisitorCountServiceImplTest {
     @Test
     void processVisitor_addsVisitorCookieUntilMidnight_whenCookieMissing() {
         MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "Mozilla/5.0 Test Browser");
+        request.setRemoteAddr("203.0.113.10");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(1);
         when(visitorCountMapper.findByDate(LocalDate.of(2026, 3, 9))).thenReturn(new VisitorCountDTO());
         when(visitorCountMapper.getTotalCount()).thenReturn(10);
 
@@ -85,6 +88,7 @@ class VisitorCountServiceImplTest {
         assertEquals(14 * 60 * 60, cookie.getMaxAge());
         verify(visitorCountMapper).incrementDailyCount(LocalDate.of(2026, 3, 9));
         verify(visitorCountMapper).incrementTotalCount();
+        verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 8));
     }
 
     @Test
@@ -97,5 +101,33 @@ class VisitorCountServiceImplTest {
 
         verifyNoInteractions(visitorCountMapper);
         assertEquals(0, response.getCookies().length);
+    }
+
+    @Test
+    void processVisitor_skipsKnownBot() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "Googlebot/2.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        visitorCountService.processVisitor(request, response);
+
+        verifyNoInteractions(visitorCountMapper);
+        assertEquals(0, response.getCookies().length);
+    }
+
+    @Test
+    void processVisitor_doesNotIncrementWhenAnonymousIdentityAlreadyExists() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "Mozilla/5.0 Test Browser");
+        request.addHeader("X-Forwarded-For", "203.0.113.20, 10.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(0);
+
+        visitorCountService.processVisitor(request, response);
+
+        assertNotNull(response.getCookie("visitor"));
+        verify(visitorCountMapper, never()).incrementDailyCount(any(LocalDate.class));
+        verify(visitorCountMapper, never()).incrementTotalCount();
+        verify(visitorCountMapper, never()).deleteDailyVisitorsBefore(any(LocalDate.class));
     }
 }
