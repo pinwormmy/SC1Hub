@@ -57,7 +57,7 @@
                             <div class="sc-terminal__input-wrap">
                                 <span id="scTerminalMirror" class="sc-terminal__mirror" aria-hidden="true"></span>
                                 <span class="sc-terminal__cursor" aria-hidden="true"></span>
-                                <input id="scTerminalInput" class="sc-terminal__input" autocomplete="off" inputmode="none" placeholder="명령어 입력 (help / ask)" aria-label="터미널 입력">
+                                <textarea id="scTerminalInput" class="sc-terminal__input" rows="1" autocomplete="off" inputmode="none" placeholder="명령어 입력 (help / ask)" aria-label="터미널 입력"></textarea>
                             </div>
                         </div>
                     </div>
@@ -121,6 +121,10 @@
         if (e.key !== 'Enter') {
             return;
         }
+        if (e.isComposing) {
+            return;
+        }
+        e.preventDefault();
         var raw = (this.value || '').trim();
         if (!raw) {
             return;

@@ -516,13 +516,18 @@ textarea.cke_source {
     flex: 1 1 auto;
     position: relative;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
+    flex-wrap: wrap;
     min-width: 0;
-    height: 32px;
+    min-height: 32px;
+    padding: 5px 0;
 }
 .sc-terminal__mirror {
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     min-width: 0;
+    max-width: 100%;
 }
 .sc-terminal__input {
     position: absolute;
@@ -535,6 +540,10 @@ textarea.cke_source {
     background: transparent;
     caret-color: transparent;
     opacity: 0;
+    resize: none;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 .sc-terminal__cursor {
     width: 0.6em;
@@ -1012,7 +1021,7 @@ body.sc-chat-fullscreen .sc-terminal__output {
     }
 
     .sc-terminal__input-wrap {
-        height: 2rem;
+        min-height: 2rem;
     }
 
     .sc-feed__actions .btn,
