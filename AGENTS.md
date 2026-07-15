@@ -1,64 +1,62 @@
-# Repository Guidelines
+# SC1Hub Agent Guide
 
-## Project Structure
+## Project Map
 
-- `src/main/java/com/sc1hub`: Spring Boot application code (controllers, services, interceptors, configs).
-- `src/main/resources`: application properties, MyBatis config, mapper XML, static assets.
-- `src/main/webapp/WEB-INF/views`: JSP views (`*.jsp`, `*.jspf` includes).
-- `src/test/java`: JUnit 5 tests.
+- Spring Boot + JSP + MyBatis application; Gradle builds a WAR.
+- Java: `src/main/java/com/sc1hub`
+- Config, mapper XML, SQL, static assets: `src/main/resources`
+- JSP views and includes: `src/main/webapp/WEB-INF/views`
+- JUnit 5 tests: `src/test/java`
 
-## Build, Test, and Development Commands
+## Commands
 
-- `./gradlew clean build`: Compiles and packages the app (WAR enabled).
-- `./gradlew test`: Runs the JUnit 5 test suite. Codex should run relevant tests whenever feasible after code changes.
-- `./gradlew bootRun`: Runs locally (port `8082` is set in `build.gradle`).
+- `./gradlew test`: run the test suite.
+- `./gradlew clean build`: compile, test, and package the WAR.
+- `./gradlew bootRun`: run locally on port `8082`.
+- After a change, run the narrowest relevant test first; use the full suite or build when the scope warrants it.
+- Never run checks that require production DB, SMTP, credentials, or other external services unless the user explicitly requests it and safe configuration is present.
+- If verification cannot run, report the exact command omitted or failed and the reason.
 
-If you are on Windows/WSL and `./gradlew` fails, ensure the script uses LF line endings.
+## Implementation Rules
 
-## Coding Style & Naming Conventions
+- Use 4-space Java indentation and no trailing whitespace.
+- Prefer constructor injection in new or modified code.
+- Follow existing names: `*Controller`, `*Service`, `*ServiceImpl`, `*DTO`, and paired `*Mapper.java` / `mapper/*Mapper.xml`.
+- Preserve unrelated user changes. Do not rewrite, reset, or delete work outside the requested scope.
+- Keep secrets out of Git. Local and online secrets belong in ignored `application-local.properties` and `application-online.properties` files.
+- Do not commit generated files such as `build/` or `*.log`.
 
-- Java: 4-space indentation, no trailing whitespace.
-- Prefer constructor injection over field injection for new/modified code.
-- Naming patterns:
-  - Controllers: `*Controller`
-  - Services: `*Service`, `*ServiceImpl`
-  - DTOs: `*DTO`
-  - MyBatis mappers: `*Mapper` (+ `src/main/resources/mapper/*Mapper.xml`)
+## Worktree-First Git Workflow
 
-## Testing Guidelines
+- Keep the primary checkout as the clean integration worktree for `main`; do implementation in a task worktree.
+- Use one worktree, one branch, and one Codex task per change. Name Codex branches `codex/<short-task-name>`.
+- Before creating a task worktree, update remote refs and confirm the integration worktree is clean. Base the task on the current local `main` so unpushed integrated commits are not skipped.
+- If Codex already opened a detached worktree, create the task branch there with `git switch -c codex/<short-task-name>`; do not create a nested worktree.
+- At task start, inspect `git status --short --branch`, `git worktree list`, and relevant branch history. Never assume another worktree is disposable.
+- After implementation, run relevant checks, review the diff, and make a concise action-focused commit when the user requested completed or commit-ready work.
+- Merge into `main`, push, open a PR, delete worktrees/branches, or deploy only when the user explicitly requests that operation.
+- Remove a worktree only after confirming it is clean. Delete its branch only after confirming the work is merged, superseded, or explicitly abandoned.
+- Never force-push or use destructive reset/checkout commands unless the user explicitly requests them.
 
-- Frameworks: JUnit 5 (Jupiter) + Mockito (via Spring Boot test starter).
-- Keep tests unit-level by default; avoid requiring DB, SMTP, or external services.
-- Naming: `*Test` classes under the matching package.
-- Codex should run the narrowest useful verification after changes, such as targeted tests, `./gradlew test`, or `./gradlew clean build` when the scope justifies it.
-- If tests cannot be run because of sandboxing, missing local configuration, external services, or long runtime, Codex must state exactly what was not run and why.
-- Do not run tests that require production credentials, production databases, SMTP, or other external services unless explicitly requested and safely configured.
+## Integration, Push, and Deploy Gate
 
-## Commit & Pull Request Guidelines
+Perform release operations from the primary integration worktree, not an implementation worktree:
 
-- Commits in this repo use short, descriptive messages (often Korean). Keep them concise and action-focused.
-- PRs should include: purpose, key changes, and any UI-impact screenshots (JSP/CSS/JS).
+1. Fetch and prune remote refs.
+2. Confirm `main` is checked out and `git status` is clean.
+3. Review worktrees, merged/unmerged branches, and `origin/main...main` commits.
+4. Integrate only the intended task commits and run `./gradlew clean build` unless a narrower check is explicitly accepted.
+5. Push or deploy only with explicit user authorization, then report the commit and verification result.
 
-## Branch Workflow
+## Repository-Specific Diagnostics
 
-- For each new implementation task, create a dedicated branch from the current main baseline using `codex/<task-name>`.
-- Do not work directly on `main` unless the user explicitly requests it.
-- If a session starts on `main` or detached HEAD, create or switch to a task branch before making code changes.
-- After implementation, run the narrowest useful tests. Commit changes when the user asked for a completed implementation or commit-ready work.
-- Do not push, create PRs, or merge into `main` unless the user explicitly asks.
-- Do not push `main` or deploy from an implementation worktree session by default. If asked to push or deploy there, advise using a fresh workspace session after verifying `main`, `git status`, recent commits, and required checks.
+- For assistant-bot activity issues, inspect the admin history APIs before speculating:
+  - `GET /api/admin/assistant-bot/history?days=3&limit=100`
+  - `GET /api/admin/assistant-bot/history/summary?days=3`
+- Useful fields: `personaName`, `generationMode`, `status`, `publishedPostNum`, and `createdAt`.
+- `sc1hub.assistant.bot.autoPublishCatchUpEnabled=true` allows missed daily random slots to run later the same day.
 
-## Security & Configuration Tips
+## Handoff
 
-- Do not commit secrets. Local/online profiles should live in `application-local.properties` and
-  `application-online.properties` (both are ignored by `.gitignore`).
-- Keep generated artifacts out of git (e.g., `build/`, `*.log` like `server.log`).
-
-## Agent Notes (Codex/AI)
-
-- Final responses for code changes should include verification performed, commands run, and any remaining checks before deployment.
-- Assistant bot operations can be inspected with admin JSON APIs:
-  - `GET /api/admin/assistant-bot/history?days=3&limit=100`: recent bot generation history rows, excluding large `raw_json`.
-  - `GET /api/admin/assistant-bot/history/summary?days=3`: counts grouped by persona, board, mode, and status, with the latest timestamp.
-- For assistant bot activity issues, check the history APIs before speculating. Useful fields are `personaName`, `generationMode`, `status`, `publishedPostNum`, and `createdAt`.
-- `sc1hub.assistant.bot.autoPublishCatchUpEnabled=true` lets the scheduler process missed daily random slots later in the same day.
+- Summarize changed files and behavior, verification commands and results, the current branch/commit, and any remaining pre-deploy checks.
+- For PRs, include purpose, key changes, and screenshots for JSP/CSS/JS UI changes.
