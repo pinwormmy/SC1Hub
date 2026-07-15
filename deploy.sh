@@ -34,6 +34,7 @@ REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
+REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
 
@@ -62,6 +63,7 @@ echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
@@ -73,6 +75,7 @@ ssh "$REMOTE" \
    REMOTE_WAR_NAME='$REMOTE_WAR_NAME'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
+   REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
    chmod 700 \"\$REMOTE_CONFIG_DIR\"
@@ -121,6 +124,8 @@ ssh "$REMOTE" \
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\\1#')
+   echo 'Applying visitor count schema...'
+   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_VISITOR_COUNT_SQL\"
    ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '\$DB_NAME' AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
    if [ \"\$ONE_LINE_STRATEGY_TABLES\" != \"2\" ]; then
      echo 'Applying one-line strategy schema...'

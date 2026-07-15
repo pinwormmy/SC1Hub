@@ -6,6 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -39,5 +40,19 @@ class VisitorCountInterceptorTest {
         interceptor.preHandle(request, response, new Object());
 
         verify(service, never()).processVisitor(request, response);
+    }
+
+    @Test
+    void preHandle_doesNotCountPrivateOrEditingPages() {
+        VisitorCountService service = mock(VisitorCountService.class);
+        VisitorCountInterceptor interceptor = new VisitorCountInterceptor(service);
+
+        MockHttpServletRequest adminRequest = new MockHttpServletRequest("GET", "/adminPage/dashboard");
+        interceptor.preHandle(adminRequest, new MockHttpServletResponse(), new Object());
+
+        MockHttpServletRequest writeRequest = new MockHttpServletRequest("GET", "/boards/tipBoard/writePost");
+        interceptor.preHandle(writeRequest, new MockHttpServletResponse(), new Object());
+
+        verify(service, never()).processVisitor(any(), any());
     }
 }

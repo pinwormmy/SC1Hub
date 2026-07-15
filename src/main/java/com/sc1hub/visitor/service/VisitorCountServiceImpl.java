@@ -1,6 +1,5 @@
 package com.sc1hub.visitor.service;
 
-import com.sc1hub.visitor.dto.VisitorCountDTO;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +17,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -27,19 +27,22 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     private static final String VISITOR_COOKIE_NAME = "visitor";
     private static final String VISITOR_COOKIE_VALUE = "true";
     private static final String ROOT_PATH = "/";
+    private static final ZoneId VISITOR_ZONE = ZoneId.of("Asia/Seoul");
     private static final Pattern BOT_USER_AGENT = Pattern.compile(
             "bot|crawler|spider|slurp|bingpreview|headless|facebookexternalhit|" +
                     "whatsapp|telegrambot|discordbot|curl|wget|python-requests|go-http-client|" +
-                    "httpclient|java/|okhttp|scanner|scrapy|semrush|ahrefs|mj12bot",
+                    "httpclient|java/|okhttp|scanner|scrapy|semrush|ahrefs|mj12bot|" +
+                    "googleother|inspectiontool|lighthouse|pagespeed|zgrab|censys|masscan|nikto",
             Pattern.CASE_INSENSITIVE
     );
 
     private final VisitorCountMapper visitorCountMapper;
     private final Clock clock;
+    private LocalDate lastIdentityCleanupDate;
 
     @Autowired
     public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
-        this(visitorCountMapper, Clock.systemDefaultZone());
+        this(visitorCountMapper, Clock.system(VISITOR_ZONE));
     }
 
     VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper, Clock clock) {
@@ -51,16 +54,7 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     @Transactional
     public void incrementVisitorCount() {
         LocalDate today = LocalDate.now(clock);
-        VisitorCountDTO visitorCount = visitorCountMapper.findByDate(today);
-
-        int totalCount = nullToZero(visitorCountMapper.getTotalCount());
-
-        if (visitorCount != null) {
-            visitorCountMapper.incrementDailyCount(today);
-        } else {
-            visitorCountMapper.insertNewRecord(today, totalCount);
-        }
-
+        visitorCountMapper.upsertDailyCount(today);
         visitorCountMapper.incrementTotalCount();
     }
 
@@ -88,7 +82,7 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
         if (visitorCountMapper.insertDailyVisitor(today, visitorHash) == 1) {
             incrementVisitorCount();
-            visitorCountMapper.deleteDailyVisitorsBefore(today.minusDays(1));
+            cleanupOldIdentitiesOnce(today);
         }
     }
 
@@ -109,6 +103,7 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
         visitorCookie.setMaxAge(secondsUntilTomorrow());
         visitorCookie.setPath(ROOT_PATH);
+        visitorCookie.setHttpOnly(true);
         response.addCookie(visitorCookie);
     }
 
@@ -117,10 +112,9 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     }
 
     private String createVisitorHash(HttpServletRequest request, LocalDate date) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        String clientAddress = forwardedFor == null || forwardedFor.trim().isEmpty()
-                ? request.getRemoteAddr()
-                : forwardedFor.split(",", 2)[0].trim();
+        // Forwarded headers are normalized by the configured Tomcat RemoteIpValve.
+        // Reading the raw X-Forwarded-For header here would let direct clients spoof identities.
+        String clientAddress = request.getRemoteAddr();
         String userAgent = request.getHeader("User-Agent");
         String source = date + "|" + normalize(clientAddress) + "|" + normalize(userAgent);
 
@@ -139,6 +133,14 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private synchronized void cleanupOldIdentitiesOnce(LocalDate today) {
+        if (today.equals(lastIdentityCleanupDate)) {
+            return;
+        }
+        visitorCountMapper.deleteDailyVisitorsBefore(today);
+        lastIdentityCleanupDate = today;
     }
 
     private int secondsUntilTomorrow() {

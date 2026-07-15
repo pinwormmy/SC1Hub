@@ -1,11 +1,11 @@
 package com.sc1hub.visitor.service;
 
-import com.sc1hub.visitor.dto.VisitorCountDTO;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -18,10 +18,11 @@ import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -45,26 +46,10 @@ class VisitorCountServiceImplTest {
     }
 
     @Test
-    void incrementVisitorCount_incrementsExistingDailyRecord() {
-        when(visitorCountMapper.findByDate(any(LocalDate.class))).thenReturn(new VisitorCountDTO());
-        when(visitorCountMapper.getTotalCount()).thenReturn(10);
-
+    void incrementVisitorCount_upsertsDailyAndTotalCounts() {
         visitorCountService.incrementVisitorCount();
 
-        verify(visitorCountMapper).incrementDailyCount(any(LocalDate.class));
-        verify(visitorCountMapper, never()).insertNewRecord(any(LocalDate.class), anyInt());
-        verify(visitorCountMapper).incrementTotalCount();
-    }
-
-    @Test
-    void incrementVisitorCount_insertsNewRecord_whenMissing() {
-        when(visitorCountMapper.findByDate(any(LocalDate.class))).thenReturn(null);
-        when(visitorCountMapper.getTotalCount()).thenReturn(null);
-
-        visitorCountService.incrementVisitorCount();
-
-        verify(visitorCountMapper).insertNewRecord(any(LocalDate.class), eq(0));
-        verify(visitorCountMapper, never()).incrementDailyCount(any(LocalDate.class));
+        verify(visitorCountMapper).upsertDailyCount(LocalDate.of(2026, 3, 9));
         verify(visitorCountMapper).incrementTotalCount();
     }
 
@@ -76,8 +61,6 @@ class VisitorCountServiceImplTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(1);
-        when(visitorCountMapper.findByDate(LocalDate.of(2026, 3, 9))).thenReturn(new VisitorCountDTO());
-        when(visitorCountMapper.getTotalCount()).thenReturn(10);
 
         visitorCountService.processVisitor(request, response);
 
@@ -86,9 +69,10 @@ class VisitorCountServiceImplTest {
         assertEquals("true", cookie.getValue());
         assertEquals("/", cookie.getPath());
         assertEquals(14 * 60 * 60, cookie.getMaxAge());
-        verify(visitorCountMapper).incrementDailyCount(LocalDate.of(2026, 3, 9));
+        assertTrue(cookie.isHttpOnly());
+        verify(visitorCountMapper).upsertDailyCount(LocalDate.of(2026, 3, 9));
         verify(visitorCountMapper).incrementTotalCount();
-        verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 8));
+        verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 9));
     }
 
     @Test
@@ -106,7 +90,7 @@ class VisitorCountServiceImplTest {
     @Test
     void processVisitor_skipsKnownBot() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("User-Agent", "Googlebot/2.1");
+        request.addHeader("User-Agent", "Mozilla/5.0 (compatible; GoogleOther)");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         visitorCountService.processVisitor(request, response);
@@ -126,8 +110,55 @@ class VisitorCountServiceImplTest {
         visitorCountService.processVisitor(request, response);
 
         assertNotNull(response.getCookie("visitor"));
-        verify(visitorCountMapper, never()).incrementDailyCount(any(LocalDate.class));
+        verify(visitorCountMapper, never()).upsertDailyCount(any(LocalDate.class));
         verify(visitorCountMapper, never()).incrementTotalCount();
         verify(visitorCountMapper, never()).deleteDailyVisitorsBefore(any(LocalDate.class));
+    }
+
+    @Test
+    void processVisitor_ignoresRawForwardedForWhenBuildingIdentity() {
+        when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(0);
+
+        MockHttpServletRequest firstRequest = browserRequest("203.0.113.30");
+        firstRequest.addHeader("X-Forwarded-For", "198.51.100.10");
+        MockHttpServletRequest secondRequest = browserRequest("203.0.113.30");
+        secondRequest.addHeader("X-Forwarded-For", "198.51.100.99");
+
+        visitorCountService.processVisitor(firstRequest, new MockHttpServletResponse());
+        visitorCountService.processVisitor(secondRequest, new MockHttpServletResponse());
+
+        ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
+        verify(visitorCountMapper, times(2))
+                .insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), hashCaptor.capture());
+        assertEquals(hashCaptor.getAllValues().get(0), hashCaptor.getAllValues().get(1));
+    }
+
+    @Test
+    void processVisitor_cleansOldIdentitiesOnlyOncePerDay() {
+        when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(1);
+
+        visitorCountService.processVisitor(browserRequest("203.0.113.40"), new MockHttpServletResponse());
+        visitorCountService.processVisitor(browserRequest("203.0.113.41"), new MockHttpServletResponse());
+
+        verify(visitorCountMapper, times(2)).upsertDailyCount(LocalDate.of(2026, 3, 9));
+        verify(visitorCountMapper, times(2)).incrementTotalCount();
+        verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 9));
+    }
+
+    @Test
+    void processVisitor_skipsRequestWithoutUserAgent() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRemoteAddr("203.0.113.50");
+
+        visitorCountService.processVisitor(request, new MockHttpServletResponse());
+
+        verifyNoInteractions(visitorCountMapper);
+    }
+
+    private MockHttpServletRequest browserRequest(String remoteAddress) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("User-Agent", "Mozilla/5.0 Test Browser");
+        request.setRemoteAddr(remoteAddress);
+        return request;
     }
 }

@@ -5,21 +5,15 @@
 
 <mapper namespace="com.sc1hub.visitor.mapper.VisitorCountMapper">
 
-    <select id="findByDate" resultType="com.sc1hub.visitor.dto.VisitorCountDTO">
-        SELECT * FROM visitor_count WHERE date = #{date}
-    </select>
-
-    <update id="incrementDailyCount">
-        UPDATE visitor_count SET daily_count = daily_count + 1 WHERE date = #{date}
-    </update>
+    <insert id="upsertDailyCount">
+        INSERT INTO visitor_count (date, daily_count)
+        VALUES (#{date}, 1)
+        ON DUPLICATE KEY UPDATE daily_count = daily_count + 1
+    </insert>
 
     <update id="incrementTotalCount">
         UPDATE total_visitor_count SET total_count = total_count + 1
     </update>
-
-    <insert id="insertNewRecord">
-        INSERT INTO visitor_count (date, daily_count) VALUES (#{date}, 1)
-    </insert>
 
     <select id="getTotalCount" resultType="int">
         SELECT total_count FROM total_visitor_count

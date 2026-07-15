@@ -18,11 +18,27 @@ public class VisitorCountInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        if ("GET".equalsIgnoreCase(request.getMethod())) {
+        if (isCountableGet(request)) {
             visitorCountService.processVisitor(request, response);
         }
         request.setAttribute("todayCount", visitorCountService.getTodayCount());
         request.setAttribute("totalCount", visitorCountService.getTotalCount());
         return true;
+    }
+
+    private boolean isCountableGet(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        String path = contextPath.isEmpty() ? requestUri : requestUri.substring(contextPath.length());
+
+        return !path.startsWith("/adminPage")
+                && !path.equals("/myPage")
+                && !path.equals("/modifyMyInfo")
+                && !path.contains("/writePost")
+                && !path.contains("/modifyPost");
     }
 }
