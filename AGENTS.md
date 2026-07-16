@@ -19,15 +19,22 @@
 
 ## Git and Worktrees
 
-- Keep the primary checkout on clean `main` for integration and release. Implement each task in one worktree on `codex/<task>`.
+- Keep the primary checkout on clean `main` for integration and release coordination. Implement each task in one worktree on `codex/<task>`.
 - Base new work on current local `main` after fetching remote refs. If Codex starts detached, create the task branch in that worktree; do not nest worktrees.
 - At task start, inspect `git status --short --branch`, `git worktree list`, and relevant history. Preserve unrelated work and other worktrees.
-- For completed work, review the diff, run relevant checks, and make a concise commit.
+- The session that implements a task owns its integration into `main`; do not hand integration to a new context-free session by default.
+- Synchronize `main` into the task branch and resolve task conflicts in the task worktree. Integrate the task branch into `main` from the worktree where `main` is checked out, while retaining the originating task session and context.
+- Before integration, review the primary worktree, all worktrees, the task diff, and the exact commits to include. For completed work, run relevant checks, make a concise commit, and merge only the reviewed task commits.
+- If the originating session cannot write to the `main` worktree, stop and hand off the branch, exact commit SHA, diff scope, checks run, and proposed merge command.
 - Merge, push, open a PR, deploy, or remove worktrees/branches only when explicitly requested. Remove only clean worktrees and merged, superseded, or abandoned branches.
 
-## Push and Deploy Gate
+## Release and Deploy Gate
 
-Run releases from the primary worktree: fetch/prune, confirm clean `main`, review `origin/main...main` and all worktrees, integrate only intended commits, then run `./gradlew clean build`. Push or deploy only with explicit authorization.
+- Treat the commit SHA, not the worktree location, as the release identity. A release may run from the primary or a clean task worktree.
+- Before release, fetch/prune, confirm the release worktree is clean and on a named committed revision, review `origin/main...HEAD` and all worktrees, and confirm that no unrelated commits are included.
+- By default, deploy only a commit already contained in `origin/main`. Deploying an unintegrated task-branch commit is an exception requiring explicit authorization and a report of the divergence and remaining integration work.
+- Run `./gradlew clean build` from the exact worktree and commit being released. Push or deploy only with explicit authorization; authorization for one does not authorize the other.
+- After deployment, verify both the server health check and the public application endpoint. Report the deployed commit SHA and verification result.
 
 ## Assistant-Bot Diagnostics
 
