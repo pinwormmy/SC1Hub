@@ -17,23 +17,19 @@
 - Use 4-space Java indentation, constructor injection, and existing names such as `*Controller`, `*Service`, `*DTO`, and paired Java/XML `*Mapper` files.
 - Keep secrets in ignored `application-local.properties` or `application-online.properties`; do not commit generated files.
 
-## Git and Worktrees
+## Git Workflow
 
-- SC1Hub is maintained by one developer and does not use pull requests by default. Keep the primary local checkout on clean `main`; it is the integration and release worktree. Use Codex-managed worktrees for implementation tasks.
-- A new managed worktree normally starts on a detached `HEAD`. This is expected even when the UI has no branch selector. Before the first task commit, create `codex/<task>` in that existing worktree; do not create a nested worktree.
-- Treat the UI targets distinctly: **Local** means the primary checkout where `main` is checked out, while **Worktree/Workspace** means an isolated task checkout. Starting another Worktree/Workspace session does not select the task branch or make it the integration checkout.
-- At task start, inspect `git status --short --branch`, `git worktree list`, and relevant history. Base the task on current local `main` after fetching remote refs, and preserve unrelated work and other worktrees.
-- Finish implementation in the task worktree by reviewing the diff, running relevant checks, committing to the named task branch, and reporting the branch, exact commit SHA, base commit, and checks run.
-- Never merge a task into `main` from a newly created managed worktree. A merge made while detached can create a commit without advancing `main`.
-- To integrate without a PR, hand the task off to **Local** when available, or start an integration session explicitly against **Local**, not Worktree/Workspace. In the primary checkout, confirm `main` is checked out and clean, update it with `git pull --ff-only origin main` when remote changes may exist, review all worktrees and the exact task commits, then merge the named task branch into `main`.
-- Prefer `git merge --ff-only codex/<task>` when `main` has not diverged. If it fails, inspect the divergence and resolve it deliberately; do not force, reset, or silently merge unrelated commits.
-- If Local is unavailable or the session cannot write to the primary checkout, stop after the task commit and hand off the branch, exact commit SHA, diff scope, checks run, and proposed merge command. Do not substitute another detached worktree for the Local integration checkout.
-- Merge, push, deploy, or remove worktrees/branches only when explicitly requested. Do not open a PR unless the developer explicitly asks for one. Remove only clean worktrees and merged, superseded, or abandoned branches.
+- SC1Hub is maintained by one developer and does not use pull requests or Git worktrees by default. Use only the primary local checkout; do not create Codex-managed worktrees or additional `git worktree` checkouts.
+- Work directly on `main` for normal tasks. At task start, confirm the current branch and inspect `git status --short --branch` plus relevant history. Preserve unrelated changes and never discard, hide, or overwrite them.
+- Fetch remote refs when they matter, and use `git pull --ff-only origin main` before work when `origin/main` may have advanced. If `main` has diverged or the checkout contains conflicting user changes, inspect and report the situation instead of forcing it into shape.
+- Use a temporary `codex/<task>` branch in the same checkout only when the developer explicitly requests a branch or the task clearly requires isolation. Do not create a worktree for it. Merge it back into local `main` only when explicitly requested.
+- Before committing, review the diff and run the narrowest relevant checks. Commit only task-related files and report the current branch, exact commit SHA, and checks run.
+- Push, deploy, merge a temporary branch, or delete an unmerged branch only when explicitly requested. Do not open a pull request unless the developer explicitly asks for one.
 
 ## Release and Deploy Gate
 
-- Run releases from the primary Local checkout. Before release, fetch/prune, confirm it is clean and on `main`, review `origin/main...main` and all worktrees, and confirm that no unrelated commits are included.
-- After merging the task branch locally, run `./gradlew clean build` from the exact `main` commit intended for release. Push `main` only after this final verification succeeds. By default, deploy only a commit already contained in `origin/main`.
+- Run releases from the primary local checkout. Before release, fetch/prune, confirm it is clean and on `main`, review `origin/main...main` and local branches, and confirm that no unrelated commits are included.
+- Run `./gradlew clean build` from the exact `main` commit intended for release. Push `main` only after this final verification succeeds. By default, deploy only a commit already contained in `origin/main`.
 - Push or deploy only with explicit authorization; authorization for one does not authorize the other. Deploying an unpushed or unintegrated commit requires separate explicit authorization and a report of the divergence.
 - After deployment, verify both the server health check and the public application endpoint. Report the deployed commit SHA and verification result.
 
@@ -45,4 +41,4 @@
 
 ## Handoff
 
-Report changed behavior/files, checks and results, task branch, exact commit and base SHAs, and whether Local integration, final build, `main` push, and deploy remain. For an unmerged task, include the proposed Local merge command. UI changes need screenshots before integration or release.
+Report changed behavior/files, checks and results, current branch and exact commit SHA when committed, and whether the final build, `main` push, and deploy remain. If a temporary branch is still unmerged, state that clearly and include the proposed merge command. UI changes need screenshots before release.
