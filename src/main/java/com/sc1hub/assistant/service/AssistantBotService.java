@@ -69,6 +69,12 @@ public class AssistantBotService {
     private static final String AUTO_DRAFT_BUDGET_EXCEEDED = "generate_call_budget_exceeded";
     private static final String CHAT_RETRY_COOLDOWN = "chat_retry_cooldown";
     private static final String CHAT_RETRY_LIMIT_REACHED = "chat_retry_limit_reached";
+    private static final String[] LOCAL_MEOW_CHAT_PATTERNS = {
+            "야옹",
+            "야옹 야옹",
+            "야~~옹~~~~",
+            "야옹 야~~옹~~~~"
+    };
     private static final int LINKED_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
     private static final int FRESH_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
 
@@ -754,6 +760,10 @@ public class AssistantBotService {
         }
 
         try {
+            if (isRepetitiveByDesignPersona(persona)) {
+                return publishLocalMeowChat(persona, boardTitle);
+            }
+
             List<ChatMessageDTO> recentChats = safeList(
                     chatRoomService.getRecentMessages(Math.max(1, botProperties.getChatContextMessageLimit())));
             List<AssistantBotHistoryDTO> recentHistory = safeList(
@@ -814,6 +824,29 @@ public class AssistantBotService {
             log.error("봇 채팅 발행 실패. personaName={}", persona.getName(), e);
             return AutoPublishResult.failed(persona.getName(), "chat_error");
         }
+    }
+
+    private AutoPublishResult publishLocalMeowChat(PersonaProperties persona, String boardTitle) {
+        String body = LOCAL_MEOW_CHAT_PATTERNS[
+                ThreadLocalRandom.current().nextInt(LOCAL_MEOW_CHAT_PATTERNS.length)];
+        ChatMessageDTO posted = chatRoomService.postBotMessage(persona.getName(), body);
+        if (posted == null) {
+            insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_post_failed");
+            return AutoPublishResult.failed(persona.getName(), "chat_post_failed");
+        }
+
+        AssistantBotHistoryDTO history = new AssistantBotHistoryDTO();
+        history.setPersonaName(persona.getName());
+        history.setBoardTitle(boardTitle);
+        history.setGenerationMode(MODE_CHAT);
+        history.setTargetPostNum(null);
+        history.setTopic("고양이 울음");
+        history.setDraftTitle(null);
+        history.setDraftBody(body);
+        history.setRawJson(null);
+        history.setStatus(STATUS_PUBLISHED);
+        assistantBotMapper.insertHistory(history);
+        return AutoPublishResult.published(persona.getName(), MODE_CHAT, history.getId(), null, null);
     }
 
     private List<Integer> resolveChatAutoPublishSlots(PersonaProperties persona, LocalDate date, int dailyLimit) {

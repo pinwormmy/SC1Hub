@@ -43,6 +43,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -471,6 +473,57 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("[Guest1234] ㅋㅋ 인정"));
         assertTrue(prompt.contains("반드시 한 줄만 쓴다"));
         assertTrue(prompt.contains("프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이다"));
+    }
+
+    @Test
+    void autoPublishOnce_forMeowPersonaPublishesLocallyWithoutContextOrGemini() throws Exception {
+        botProperties.setPersonas(Collections.singletonList(persona("야옹봇")));
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "야옹봇");
+        int chatSlot = chatSlots.get(0);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ZonedDateTime publishTime = ZonedDateTime.of(date, LocalTime.MIDNIGHT, zone).plusMinutes(chatSlot);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                chatRoomService,
+                Clock.fixed(publishTime.toInstant(), zone)
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = publishTime.toLocalDateTime().withSecond(0).withNano(0);
+        when(assistantBotMapper.countPublishedSinceByMode("야옹봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("야옹봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("야옹봇", "funboard", "chat", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode(
+                "야옹봇", "funboard", "chat", minuteStart.minusMinutes(60))).thenReturn(0);
+        when(chatRoomService.postBotMessage(eq("야옹봇"), anyString())).thenAnswer(invocation -> {
+            ChatMessageDTO message = new ChatMessageDTO();
+            message.setId(11L);
+            message.setContent(invocation.getArgument(1));
+            return message;
+        });
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("야옹봇");
+
+        assertEquals("published", result.getOutcome());
+        verify(chatRoomService, never()).getRecentMessages(anyInt());
+        verify(assistantBotMapper, never()).selectRecentHistory(eq("야옹봇"), eq("funboard"), anyInt());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(chatRoomService).postBotMessage(eq("야옹봇"),
+                argThat(body -> body != null && body.matches("야(?:~+)?옹(?:~+)?(?: 야(?:~+)?옹(?:~+)?)?")));
+        verify(assistantBotMapper).insertHistory(argThat(history ->
+                "야옹봇".equals(history.getPersonaName())
+                        && "chat".equals(history.getGenerationMode())
+                        && "고양이 울음".equals(history.getTopic())
+                        && history.getRawJson() == null
+                        && "published".equals(history.getStatus())));
     }
 
     @Test
