@@ -43,6 +43,8 @@ public class AssistantBotProperties {
     private int autoPublishCommentDailyLimit = 5;
     private int autoPublishChatDailyLimit = 1;
     private int autoPublishChatMinGapMinutes = 20;
+    private int autoPublishChatMaxAttemptsPerDay = 3;
+    private int autoPublishChatRetryCooldownMinutes = 60;
     private int chatContextMessageLimit = 3;
     private int autoPublishCommentCandidatePosts = 10;
     private double autoPublishCommentReplyPriorityProbability = 0.9;

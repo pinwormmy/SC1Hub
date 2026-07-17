@@ -1,5 +1,6 @@
 package com.sc1hub.assistant.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantBotProperties;
 import com.sc1hub.assistant.config.AssistantProperties;
@@ -370,6 +371,91 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void autoPublishOnce_forChatPersonaRetriesSkippedAttemptAfterCooldown() throws Exception {
+        botProperties.setAutoPublishChatRetryCooldownMinutes(1);
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "프징징봇");
+        int firstChatSlot = chatSlots.get(0);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ZonedDateTime retryTime = ZonedDateTime.of(date, LocalTime.MIDNIGHT, zone).plusMinutes(firstChatSlot + 2L);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                chatRoomService,
+                Clock.fixed(retryTime.toInstant(), zone)
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = retryTime.toLocalDateTime().withSecond(0).withNano(0);
+        when(assistantBotMapper.countPublishedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(1);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode(
+                "프징징봇", "funboard", "chat", minuteStart.minusMinutes(1))).thenReturn(0);
+        when(chatRoomService.getRecentMessages(botProperties.getChatContextMessageLimit()))
+                .thenReturn(Collections.emptyList());
+        when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
+                .thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+                .thenReturn(validChatDraftJson());
+        when(chatRoomService.postBotMessage(anyString(), anyString())).thenAnswer(invocation -> {
+            ChatMessageDTO message = new ChatMessageDTO();
+            message.setId(10L);
+            message.setContent(invocation.getArgument(1));
+            return message;
+        });
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+
+        assertEquals("published", result.getOutcome());
+        verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString());
+        verify(chatRoomService).postBotMessage("프징징봇", "드라군이 벌처한테 또 녹았는데 이게 맞냐");
+    }
+
+    @Test
+    void autoPublishOnce_forChatPersonaWaitsDuringRetryCooldown() throws Exception {
+        botProperties.setAutoPublishChatRetryCooldownMinutes(60);
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "프징징봇");
+        int firstChatSlot = chatSlots.get(0);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        ZonedDateTime retryTime = ZonedDateTime.of(date, LocalTime.MIDNIGHT, zone).plusMinutes(firstChatSlot + 2L);
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                new ObjectMapper(),
+                chatRoomService,
+                Clock.fixed(retryTime.toInstant(), zone)
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = retryTime.toLocalDateTime().withSecond(0).withNano(0);
+        when(assistantBotMapper.countPublishedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", since)).thenReturn(1);
+        when(assistantBotMapper.countGeneratedSinceByMode("프징징봇", "funboard", "chat", minuteStart)).thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode(
+                "프징징봇", "funboard", "chat", minuteStart.minusMinutes(60))).thenReturn(1);
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
+
+        assertEquals("skipped", result.getOutcome());
+        assertEquals("chat_retry_cooldown", result.getDetail());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(chatRoomService, never()).postBotMessage(anyString(), anyString());
+    }
+
+    @Test
     void buildChatPrompt_includesLatestChatLinesAndPersonaRule() {
         String prompt = assistantBotService.buildChatPrompt(
                 persona("프징징봇"),
@@ -385,6 +471,24 @@ class AssistantBotServiceTest {
         assertTrue(prompt.contains("[Guest1234] ㅋㅋ 인정"));
         assertTrue(prompt.contains("반드시 한 줄만 쓴다"));
         assertTrue(prompt.contains("프징징봇은 프로토스가 늘 손해 본다고 믿는 투덜이다"));
+    }
+
+    @Test
+    void validateChatCandidate_acceptsRepeatedMeowByDesign() throws Exception {
+        AssistantBotHistoryDTO recentMeow = history("chat", "고양이 울음", null, "야옹 야옹");
+        JsonNode result = new ObjectMapper().readTree(
+                "{\"analysis\":{\"topic\":\"고양이 울음\",\"risk_notes\":[]},\"chat\":{\"body\":\"야옹 야옹\"}}");
+
+        Object candidate = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "validateChatCandidate",
+                persona("야옹봇"),
+                result,
+                Collections.singletonList(recentMeow)
+        );
+
+        assertEquals(Boolean.TRUE, ReflectionTestUtils.getField(candidate, "accepted"));
+        assertEquals("야옹 야옹", ReflectionTestUtils.getField(candidate, "body"));
     }
 
     @Test

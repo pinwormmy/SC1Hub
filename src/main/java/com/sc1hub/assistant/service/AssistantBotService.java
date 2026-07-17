@@ -67,6 +67,8 @@ public class AssistantBotService {
     private static final String POST_STRATEGY_FRESH = "fresh";
     private static final String AUTO_DRAFT_SKIPPED_AFTER_GENERATION = "draft_skipped_after_generation:";
     private static final String AUTO_DRAFT_BUDGET_EXCEEDED = "generate_call_budget_exceeded";
+    private static final String CHAT_RETRY_COOLDOWN = "chat_retry_cooldown";
+    private static final String CHAT_RETRY_LIMIT_REACHED = "chat_retry_limit_reached";
     private static final int LINKED_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
     private static final int FRESH_TITLE_KEYWORD_OVERLAP_LIMIT = 3;
 
@@ -435,21 +437,33 @@ public class AssistantBotService {
         if (isChatPersona(persona)) {
             personaStatus.setPublishChannel(MODE_CHAT);
             int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
-            int handledChatToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, since);
-            int handledChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, minuteStart);
-            personaStatus.setHandledChatToday(handledChatToday);
-            personaStatus.setHandledChatThisMinute(handledChatThisMinute);
+            int publishedChatToday = assistantBotMapper.countPublishedSinceByMode(
+                    persona.getName(), boardTitle, MODE_CHAT, since);
+            int attemptedChatToday = assistantBotMapper.countGeneratedSinceByMode(
+                    persona.getName(), boardTitle, MODE_CHAT, since);
+            int attemptedChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(
+                    persona.getName(), boardTitle, MODE_CHAT, minuteStart);
+            int attemptedChatInRetryWindow = countChatAttemptsInRetryWindow(persona, boardTitle, now);
+            personaStatus.setHandledChatToday(publishedChatToday);
+            personaStatus.setHandledChatThisMinute(attemptedChatThisMinute);
 
             List<Integer> chatSlots = resolveChatAutoPublishSlots(persona, today, chatDailyLimit);
             personaStatus.setChatSlots(formatMinuteSlots(chatSlots));
             Integer nextChatSlot = resolveNextUpcomingChatSlot(persona, today, now.toLocalTime(), chatDailyLimit);
             personaStatus.setNextChatSlot(nextChatSlot == null ? null : formatMinuteOfDay(nextChatSlot));
 
-            boolean chatDue = isPublishMinute(chatSlots, toMinuteOfDay(now.toLocalTime()), handledChatToday, handledChatThisMinute);
+            boolean chatDue = isPublishMinute(
+                    chatSlots, toMinuteOfDay(now.toLocalTime()), publishedChatToday, attemptedChatThisMinute);
+            String retryWaitingDetail = resolveChatRetryWaitingDetail(
+                    publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
+            if (StringUtils.hasText(retryWaitingDetail)) {
+                chatDue = false;
+            }
             personaStatus.setDueModes(chatDue ? Collections.singletonList(MODE_CHAT) : Collections.emptyList());
             personaStatus.setWaitingDetail(chatDue
                     ? "due_now"
-                    : buildChatWaitingDetail(persona, today, now.toLocalTime(), handledChatToday, chatDailyLimit));
+                    : buildChatWaitingDetail(persona, today, now.toLocalTime(), publishedChatToday,
+                    attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit));
             return personaStatus;
         }
 
@@ -707,12 +721,24 @@ public class AssistantBotService {
         LocalDateTime minuteStart = now.withSecond(0).withNano(0);
 
         int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
-        int handledChatToday = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, since);
-        int handledChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(persona.getName(), boardTitle, MODE_CHAT, minuteStart);
+        int publishedChatToday = assistantBotMapper.countPublishedSinceByMode(
+                persona.getName(), boardTitle, MODE_CHAT, since);
+        int attemptedChatToday = assistantBotMapper.countGeneratedSinceByMode(
+                persona.getName(), boardTitle, MODE_CHAT, since);
+        int attemptedChatThisMinute = assistantBotMapper.countGeneratedSinceByMode(
+                persona.getName(), boardTitle, MODE_CHAT, minuteStart);
+        int attemptedChatInRetryWindow = countChatAttemptsInRetryWindow(persona, boardTitle, now);
         List<Integer> chatSlots = resolveChatAutoPublishSlots(persona, today, chatDailyLimit);
-        if (!isPublishMinute(chatSlots, toMinuteOfDay(now.toLocalTime()), handledChatToday, handledChatThisMinute)) {
+        if (!isPublishMinute(chatSlots, toMinuteOfDay(now.toLocalTime()), publishedChatToday, attemptedChatThisMinute)) {
             return AutoPublishResult.skipped(persona.getName(),
-                    buildChatWaitingDetail(persona, today, now.toLocalTime(), handledChatToday, chatDailyLimit));
+                    buildChatWaitingDetail(persona, today, now.toLocalTime(), publishedChatToday,
+                            attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit));
+        }
+
+        String retryWaitingDetail = resolveChatRetryWaitingDetail(
+                publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
+        if (StringUtils.hasText(retryWaitingDetail)) {
+            return AutoPublishResult.skipped(persona.getName(), retryWaitingDetail);
         }
 
         // 여러 페르소나의 무작위 슬롯이 같은/인접한 분에 몰리면 연달아 발행되어 부자연스럽다.
@@ -800,13 +826,48 @@ public class AssistantBotService {
     private String buildChatWaitingDetail(PersonaProperties persona,
                                           LocalDate date,
                                           LocalTime now,
-                                          int handledChatToday,
+                                          int publishedChatToday,
+                                          int attemptedChatToday,
+                                          int attemptedChatInRetryWindow,
                                           int chatDailyLimit) {
+        String retryWaitingDetail = resolveChatRetryWaitingDetail(
+                publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
+        if (StringUtils.hasText(retryWaitingDetail)) {
+            return retryWaitingDetail;
+        }
         Integer nextSlot = resolveNextUpcomingChatSlot(persona, date, now, chatDailyLimit);
         if (nextSlot == null) {
-            return handledChatToday >= chatDailyLimit ? "daily_limits_reached" : "no_remaining_slot_today";
+            return publishedChatToday >= chatDailyLimit ? "daily_limits_reached" : "no_remaining_slot_today";
         }
         return "waiting_random_slot:chat=" + formatMinuteOfDay(nextSlot);
+    }
+
+    private int countChatAttemptsInRetryWindow(PersonaProperties persona,
+                                               String boardTitle,
+                                               LocalDateTime now) {
+        int retryCooldownMinutes = Math.max(0, botProperties.getAutoPublishChatRetryCooldownMinutes());
+        if (retryCooldownMinutes <= 0) {
+            return 0;
+        }
+        return assistantBotMapper.countGeneratedSinceByMode(
+                persona.getName(), boardTitle, MODE_CHAT, now.minusMinutes(retryCooldownMinutes));
+    }
+
+    private String resolveChatRetryWaitingDetail(int publishedChatToday,
+                                                 int attemptedChatToday,
+                                                 int attemptedChatInRetryWindow,
+                                                 int chatDailyLimit) {
+        if (publishedChatToday >= chatDailyLimit) {
+            return "daily_limits_reached";
+        }
+        int maxAttemptsPerDay = Math.max(1, botProperties.getAutoPublishChatMaxAttemptsPerDay());
+        if (attemptedChatToday >= maxAttemptsPerDay) {
+            return CHAT_RETRY_LIMIT_REACHED;
+        }
+        if (attemptedChatToday > publishedChatToday && attemptedChatInRetryWindow > 0) {
+            return CHAT_RETRY_COOLDOWN;
+        }
+        return null;
     }
 
     private Integer resolveNextUpcomingChatSlot(PersonaProperties persona, LocalDate date, LocalTime now, int chatDailyLimit) {
@@ -853,7 +914,11 @@ public class AssistantBotService {
         sb.append("금지:\n");
         sb.append("- 정치, 혐오, 성적 표현, 실존 유저 공격, 패드립, 과한 분쟁 유도\n");
         sb.append("- 너무 반듯한 AI 문체, 링크, 해시태그\n");
-        sb.append("- 최근 자기 채팅과 같은 문장, 같은 어미 반복\n");
+        if (isRepetitiveByDesignPersona(persona)) {
+            sb.append("- 고양이 울음 외의 설명이나 사람 말투 사용\n");
+        } else {
+            sb.append("- 최근 자기 채팅과 같은 문장, 같은 어미 반복\n");
+        }
         sb.append("- 금칙어 사용\n\n");
 
         sb.append("형식 규칙:\n");
@@ -927,14 +992,16 @@ public class AssistantBotService {
             return ChatCandidate.rejected("금칙어가 포함됐습니다: " + matchedBlockedWord);
         }
 
-        double threshold = clampThreshold(botProperties.getDuplicateSimilarityThreshold());
-        String normalizedBody = normalizeText(body);
-        for (AssistantBotHistoryDTO history : safeList(recentHistory)) {
-            if (history == null || !MODE_CHAT.equals(normalizeMode(history.getGenerationMode()))) {
-                continue;
-            }
-            if (isTooSimilar(normalizedBody, normalizeText(history.getDraftBody()), threshold)) {
-                return ChatCandidate.rejected("최근 봇 채팅과 너무 비슷합니다.");
+        if (!isRepetitiveByDesignPersona(persona)) {
+            double threshold = clampThreshold(botProperties.getDuplicateSimilarityThreshold());
+            String normalizedBody = normalizeText(body);
+            for (AssistantBotHistoryDTO history : safeList(recentHistory)) {
+                if (history == null || !MODE_CHAT.equals(normalizeMode(history.getGenerationMode()))) {
+                    continue;
+                }
+                if (isTooSimilar(normalizedBody, normalizeText(history.getDraftBody()), threshold)) {
+                    return ChatCandidate.rejected("최근 봇 채팅과 너무 비슷합니다.");
+                }
             }
         }
 
@@ -951,6 +1018,12 @@ public class AssistantBotService {
                 .replace('\n', ' ')
                 .replaceAll("\\s+", " ")
                 .trim();
+        if (isRepetitiveByDesignPersona(persona)) {
+            normalized = normalizeMeowPublishText(normalized)
+                    .replace('\n', ' ')
+                    .replaceAll("\\s+", " ")
+                    .trim();
+        }
         if (isSingleSentenceOnlyPersona(persona)) {
             normalized = firstSentenceOnly(normalized);
         }
