@@ -3,6 +3,7 @@ package com.sc1hub.common.config;
 import com.sc1hub.common.interceptor.AdminInterceptor;
 import com.sc1hub.common.interceptor.BoardLvInterceptor;
 import com.sc1hub.common.interceptor.CanonicalInterceptor;
+import com.sc1hub.common.interceptor.MemberLoginInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
@@ -18,15 +19,18 @@ public class WebConfig implements WebMvcConfigurer {
     private final CanonicalInterceptor canonicalInterceptor;
     private final BoardLvInterceptor boardLvInterceptor;
     private final AdminInterceptor adminInterceptor;
+    private final MemberLoginInterceptor memberLoginInterceptor;
 
     public WebConfig(VisitorCountInterceptor visitorCountInterceptor,
                      CanonicalInterceptor canonicalInterceptor,
                      BoardLvInterceptor boardLvInterceptor,
-                     AdminInterceptor adminInterceptor) {
+                     AdminInterceptor adminInterceptor,
+                     MemberLoginInterceptor memberLoginInterceptor) {
         this.visitorCountInterceptor = visitorCountInterceptor;
         this.canonicalInterceptor = canonicalInterceptor;
         this.boardLvInterceptor = boardLvInterceptor;
         this.adminInterceptor = adminInterceptor;
+        this.memberLoginInterceptor = memberLoginInterceptor;
     }
 
     @Override
@@ -53,6 +57,8 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(boardLvInterceptor)
                 .addPathPatterns("/**/writePost", "/**/modifyPost/**", "/**/deletePost/**")
                 .excludePathPatterns("/boards/funBoard/**", "/boards/funboard/**");
+        registry.addInterceptor(memberLoginInterceptor)
+                .addPathPatterns("/myPage", "/modifyMyInfo", "/submitModifyMyInfo", "/deleteMyAccount");
         registry.addInterceptor(adminInterceptor)
                 .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
                         "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",

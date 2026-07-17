@@ -15,6 +15,9 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.ui.ExtendedModelMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -73,5 +76,52 @@ class MemberControllerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("", response.getBody());
         verifyNoInteractions(memberService);
+    }
+
+    @Test
+    void extendLogin_rejectsExpiredSessionWithoutCreatingNewSession() {
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/extendLogin");
+
+        ResponseEntity<Void> response = controller.extendLogin(request);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(request.getSession(false));
+    }
+
+    @Test
+    void extendLogin_refreshesAuthenticatedSession() {
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/extendLogin");
+        MockHttpSession session = new MockHttpSession();
+        MemberDTO member = new MemberDTO();
+        member.setId("user");
+        session.setAttribute("member", member);
+        session.setMaxInactiveInterval(60);
+        request.setSession(session);
+
+        ResponseEntity<Void> response = controller.extendLogin(request);
+
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        assertEquals(30 * 60, session.getMaxInactiveInterval());
+    }
+
+    @Test
+    void submitModifyMyInfo_usesAuthenticatedMemberId() throws Exception {
+        MemberDTO authenticatedMember = new MemberDTO();
+        authenticatedMember.setId("owner");
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", authenticatedMember);
+        MemberDTO submitted = new MemberDTO();
+        submitted.setId("another-member");
+        submitted.setPw("new-password");
+        MemberDTO refreshed = new MemberDTO();
+        refreshed.setId("owner");
+        when(memberService.checkLoginData(any(MemberDTO.class))).thenReturn(refreshed);
+
+        String view = controller.submitModifyMyInfo(submitted, session);
+
+        assertEquals("myPage", view);
+        assertEquals("owner", submitted.getId());
+        assertEquals(refreshed, session.getAttribute("member"));
+        verify(memberService).submitModifyMyInfo(submitted);
     }
 }

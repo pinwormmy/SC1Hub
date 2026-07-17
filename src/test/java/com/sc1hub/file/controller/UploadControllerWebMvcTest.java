@@ -2,6 +2,7 @@ package com.sc1hub.file.controller;
 
 import com.sc1hub.common.config.WebConfig;
 import com.sc1hub.common.interceptor.CanonicalInterceptor;
+import com.sc1hub.common.interceptor.MemberLoginInterceptor;
 import com.sc1hub.common.interceptor.AdminInterceptor;
 import com.sc1hub.common.interceptor.BoardLvInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
@@ -79,12 +80,18 @@ class UploadControllerWebMvcTest {
         }
 
         @Bean
+        MemberLoginInterceptor memberLoginInterceptor() {
+            return new MemberLoginInterceptor();
+        }
+
+        @Bean
         WebConfig webConfig(VisitorCountInterceptor visitorCountInterceptor,
                             CanonicalInterceptor canonicalInterceptor,
                             BoardLvInterceptor boardLvInterceptor,
-                            AdminInterceptor adminInterceptor) {
+                            AdminInterceptor adminInterceptor,
+                            MemberLoginInterceptor memberLoginInterceptor) {
             return new WebConfig(visitorCountInterceptor, canonicalInterceptor,
-                    boardLvInterceptor, adminInterceptor);
+                    boardLvInterceptor, adminInterceptor, memberLoginInterceptor);
         }
     }
 

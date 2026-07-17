@@ -30,6 +30,8 @@ import java.util.Map;
 @Controller
 @Slf4j
 public class MemberController {
+    private static final int LOGIN_SESSION_TIMEOUT_SECONDS = 30 * 60;
+
     private final MemberService memberService;
     private final EmailService emailService;
 
@@ -104,6 +106,11 @@ public class MemberController {
 
     @PostMapping("/submitModifyMyInfo")
     public String submitModifyMyInfo(MemberDTO member, HttpSession session) throws Exception {
+        MemberDTO authenticatedMember = (MemberDTO) session.getAttribute("member");
+        if (authenticatedMember == null) {
+            return "redirect:/login";
+        }
+        member.setId(authenticatedMember.getId());
         memberService.submitModifyMyInfo(member);
         session.setAttribute("member", memberService.checkLoginData(member)); // 재로그인해서 회원정보갱신
         return "myPage";
@@ -276,9 +283,16 @@ public class MemberController {
 
     @PutMapping("/extendLogin")
     @ResponseBody
-    public void extendLogin(HttpServletRequest request) {
-        log.info("로그인 시간을 연장합니다.");
-        request.getSession().setMaxInactiveInterval(1800);
+    public ResponseEntity<Void> extendLogin(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
+        if (member == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        session.setMaxInactiveInterval(LOGIN_SESSION_TIMEOUT_SECONDS);
+        log.debug("로그인 시간을 연장합니다. memberId={}", member.getId());
+        return ResponseEntity.noContent().build();
     }
 
     private String resolveSafeReturnPath(String referer) {
