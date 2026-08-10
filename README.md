@@ -159,6 +159,27 @@ fetch('/api/admin/assistant-publisher/auto-publish/run', {
 - `/adminPage/ops/history?days=3&limit=100`
 - `/adminPage/ops/history/summary?days=3`
 
+### AI 한줄 공략 검수
+
+AI 한줄 공략은 공개 글을 직접 작성하지 않습니다. 사이트의 종족전·팁·팀플 공략 게시글과 Google Search 외부 근거를 함께 확인해 비공개 초안을 만들고, 관리자가 `/adminPage/strategy-tips/ai`에서 내부·외부 원문을 확인해 편집·승인한 경우에만 공개됩니다.
+
+- 서울 날짜 기준 하루 최대 3건만 생성합니다.
+- 하루치 최대 3건을 Gemini Interactions API 한 번에 요청합니다.
+- 각 초안에는 Gemini가 실제 Google Search에서 인용한 외부 출처 링크가 반드시 저장됩니다.
+- 검수 대기 초안이 3건이면 새 생성을 멈춰 대기열이 쌓이지 않습니다.
+- 정상적으로 3건을 채우면 같은 날 다시 호출하지 않습니다. 대기열 때문에 일부만 생성했거나 외부 오류가 난 경우에도 하루 총 2회까지만 호출합니다.
+- 승인 전 초안은 `one_line_strategy_ai_draft`에만 저장되므로 공개 목록과 최신글에 노출되지 않습니다.
+
+운영에서는 공용 `application.properties`를 수정하지 말고 외부 `application-online.properties`에 비밀키와 활성화 설정을 둡니다.
+
+```properties
+sc1hub.gemini.apiKey=<운영 전용 비밀키>
+sc1hub.gemini.allowLiveCalls=true
+sc1hub.strategy-tip.ai.enabled=true
+```
+
+공유 기본값은 Google Search grounding과 구조화 출력을 함께 지원하는 `gemini-3.6-flash`의 `low` 사고 수준, 하루 3건, 대기 3건이며 매시 5분에 당일 누락분을 확인합니다. 요청할 때는 세 분류를 한 배치로 묶되 분류마다 검색 질의를 정확히 한 번만 사용하고, DB의 일일 호출 상한과 `(generation_date, slot_no)` 유니크 키가 과금·중복 저장을 제한합니다. 수동 생성도 관리자 검수 화면에서 같은 제한 안에서만 실행됩니다.
+
 ### RAG 적용 흐름
 
 1) `sc1hub.assistant.rag.enabled=true`로 켠 뒤 서버 실행

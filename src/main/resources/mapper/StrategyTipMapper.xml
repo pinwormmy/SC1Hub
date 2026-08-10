@@ -51,7 +51,8 @@
         where tip_num = #{tipNum}
     </select>
 
-    <insert id="insertTip" parameterType="com.sc1hub.strategytip.dto.StrategyTipDTO">
+    <insert id="insertTip" parameterType="com.sc1hub.strategytip.dto.StrategyTipDTO"
+            useGeneratedKeys="true" keyProperty="tipNum">
         insert into one_line_strategy(category, content, writer, member_id, guest_password, reg_date, recommend_count)
         values(#{category}, #{content}, #{writer}, #{memberId}, #{guestPassword}, now(), 0)
     </insert>

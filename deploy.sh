@@ -32,8 +32,10 @@ REMOTE_WEBAPPS_DIR="$REMOTE_TOMCAT_DIR/webapps"
 REMOTE_WAR_PATH="$REMOTE_WEBAPPS_DIR/$REMOTE_WAR_NAME"
 REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
+REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
+REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL="$REMOTE_SCRIPT_DIR/20260810_create_one_line_strategy_ai_draft.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
@@ -63,6 +65,7 @@ echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260810_create_one_line_strategy_ai_draft.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
@@ -73,8 +76,13 @@ ssh "$REMOTE" \
    REMOTE_CONFIG_DIR='$REMOTE_CONFIG_DIR'
    REMOTE_ONLINE_PROPS='$REMOTE_ONLINE_PROPS'
    REMOTE_WAR_NAME='$REMOTE_WAR_NAME'
+   REMOTE_WAR_PATH='$REMOTE_WAR_PATH'
+   REMOTE_UPLOAD_PATH='$REMOTE_UPLOAD_PATH'
+   REMOTE_EXPLODED_DIR='$REMOTE_EXPLODED_DIR'
+   REMOTE_WAR_BACKUP_PATH='$REMOTE_WAR_BACKUP_PATH'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
+   REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL='$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -104,44 +112,113 @@ ssh "$REMOTE" \
      echo \"Missing required online config: \$REMOTE_ONLINE_PROPS\" >&2
      exit 1
    fi
-   if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
-     : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
-   fi
-   $REMOTE_STOP_CMD || true
-   for attempt in 1 2 3 4 5 6 7 8 9 10; do
-     if ! curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
-       break
-     fi
-     perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
-   done
-   if curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
-     echo \"Tomcat is still responding on port \$REMOTE_HTTP_PORT after shutdown.\" >&2
-     exit 1
-   fi
+   chmod 600 \"\$REMOTE_ONLINE_PROPS\"
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\\1#')
+   if [ -z \"\$DB_USER\" ] || [ -z \"\$DB_PASS\" ] || ! printf '%s' \"\$DB_NAME\" | grep -Eq '^[A-Za-z0-9_]+$'; then
+     echo 'Online database configuration is missing or invalid.' >&2
+     exit 1
+   fi
    echo 'Applying visitor count schema...'
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_VISITOR_COUNT_SQL\"
-   ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '\$DB_NAME' AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
+   ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
    if [ \"\$ONE_LINE_STRATEGY_TABLES\" != \"2\" ]; then
      echo 'Applying one-line strategy schema...'
      MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_SQL\"
    fi
-   mv '$REMOTE_UPLOAD_PATH' '$REMOTE_WAR_PATH'
-   rm -rf '$REMOTE_EXPLODED_DIR'
-   $REMOTE_START_CMD
-   for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-     if curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
-       exit 0
+   echo 'Applying one-line strategy AI draft schema...'
+   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL\"
+
+   REQUIRED_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('one_line_strategy', 'one_line_strategy_category', 'one_line_strategy_ai_daily_run', 'one_line_strategy_ai_draft');\" \"\$DB_NAME\")
+   REQUIRED_RUN_COLUMNS=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_daily_run' AND column_name IN ('generation_date', 'api_call_count', 'last_status', 'last_attempt_at', 'completed_at', 'last_error', 'input_tokens', 'output_tokens', 'search_query_count');\" \"\$DB_NAME\")
+   REQUIRED_DRAFT_COLUMNS=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND column_name IN ('draft_id', 'generation_date', 'slot_no', 'category', 'content', 'evidence_summary', 'source_board', 'source_post_num', 'source_title', 'source_excerpt', 'external_source_url', 'external_source_title', 'external_evidence_summary', 'model', 'status', 'created_at', 'reviewed_at', 'reviewed_by', 'published_tip_num');\" \"\$DB_NAME\")
+   REQUIRED_SLOT_UNIQUE=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM (SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND non_unique = 0 GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') = 'generation_date,slot_no') required_unique;\" \"\$DB_NAME\")
+   REQUIRED_CATEGORY_FK=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_category' AND column_name = 'category' AND referenced_table_name = 'one_line_strategy_category' AND referenced_column_name = 'code';\" \"\$DB_NAME\")
+   REQUIRED_PUBLISHED_FK=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_published_tip' AND column_name = 'published_tip_num' AND referenced_table_name = 'one_line_strategy' AND referenced_column_name = 'tip_num';\" \"\$DB_NAME\")
+   REQUIRED_PUBLISHED_DELETE_RULE=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_published_tip' AND delete_rule = 'SET NULL';\" \"\$DB_NAME\")
+   if [ \"\$REQUIRED_TABLES\" != \"4\" ] || [ \"\$REQUIRED_RUN_COLUMNS\" != \"9\" ] || [ \"\$REQUIRED_DRAFT_COLUMNS\" != \"19\" ] || [ \"\$REQUIRED_SLOT_UNIQUE\" -lt \"1\" ] || [ \"\$REQUIRED_CATEGORY_FK\" != \"1\" ] || [ \"\$REQUIRED_PUBLISHED_FK\" != \"1\" ] || [ \"\$REQUIRED_PUBLISHED_DELETE_RULE\" != \"1\" ]; then
+     echo 'Required one-line strategy AI schema validation failed; Tomcat was not stopped.' >&2
+     exit 1
+   fi
+   echo 'Required one-line strategy AI schema validated.'
+   if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
+     echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
+     exit 1
+   fi
+
+   wait_for_local_health() {
+     for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+       if curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
+         return 0
+       fi
+       perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
+     done
+     return 1
+   }
+   wait_for_tomcat_shutdown() {
+     for attempt in \$(seq 1 50); do
+       if ! curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
+         return 0
+       fi
+       perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
+     done
+     return 1
+   }
+   rollback_and_restart() {
+     echo 'New deployment failed; restoring the previous WAR.' >&2
+     $REMOTE_STOP_CMD || true
+     wait_for_tomcat_shutdown || true
+     if [ \"\$HAD_EXISTING_WAR\" = \"1\" ] && [ -f \"\$REMOTE_WAR_BACKUP_PATH\" ]; then
+       cp -p \"\$REMOTE_WAR_BACKUP_PATH\" \"\$REMOTE_WAR_PATH\"
+     else
+       rm -f \"\$REMOTE_WAR_PATH\"
      fi
-     perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
-   done
+     rm -rf \"\$REMOTE_EXPLODED_DIR\"
+     if ! $REMOTE_START_CMD; then
+       echo 'Rollback WAR was restored, but Tomcat restart failed.' >&2
+       return 1
+     fi
+     if ! wait_for_local_health; then
+       echo \"Rollback restart did not become healthy on port \$REMOTE_HTTP_PORT.\" >&2
+       return 1
+     fi
+     echo 'Previous WAR restored and restarted.' >&2
+     return 0
+   }
+
+   HAD_EXISTING_WAR=0
+   if [ -f \"\$REMOTE_WAR_PATH\" ]; then
+     cp -p \"\$REMOTE_WAR_PATH\" \"\$REMOTE_WAR_BACKUP_PATH\"
+     chmod 600 \"\$REMOTE_WAR_BACKUP_PATH\"
+     HAD_EXISTING_WAR=1
+   fi
+   if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
+     : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
+   fi
+   $REMOTE_STOP_CMD || true
+   if ! wait_for_tomcat_shutdown; then
+     echo \"Tomcat is still responding on port \$REMOTE_HTTP_PORT after shutdown.\" >&2
+     exit 1
+   fi
+   if ! mv \"\$REMOTE_UPLOAD_PATH\" \"\$REMOTE_WAR_PATH\"; then
+     rollback_and_restart || true
+     exit 1
+   fi
+   rm -rf \"\$REMOTE_EXPLODED_DIR\"
+   if ! $REMOTE_START_CMD; then
+     rollback_and_restart || true
+     exit 1
+   fi
+   if wait_for_local_health; then
+     exit 0
+   fi
    echo \"Tomcat did not respond on port \$REMOTE_HTTP_PORT after startup.\" >&2
-   tail -n 120 \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" >&2 || true
+   echo \"Inspect \$REMOTE_TOMCAT_DIR/logs/catalina.out for startup details.\" >&2
+   rollback_and_restart || true
    exit 1"
 
 echo "Deploy complete."

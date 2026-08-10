@@ -56,4 +56,8 @@ if [[ "$ONE_LINE_STRATEGY_TABLES" != "2" ]]; then
   MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" "$LOCAL_DB_NAME" < "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql"
 fi
 
+echo "Applying one-line strategy AI draft schema..."
+MYSQL_PWD="$LOCAL_DB_PASS" mysql -u "$LOCAL_DB_USER" "$LOCAL_DB_NAME" \
+  < "$ROOT_DIR/src/main/resources/sql/20260810_create_one_line_strategy_ai_draft.sql"
+
 echo "Local DB schema is ready."

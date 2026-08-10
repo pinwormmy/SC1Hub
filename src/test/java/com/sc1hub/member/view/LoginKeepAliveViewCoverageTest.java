@@ -28,7 +28,8 @@ class LoginKeepAliveViewCoverageTest {
                 "modifyMyInfo.jsp",
                 "adminPage.jsp",
                 "adminOps.jsp",
-                "adminAliasDictionary.jsp"
+                "adminAliasDictionary.jsp",
+                "adminStrategyTipAi.jsp"
         );
 
         for (String viewPath : viewPaths) {

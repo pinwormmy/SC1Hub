@@ -55,6 +55,7 @@ sc1hub.assistant.bot.autoPublishEnabled=false
 sc1hub.assistant.bot.autoPublishCatchUpEnabled=false
 sc1hub.assistant.rag.enabled=false
 sc1hub.assistant.rag.autoUpdate.enabled=false
+sc1hub.strategy-tip.ai.enabled=false
 sc1hub.http-redirect.enabled=false
 EOF
 
