@@ -114,9 +114,13 @@ public class StrategyTipAiDraftStore {
 
     public void failDailyRun(LocalDate generationDate, int attemptNo, String errorMessage,
                              int inputTokens, int outputTokens, int searchQueryCount) {
-        strategyTipAiMapper.failDailyRun(generationDate, attemptNo, truncate(errorMessage, 500),
+        int updated = strategyTipAiMapper.failDailyRun(
+                generationDate, attemptNo, truncate(errorMessage, 500),
                 Math.max(0, inputTokens), Math.max(0, outputTokens),
                 Math.max(0, searchQueryCount));
+        if (updated != 1) {
+            throw new IllegalStateException("AI 한줄 공략 실패 상태를 기록하지 못했습니다.");
+        }
     }
 
     @Transactional

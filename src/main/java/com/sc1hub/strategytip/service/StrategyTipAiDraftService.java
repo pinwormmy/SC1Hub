@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,7 +40,7 @@ import java.util.regex.Pattern;
 public class StrategyTipAiDraftService {
 
     private static final int ABSOLUTE_DAILY_DRAFT_LIMIT = 3;
-    private static final int ABSOLUTE_DAILY_API_CALL_LIMIT = 2;
+    private static final int ABSOLUTE_DAILY_API_CALL_LIMIT = 3;
     private static final int MAX_CONTENT_LENGTH = 160;
     private static final int MAX_GENERATED_CONTENT_LENGTH = 96;
     private static final int MIN_CONTENT_LENGTH = 12;
@@ -49,6 +50,7 @@ public class StrategyTipAiDraftService {
     private static final int MAX_PROMPT_SOURCE_TITLE_LENGTH = 120;
     private static final int MAX_PROMPT_DUPLICATE_EXAMPLES = 12;
     private static final int MAX_PROMPT_DUPLICATE_LENGTH = 96;
+    private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
     private static final double DUPLICATE_SIMILARITY_THRESHOLD = 0.72;
     private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^0-9a-z가-힣]");
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+(?:\\.\\d+)?");
@@ -57,6 +59,7 @@ public class StrategyTipAiDraftService {
     private final GeminiStrategyTipClient geminiClient;
     private final StrategyTipAiProperties properties;
     private final ObjectMapper objectMapper;
+    private final AtomicBoolean generationInProgress = new AtomicBoolean(false);
 
     public StrategyTipAiDraftService(StrategyTipAiDraftStore store,
                                      GeminiStrategyTipClient geminiClient,
@@ -74,6 +77,18 @@ public class StrategyTipAiDraftService {
     }
 
     GenerationResult generateDailyDrafts(LocalDate generationDate, LocalDateTime now) {
+        if (!generationInProgress.compareAndSet(false, true)) {
+            return GenerationResult.skipped("AI 한줄 공략 생성이 이미 실행 중입니다.");
+        }
+        try {
+            return generateDailyDraftsWithLock(generationDate, now);
+        } finally {
+            generationInProgress.set(false);
+        }
+    }
+
+    private GenerationResult generateDailyDraftsWithLock(LocalDate generationDate,
+                                                           LocalDateTime now) {
         if (!properties.isEnabled()) {
             return GenerationResult.skipped("AI 한줄 공략 생성이 비활성화되어 있습니다.");
         }
@@ -82,6 +97,12 @@ public class StrategyTipAiDraftService {
         }
         if (!StringUtils.hasText(properties.getApiKey())) {
             return GenerationResult.skipped("Gemini API 키가 설정되지 않았습니다.");
+        }
+        if (!StringUtils.hasText(properties.getModel())) {
+            return GenerationResult.skipped("Gemini 모델이 설정되지 않았습니다.");
+        }
+        if (!isTrustedGeminiApiEndpoint(properties.getBaseUrl())) {
+            return GenerationResult.skipped("Gemini API 주소 설정을 확인해주세요.");
         }
 
         int dailyLimit = resolveDailyLimit();
@@ -96,60 +117,76 @@ public class StrategyTipAiDraftService {
             return GenerationResult.skipped("검수 대기 초안이 " + maxPending + "건이라 새 생성을 보류했습니다.");
         }
 
-        int requestedCount = Math.min(dailyLimit - generatedToday, maxPending - pendingCount);
-
+        int targetCount = Math.min(dailyLimit - generatedToday, maxPending - pendingCount);
         LocalDateTime staleBefore = now.minusMinutes(Math.max(1, properties.getStaleRunMinutes()));
         int maxDailyApiCalls = Math.max(1,
                 Math.min(properties.getMaxDailyApiCalls(), ABSOLUTE_DAILY_API_CALL_LIMIT));
-        int attemptNo = store.claimDailyApiCall(generationDate, maxDailyApiCalls, staleBefore);
-        if (attemptNo < 1) {
-            return GenerationResult.skipped("오늘의 AI 호출이 이미 실행 중이거나 호출 상한에 도달했습니다.");
-        }
+        List<Integer> slots = findAvailableSlots(generationDate, targetCount, dailyLimit);
+        List<String> comparisonContents = new ArrayList<>(
+                store.getRecentContents(properties.getDuplicateContextLimit()));
+        int createdCount = 0;
 
-        StrategyTipAiGeneratedBatch generated = null;
-        try {
-            List<Integer> slots = findAvailableSlots(generationDate, requestedCount, dailyLimit);
-            List<CategorySources> categorySources = selectCategorySources(generationDate, slots);
-            if (categorySources.size() != requestedCount) {
+        for (Integer slot : slots) {
+            List<Integer> oneSlot = Collections.singletonList(slot);
+            List<CategorySources> categorySources = selectCategorySources(generationDate, oneSlot);
+            if (categorySources.size() != 1) {
                 throw new IllegalStateException("생성할 한줄 공략 분류를 준비하지 못했습니다.");
             }
-            List<String> recentContents = store.getRecentContents(properties.getDuplicateContextLimit());
-            PromptInput promptInput = buildPromptInput(categorySources, recentContents);
-            generated = geminiClient.generate(
-                    buildSystemPrompt(),
-                    serializePromptInput(promptInput),
-                    requestedCount,
-                    promptInput.categories,
-                    promptInput.sourceIds);
+            PromptInput promptInput = buildPromptInput(categorySources, comparisonContents);
+            String serializedPrompt = serializePromptInput(promptInput);
 
-            List<StrategyTipAiDraftDTO> drafts = validateAndMap(
-                    generationDate, slots, categorySources, recentContents, generated);
-            store.saveGeneratedDrafts(generationDate, attemptNo, drafts,
-                    generated.getInputTokens(), generated.getOutputTokens(),
-                    generated.getSearchQueryCount());
-            return GenerationResult.created(drafts.size());
-        } catch (RuntimeException e) {
-            int inputTokens = generated == null ? 0 : generated.getInputTokens();
-            int outputTokens = generated == null ? 0 : generated.getOutputTokens();
-            int searchQueryCount = generated == null ? 0 : generated.getSearchQueryCount();
-            if (e instanceof GeminiStrategyTipException) {
-                GeminiStrategyTipException geminiException = (GeminiStrategyTipException) e;
-                inputTokens = Math.max(inputTokens, geminiException.getInputTokens());
-                outputTokens = Math.max(outputTokens, geminiException.getOutputTokens());
-                searchQueryCount = Math.max(searchQueryCount,
-                        geminiException.getSearchQueryCount());
+            // Preparing sources and prompts does not consume the paid-call budget. Claim the
+            // database slot immediately before the one outbound interaction it represents.
+            int attemptNo = store.claimDailyApiCall(
+                    generationDate, maxDailyApiCalls, staleBefore);
+            if (attemptNo < 1) {
+                return createdCount > 0
+                        ? GenerationResult.created(createdCount)
+                        : GenerationResult.skipped(
+                        "오늘의 AI 호출이 이미 실행 중이거나 호출 상한에 도달했습니다.");
             }
+
+            StrategyTipAiGeneratedBatch generated = null;
             try {
-                store.failDailyRun(generationDate, attemptNo, safeErrorMessage(e),
-                        inputTokens, outputTokens, searchQueryCount);
-            } catch (RuntimeException statusException) {
-                log.error("AI 한줄 공략 실패 상태 기록 실패. date={}, type={}",
-                        generationDate, statusException.getClass().getSimpleName());
+                generated = geminiClient.generate(
+                        buildSystemPrompt(), serializedPrompt, 1,
+                        promptInput.categories, promptInput.sourceIds);
+                List<StrategyTipAiDraftDTO> drafts = validateAndMap(
+                        generationDate, oneSlot, categorySources, comparisonContents, generated);
+                store.saveGeneratedDrafts(generationDate, attemptNo, drafts,
+                        generated.getInputTokens(), generated.getOutputTokens(),
+                        generated.getSearchQueryCount());
+                comparisonContents.add(drafts.get(0).getContent());
+                createdCount++;
+            } catch (RuntimeException e) {
+                recordFailedCall(generationDate, attemptNo, generated, e);
+                throw e;
             }
-            log.warn("AI 한줄 공략 초안 생성 실패. date={}, type={}",
-                    generationDate, e.getClass().getSimpleName());
-            throw e;
         }
+        return GenerationResult.created(createdCount);
+    }
+
+    private void recordFailedCall(LocalDate generationDate, int attemptNo,
+                                  StrategyTipAiGeneratedBatch generated, RuntimeException failure) {
+        int inputTokens = generated == null ? 0 : generated.getInputTokens();
+        int outputTokens = generated == null ? 0 : generated.getOutputTokens();
+        int searchQueryCount = generated == null ? 0 : generated.getSearchQueryCount();
+        if (failure instanceof GeminiStrategyTipException) {
+            GeminiStrategyTipException geminiException = (GeminiStrategyTipException) failure;
+            inputTokens = Math.max(inputTokens, geminiException.getInputTokens());
+            outputTokens = Math.max(outputTokens, geminiException.getOutputTokens());
+            searchQueryCount = Math.max(searchQueryCount,
+                    geminiException.getSearchQueryCount());
+        }
+        try {
+            store.failDailyRun(generationDate, attemptNo, safeErrorMessage(failure),
+                    inputTokens, outputTokens, searchQueryCount);
+        } catch (RuntimeException statusException) {
+            log.error("AI 한줄 공략 실패 상태 기록 실패. date={}, type={}",
+                    generationDate, statusException.getClass().getSimpleName());
+        }
+        log.warn("AI 한줄 공략 초안 생성 실패. date={}, type={}",
+                generationDate, failure.getClass().getSimpleName());
     }
 
     public List<StrategyTipAiDraftDTO> getPendingDrafts() {
@@ -591,6 +628,22 @@ public class StrategyTipAiDraftService {
             }
         }
         return true;
+    }
+
+    private boolean isTrustedGeminiApiEndpoint(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        try {
+            URI uri = new URI(value.trim());
+            int port = uri.getPort();
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    && GEMINI_API_HOST.equalsIgnoreCase(uri.getHost())
+                    && uri.getUserInfo() == null
+                    && (port == -1 || port == 443);
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     private int resolveDailyLimit() {

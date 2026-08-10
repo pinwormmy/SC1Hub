@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,7 +36,7 @@ import java.util.Set;
 public class GeminiStrategyTipClient {
 
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
-    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 1200;
+    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 600;
     private static final int MAX_GENERATED_CONTENT_CHARS = 96;
     private static final int MAX_EVIDENCE_SUMMARY_CHARS = 72;
     private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
@@ -43,14 +44,17 @@ public class GeminiStrategyTipClient {
     private final RestTemplate restTemplate;
     private final StrategyTipAiProperties properties;
     private final ObjectMapper objectMapper;
+    private final GroundingCitationUrlResolver citationUrlResolver;
 
     public GeminiStrategyTipClient(
             @Qualifier("strategyTipAiRestTemplate") RestTemplate restTemplate,
             StrategyTipAiProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            GroundingCitationUrlResolver citationUrlResolver) {
         this.restTemplate = restTemplate;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.citationUrlResolver = citationUrlResolver;
     }
 
     public StrategyTipAiGeneratedBatch generate(String systemPrompt,
@@ -145,6 +149,8 @@ public class GeminiStrategyTipClient {
         constraints.put("allowedInternalSourceIds", sourceIds);
         constraints.put("minimumGoogleSearchQueries", requestedCount);
         constraints.put("maximumGoogleSearchQueries", requestedCount);
+        constraints.put("requiredGoogleSearchQueryExclusions",
+                Arrays.asList("-site:sc1hub.com", "-site:www.sc1hub.com"));
         constraints.put("maximumContentChars", MAX_GENERATED_CONTENT_CHARS);
         constraints.put("maximumEvidenceSummaryChars", MAX_EVIDENCE_SUMMARY_CHARS);
         try {
@@ -152,6 +158,8 @@ public class GeminiStrategyTipClient {
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
                     + "\nGoogle Search query budget: execute exactly " + requestedCount
                     + " queries total, exactly one query for each requested category. "
+                    + "Every query must contain these two literal, separate tokens: "
+                    + "-site:sc1hub.com -site:www.sc1hub.com. "
                     + "Return only the schema JSON. Keep each evidence summary concise. "
                     + "Put exactly one native url_citation annotation inside each corresponding "
                     + "externalEvidenceSummary. Do not output a source URL or title; "
@@ -245,14 +253,14 @@ public class GeminiStrategyTipClient {
             if (!StringUtils.hasText(parts.outputText)) {
                 throw new GeminiStrategyTipException("Gemini returned no structured text output.");
             }
+            validateSearchQueries(parts.searchQueries, requestedCount);
 
-            List<StrategyTipAiGeneratedBatch.Draft> drafts = parseDrafts(parts.outputText,
-                    requestedCount, allowedCategories, allowedSourceIds,
-                    parts.citationTitlesByUrl, parts.citationSpans);
+            ParsedDrafts parsed = parseDrafts(parts.outputText,
+                    requestedCount, allowedCategories, allowedSourceIds, parts.citations);
             String model = root.path("model").asText(fallbackModel);
-            return new StrategyTipAiGeneratedBatch(drafts, model,
+            return new StrategyTipAiGeneratedBatch(parsed.drafts, model,
                     usage.inputTokens, usage.outputTokens,
-                    parts.searchQueryCount, parts.citationTitlesByUrl);
+                    parts.searchQueries.size(), parsed.citationTitlesByUrl);
         } catch (GeminiStrategyTipException e) {
             if (e.hasUsage() || !usage.available) {
                 throw e;
@@ -267,9 +275,8 @@ public class GeminiStrategyTipClient {
             throw new GeminiStrategyTipException("Gemini response is missing interaction steps.");
         }
 
-        Map<String, String> citations = Collections.emptyMap();
-        List<CitationSpan> citationSpans = Collections.emptyList();
-        int searchQueryCount = 0;
+        List<RawCitation> citations = Collections.emptyList();
+        List<String> searchQueries = new ArrayList<>();
         boolean refusal = false;
         String outputText = null;
         for (JsonNode step : steps) {
@@ -279,7 +286,7 @@ public class GeminiStrategyTipClient {
                 if (queries.isArray()) {
                     for (JsonNode query : queries) {
                         if (StringUtils.hasText(query.asText(""))) {
-                            searchQueryCount++;
+                            searchQueries.add(query.asText("").trim());
                         }
                     }
                 }
@@ -293,8 +300,7 @@ public class GeminiStrategyTipClient {
                 continue;
             }
             StringBuilder stepText = new StringBuilder();
-            Map<String, String> stepCitations = new LinkedHashMap<>();
-            List<CitationSpan> stepCitationSpans = new ArrayList<>();
+            List<RawCitation> stepCitations = new ArrayList<>();
             for (JsonNode block : content) {
                 String blockType = block.path("type").asText("");
                 if ("refusal".equals(blockType)) {
@@ -306,20 +312,18 @@ public class GeminiStrategyTipClient {
                 }
                 int blockStartByte = utf8Length(stepText.toString());
                 stepText.append(block.path("text").asText(""));
-                collectCitations(block.path("annotations"), stepCitations,
-                        stepCitationSpans, blockStartByte);
+                collectCitations(block.path("annotations"), stepCitations, blockStartByte);
             }
             if (StringUtils.hasText(stepText.toString())) {
                 outputText = stepText.toString();
                 citations = stepCitations;
-                citationSpans = stepCitationSpans;
             }
         }
-        return new ResponseParts(outputText, citations, citationSpans, searchQueryCount, refusal);
+        return new ResponseParts(outputText, citations, searchQueries, refusal);
     }
 
-    private void collectCitations(JsonNode annotations, Map<String, String> citations,
-                                  List<CitationSpan> citationSpans, int blockStartByte) {
+    private void collectCitations(JsonNode annotations, List<RawCitation> citations,
+                                  int blockStartByte) {
         if (!annotations.isArray()) {
             return;
         }
@@ -332,10 +336,6 @@ public class GeminiStrategyTipClient {
                 continue;
             }
             String title = annotation.path("title").asText("").trim();
-            String previous = citations.get(url);
-            if (previous == null || (!StringUtils.hasText(previous) && StringUtils.hasText(title))) {
-                citations.put(url, title);
-            }
             JsonNode startNode = annotation.get("start_index");
             JsonNode endNode = annotation.get("end_index");
             if (startNode != null && endNode != null
@@ -343,20 +343,19 @@ public class GeminiStrategyTipClient {
                 int start = startNode.asInt();
                 int end = endNode.asInt();
                 if (start >= 0 && end > start) {
-                    citationSpans.add(new CitationSpan(
-                            url, blockStartByte + start, blockStartByte + end));
+                    citations.add(new RawCitation(
+                            url, title, blockStartByte + start, blockStartByte + end));
                 }
             }
         }
     }
 
-    private List<StrategyTipAiGeneratedBatch.Draft> parseDrafts(
+    private ParsedDrafts parseDrafts(
             String outputText,
             int requestedCount,
             List<String> allowedCategories,
             List<String> allowedSourceIds,
-            Map<String, String> citations,
-            List<CitationSpan> citationSpans) {
+            List<RawCitation> citations) {
         JsonNode output;
         try {
             output = objectMapper.readTree(outputText);
@@ -375,6 +374,9 @@ public class GeminiStrategyTipClient {
             throw new GeminiStrategyTipException("Gemini structured output draft ranges are invalid.");
         }
         List<StrategyTipAiGeneratedBatch.Draft> drafts = new ArrayList<>();
+        Map<String, String> resolvedCitations = new LinkedHashMap<>();
+        Map<String, GroundingCitationUrlResolver.ResolvedDestination> destinationsByRawUrl =
+                new LinkedHashMap<>();
         for (int draftIndex = 0; draftIndex < draftNodes.size(); draftIndex++) {
             JsonNode draftNode = draftNodes.get(draftIndex);
             String category = requiredOutputText(draftNode, "category");
@@ -387,19 +389,22 @@ public class GeminiStrategyTipClient {
                 throw new GeminiStrategyTipException("Gemini returned a draft outside the allowed source scope.");
             }
             DraftByteRanges ranges = draftRanges.get(draftIndex);
-            String externalSourceUrl = singleCitationUrlWithinEvidenceRange(
-                    ranges.draftRange, ranges.externalEvidenceRange, citationSpans);
-            if (!StringUtils.hasText(externalSourceUrl)
-                    || !citations.containsKey(externalSourceUrl)) {
+            List<RawCitation> draftCitations = citationsForDraft(
+                    ranges.draftRange, ranges.externalEvidenceRange, citations,
+                    requestedCount == 1, utf8Length(outputText));
+            ResolvedCitation resolvedCitation = resolveSingleCitation(
+                    draftCitations, destinationsByRawUrl);
+            if (resolvedCitation == null) {
                 throw new GeminiStrategyTipException(
                         "Gemini did not bind exactly one native Google Search citation to that draft.");
             }
-            String externalSourceTitle = citationTitleOrHost(
-                    externalSourceUrl, citations.get(externalSourceUrl));
+            String externalSourceUrl = resolvedCitation.url;
+            String externalSourceTitle = resolvedCitation.title;
+            resolvedCitations.putIfAbsent(externalSourceUrl, externalSourceTitle);
             drafts.add(new StrategyTipAiGeneratedBatch.Draft(category, content, sourceId,
                     evidenceSummary, externalSourceUrl, externalSourceTitle, externalEvidenceSummary));
         }
-        return drafts;
+        return new ParsedDrafts(drafts, resolvedCitations);
     }
 
     private List<DraftByteRanges> findDraftByteRanges(String outputText) {
@@ -532,45 +537,87 @@ public class GeminiStrategyTipClient {
         return -1;
     }
 
-    private String singleCitationUrlWithinEvidenceRange(
+    private List<RawCitation> citationsForDraft(
             ByteRange draftRange,
             ByteRange externalEvidenceRange,
-            List<CitationSpan> citationSpans) {
-        if (citationSpans == null) {
-            return null;
+            List<RawCitation> citations,
+            boolean singleDraft,
+            int outputLengthBytes) {
+        if (citations == null || citations.isEmpty()) {
+            return Collections.emptyList();
         }
-        String citationUrl = null;
-        int citationCount = 0;
-        for (CitationSpan citation : citationSpans) {
+        List<RawCitation> matches = new ArrayList<>();
+        for (RawCitation citation : citations) {
+            if (citation.startByte < 0 || citation.endByte > outputLengthBytes
+                    || citation.endByte <= citation.startByte) {
+                continue;
+            }
             boolean overlapsDraft = citation.startByte < draftRange.endByte
                     && citation.endByte > draftRange.startByte;
             if (!overlapsDraft) {
                 continue;
             }
-            if (citation.startByte < externalEvidenceRange.startByte
-                    || citation.endByte > externalEvidenceRange.endByte) {
-                return null;
+            if (!singleDraft && (citation.startByte < externalEvidenceRange.startByte
+                    || citation.endByte > externalEvidenceRange.endByte)) {
+                return Collections.emptyList();
             }
-            citationCount++;
-            if (citationCount > 1) {
-                return null;
-            }
-            citationUrl = citation.url;
+            matches.add(citation);
         }
-        return citationUrl;
+        return matches;
     }
 
-    private String citationTitleOrHost(String url, String title) {
-        if (StringUtils.hasText(title)) {
-            return title.trim();
+    private ResolvedCitation resolveSingleCitation(
+            List<RawCitation> rawCitations,
+            Map<String, GroundingCitationUrlResolver.ResolvedDestination> destinationsByRawUrl) {
+        if (rawCitations == null || rawCitations.isEmpty()) {
+            return null;
         }
-        try {
-            String host = new URI(url).getHost();
-            return StringUtils.hasText(host)
-                    ? host.toLowerCase(java.util.Locale.ROOT) : "";
-        } catch (URISyntaxException e) {
-            return "";
+
+        Map<String, String> titlesByFinalUrl = new LinkedHashMap<>();
+        for (RawCitation rawCitation : rawCitations) {
+            GroundingCitationUrlResolver.ResolvedDestination destination =
+                    destinationsByRawUrl.get(rawCitation.url);
+            if (destination == null) {
+                destination = citationUrlResolver.resolveDestination(rawCitation.url);
+                destinationsByRawUrl.put(rawCitation.url, destination);
+            }
+            String title = citationUrlResolver.safeDisplayTitle(destination, rawCitation.title);
+            String previous = titlesByFinalUrl.get(destination.getUrl());
+            if (previous == null || (!StringUtils.hasText(previous) && StringUtils.hasText(title))) {
+                titlesByFinalUrl.put(destination.getUrl(), title);
+            }
         }
+        if (titlesByFinalUrl.size() != 1) {
+            return null;
+        }
+        Map.Entry<String, String> citation = titlesByFinalUrl.entrySet().iterator().next();
+        return new ResolvedCitation(citation.getKey(), citation.getValue());
+    }
+
+    private void validateSearchQueries(List<String> searchQueries, int requestedCount) {
+        if (searchQueries == null || searchQueries.size() != requestedCount) {
+            throw new GeminiStrategyTipException(
+                    "Gemini did not execute exactly one safe Google Search query per draft.");
+        }
+        for (String query : searchQueries) {
+            if (!containsQueryToken(query, "-site:sc1hub.com")
+                    || !containsQueryToken(query, "-site:www.sc1hub.com")) {
+                throw new GeminiStrategyTipException(
+                        "Gemini Google Search query did not exclude SC1Hub.");
+            }
+        }
+    }
+
+    private boolean containsQueryToken(String query, String requiredToken) {
+        if (!StringUtils.hasText(query)) {
+            return false;
+        }
+        for (String token : query.trim().split("\\s+")) {
+            if (requiredToken.equals(token.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int utf8Length(String value) {
@@ -730,20 +777,17 @@ public class GeminiStrategyTipClient {
 
     private static final class ResponseParts {
         private final String outputText;
-        private final Map<String, String> citationTitlesByUrl;
-        private final List<CitationSpan> citationSpans;
-        private final int searchQueryCount;
+        private final List<RawCitation> citations;
+        private final List<String> searchQueries;
         private final boolean refusal;
 
         private ResponseParts(String outputText,
-                              Map<String, String> citationTitlesByUrl,
-                              List<CitationSpan> citationSpans,
-                              int searchQueryCount,
+                              List<RawCitation> citations,
+                              List<String> searchQueries,
                               boolean refusal) {
             this.outputText = outputText;
-            this.citationTitlesByUrl = citationTitlesByUrl;
-            this.citationSpans = citationSpans;
-            this.searchQueryCount = searchQueryCount;
+            this.citations = citations;
+            this.searchQueries = searchQueries;
             this.refusal = refusal;
         }
     }
@@ -763,15 +807,38 @@ public class GeminiStrategyTipClient {
         }
     }
 
-    private static final class CitationSpan {
+    private static final class RawCitation {
         private final String url;
+        private final String title;
         private final int startByte;
         private final int endByte;
 
-        private CitationSpan(String url, int startByte, int endByte) {
+        private RawCitation(String url, String title, int startByte, int endByte) {
             this.url = url;
+            this.title = title;
             this.startByte = startByte;
             this.endByte = endByte;
+        }
+    }
+
+    private static final class ResolvedCitation {
+        private final String url;
+        private final String title;
+
+        private ResolvedCitation(String url, String title) {
+            this.url = url;
+            this.title = title;
+        }
+    }
+
+    private static final class ParsedDrafts {
+        private final List<StrategyTipAiGeneratedBatch.Draft> drafts;
+        private final Map<String, String> citationTitlesByUrl;
+
+        private ParsedDrafts(List<StrategyTipAiGeneratedBatch.Draft> drafts,
+                             Map<String, String> citationTitlesByUrl) {
+            this.drafts = drafts;
+            this.citationTitlesByUrl = citationTitlesByUrl;
         }
     }
 

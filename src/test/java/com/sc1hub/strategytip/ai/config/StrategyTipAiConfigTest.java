@@ -23,10 +23,10 @@ class StrategyTipAiConfigTest {
                 properties.getBaseUrl());
         assertEquals("gemini-3.6-flash", properties.getModel());
         assertEquals("minimal", properties.getThinkingLevel());
-        assertEquals(1200, properties.getMaxOutputTokens());
+        assertEquals(600, properties.getMaxOutputTokens());
         assertEquals(3, properties.getDailyDraftLimit());
         assertEquals(3, properties.getMaxPendingDrafts());
-        assertEquals(2, properties.getMaxDailyApiCalls());
+        assertEquals(3, properties.getMaxDailyApiCalls());
         assertEquals(360, properties.getSourceExcerptChars());
     }
 

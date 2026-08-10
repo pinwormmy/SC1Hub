@@ -45,7 +45,8 @@ class GeminiStrategyTipClientTest {
         properties.setAllowLiveCalls(true);
         properties.setApiKey("test-gemini-key");
         properties.setBaseUrl(API_URL);
-        client = new GeminiStrategyTipClient(restTemplate, properties, new ObjectMapper());
+        client = new GeminiStrategyTipClient(restTemplate, properties, new ObjectMapper(),
+                new GroundingCitationUrlResolver());
     }
 
     @Test
@@ -62,11 +63,13 @@ class GeminiStrategyTipClientTest {
                         "maximumGoogleSearchQueries\":1")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
                         "execute exactly 1 queries total")))
+                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
+                        "-site:sc1hub.com -site:www.sc1hub.com")))
                 .andExpect(jsonPath("$.tools[0].type").value("google_search"))
                 .andExpect(jsonPath("$.store").value(false))
                 .andExpect(jsonPath("$.generation_config.thinking_level").value("minimal"))
                 .andExpect(jsonPath("$.generation_config.thinking_summaries").value("none"))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(1200))
+                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(600))
                 .andExpect(jsonPath("$.response_format.length()").value(1))
                 .andExpect(jsonPath("$.response_format[0].type").value("text"))
                 .andExpect(jsonPath("$.response_format[0].mime_type").value("application/json"))
@@ -201,6 +204,158 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
+    void generate_acceptsBroadFullOutputCitationForSingleDraft() {
+        String escapedOutput = escapedStructuredOutput();
+        String plainOutput = escapedOutput.replace("\\\"", "\"");
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponse(
+                        CITATION_URL, 0, plainOutput.getBytes(StandardCharsets.UTF_8).length,
+                        escapedOutput), MediaType.APPLICATION_JSON));
+
+        StrategyTipAiGeneratedBatch batch = generateOne();
+
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
+        server.verify();
+    }
+
+    @Test
+    void generate_deduplicatesRepeatedSingleDraftCitationsToSameDestination() {
+        String escapedOutput = escapedStructuredOutput();
+        String plainOutput = escapedOutput.replace("\\\"", "\"");
+        int outputBytes = plainOutput.getBytes(StandardCharsets.UTF_8).length;
+        String first = citationJson(CITATION_URL, "Trusted Strategy Guide", 0, outputBytes);
+        String response = completedResponseWithAnnotations(
+                "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
+                escapedOutput, first + "," + first);
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        StrategyTipAiGeneratedBatch batch = generateOne();
+
+        assertEquals(1, batch.getCitationTitlesByUrl().size());
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsTwoDistinctExternalDestinationsForSingleDraft() {
+        String escapedOutput = escapedStructuredOutput();
+        String plainOutput = escapedOutput.replace("\\\"", "\"");
+        int outputBytes = plainOutput.getBytes(StandardCharsets.UTF_8).length;
+        String annotations = citationJson(CITATION_URL, "First guide", 0, outputBytes)
+                + "," + citationJson("https://liquipedia.net/starcraft/Strategy",
+                "Second guide", 0, outputBytes);
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponseWithAnnotations(
+                        "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
+                        escapedOutput, annotations), MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+
+        assertTrue(exception.getMessage().contains("exactly one native Google Search citation"));
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsSearchQueryWithoutBothSc1hubExclusions() {
+        String response = completedResponse(CITATION_URL)
+                .replace("zvp opening defense -site:sc1hub.com -site:www.sc1hub.com",
+                        "zvp opening defense -site:sc1hub.com");
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+
+        assertTrue(exception.getMessage().contains("did not exclude SC1Hub"));
+        assertEquals(1, exception.getSearchQueryCount());
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsMoreThanOneActualSearchQueryForSingleDraft() {
+        String safeQuery = "zvp opening defense -site:sc1hub.com -site:www.sc1hub.com";
+        String response = completedResponse(CITATION_URL)
+                .replace("\"queries\":[\"" + safeQuery + "\"]",
+                        "\"queries\":[\"" + safeQuery + "\",\"" + safeQuery + "\"]");
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+
+        assertTrue(exception.getMessage().contains("exactly one safe Google Search query"));
+        assertEquals(2, exception.getSearchQueryCount());
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsDirectClaimThatSc1hubIsExternal() {
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponse(
+                        "https://sc1hub.com/boards/pvspboard/readPost?postNum=2"),
+                        MediaType.APPLICATION_JSON));
+        GeminiStrategyTipException direct = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+        assertTrue(direct.getMessage().contains("unsafe external citation URL"));
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsTitleClaimThatSc1hubIsExternal() {
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponse(CITATION_URL)
+                        .replace("Trusted Strategy Guide", "guide.sc1hub.com"),
+                        MediaType.APPLICATION_JSON));
+        GeminiStrategyTipException title = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+        assertTrue(title.getMessage().contains("cited SC1Hub"));
+        server.verify();
+    }
+
+    @Test
+    void generate_resolvesTrustedGoogleRedirectAndDoesNotFetchExternalDestination() {
+        final int[] fetchCount = {0};
+        GroundingCitationUrlResolver resolver = new GroundingCitationUrlResolver(uri -> {
+            fetchCount[0]++;
+            assertEquals("vertexaisearch.cloud.google.com", uri.getHost());
+            return new GroundingCitationUrlResolver.RedirectResponse(
+                    302, "https://liquipedia.net/starcraft/Strategy");
+        });
+        client = new GeminiStrategyTipClient(restTemplate, properties, new ObjectMapper(), resolver);
+        String groundingUrl = "https://vertexaisearch.cloud.google.com/"
+                + "grounding-api-redirect/test-token";
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponse(groundingUrl), MediaType.APPLICATION_JSON));
+
+        StrategyTipAiGeneratedBatch batch = generateOne();
+
+        assertEquals("https://liquipedia.net/starcraft/Strategy",
+                batch.getDrafts().get(0).getExternalSourceUrl());
+        assertEquals(1, fetchCount[0]);
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsTrustedGoogleRedirectThatEndsAtSc1hub() {
+        GroundingCitationUrlResolver resolver = new GroundingCitationUrlResolver(uri ->
+                new GroundingCitationUrlResolver.RedirectResponse(
+                        302, "https://www.sc1hub.com/boards/tipboard/readPost?postNum=4"));
+        client = new GeminiStrategyTipClient(restTemplate, properties, new ObjectMapper(), resolver);
+        String groundingUrl = "https://vertexaisearch.cloud.google.com/"
+                + "grounding-api-redirect/test-token";
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponse(groundingUrl), MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+
+        assertTrue(exception.getMessage().contains("unsafe external citation URL"));
+        server.verify();
+    }
+
+    @Test
     void generate_preservesUsageWhenStructuredOutputCannotBeParsed() {
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedResponse(
@@ -267,7 +422,7 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
-    void generate_rejectsCitationBoundToContentInsteadOfExternalEvidence() {
+    void generate_acceptsSingleDraftCitationBoundAnywhereInsideThatDraft() {
         String escapedOutput = escapedStructuredOutput();
         String plainOutput = escapedOutput.replace("\\\"", "\"");
         String content = "질럿 압박을 확인하면 입구 수비 병력을 먼저 보강하세요.";
@@ -278,22 +433,18 @@ class GeminiStrategyTipClientTest {
                         CITATION_URL, citationStart, citationEnd, escapedOutput),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiGeneratedBatch batch = generateOne();
 
-        assertTrue(exception.getMessage().contains("exactly one native Google Search citation"));
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
         server.verify();
     }
 
     @Test
-    void generate_rejectsCitationSpanCrossingTwoDrafts() {
+    void generate_rejectsBroadFullOutputCitationForMultipleDrafts() {
         String escapedOutput = escapedTwoDraftStructuredOutput();
         String plainOutput = escapedOutput.replace("\\\"", "\"");
-        String firstEvidence = "외부 가이드도 같은 초반 대응을 설명합니다.";
-        String secondEvidence = "외부 가이드도 방어 위치 조정을 설명합니다.";
-        int citationStart = utf8IndexOf(plainOutput, firstEvidence, 0);
-        int secondStart = utf8IndexOf(plainOutput, secondEvidence, 0);
-        int citationEnd = secondStart + secondEvidence.getBytes(StandardCharsets.UTF_8).length;
+        int citationStart = 0;
+        int citationEnd = plainOutput.getBytes(StandardCharsets.UTF_8).length;
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedTwoDraftResponseWithSingleCitation(
                         escapedOutput, citationStart, citationEnd), MediaType.APPLICATION_JSON));
@@ -311,7 +462,7 @@ class GeminiStrategyTipClientTest {
     void generate_clampsConfiguredOutputTokenLimit() {
         properties.setMaxOutputTokens(999_999);
         server.expect(requestTo(API_URL))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(1200))
+                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(600))
                 .andRespond(withSuccess(completedResponse(CITATION_URL), MediaType.APPLICATION_JSON));
 
         StrategyTipAiGeneratedBatch batch = generateOne();
@@ -407,7 +558,9 @@ class GeminiStrategyTipClientTest {
                 + "\"status\":\"completed\","
                 + "\"model\":\"gemini-3.6-flash\","
                 + "\"steps\":["
-                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":[\"zvp defense\",\"tvp defense\"]}},"
+                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":["
+                + "\"zvp defense -site:sc1hub.com -site:www.sc1hub.com\","
+                + "\"tvp defense -site:sc1hub.com -site:www.sc1hub.com\"]}},"
                 + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\","
                 + "\"text\":\"" + escapedOutput + "\","
                 + "\"annotations\":["
@@ -428,7 +581,9 @@ class GeminiStrategyTipClientTest {
                 + "\"status\":\"completed\","
                 + "\"model\":\"gemini-3.6-flash\","
                 + "\"steps\":["
-                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":[\"zvp defense\",\"tvp defense\"]}},"
+                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":["
+                + "\"zvp defense -site:sc1hub.com -site:www.sc1hub.com\","
+                + "\"tvp defense -site:sc1hub.com -site:www.sc1hub.com\"]}},"
                 + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\","
                 + "\"text\":\"" + escapedOutput + "\","
                 + "\"annotations\":[{\"type\":\"url_citation\",\"url\":\"" + CITATION_URL
@@ -445,7 +600,8 @@ class GeminiStrategyTipClientTest {
                 + "\"status\":\"completed\","
                 + "\"model\":\"gemini-3.6-flash\","
                 + "\"steps\":["
-                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":[\"zvp opening defense\"]}},"
+                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":["
+                + "\"zvp opening defense -site:sc1hub.com -site:www.sc1hub.com\"]}},"
                 + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\","
                 + "\"text\":\"" + escapedOutput + "\","
                 + "\"annotations\":[{\"type\":\"url_citation\","
@@ -455,5 +611,27 @@ class GeminiStrategyTipClientTest {
                 + "\"usage\":{\"total_input_tokens\":123,\"total_output_tokens\":45,"
                 + "\"total_thought_tokens\":7}"
                 + "}";
+    }
+
+    private String completedResponseWithAnnotations(String query, String escapedOutput,
+                                                    String annotationsJson) {
+        return "{"
+                + "\"status\":\"completed\","
+                + "\"model\":\"gemini-3.6-flash\","
+                + "\"steps\":["
+                + "{\"type\":\"google_search_call\",\"arguments\":{\"queries\":[\""
+                + query + "\"]}},"
+                + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\","
+                + "\"text\":\"" + escapedOutput + "\","
+                + "\"annotations\":[" + annotationsJson + "]}]}],"
+                + "\"usage\":{\"total_input_tokens\":123,\"total_output_tokens\":45,"
+                + "\"total_thought_tokens\":7}"
+                + "}";
+    }
+
+    private String citationJson(String url, String title, int start, int end) {
+        return "{\"type\":\"url_citation\",\"url\":\"" + url
+                + "\",\"title\":\"" + title + "\",\"start_index\":" + start
+                + ",\"end_index\":" + end + "}";
     }
 }

@@ -120,11 +120,26 @@ class StrategyTipAiDraftStoreTest {
     @Test
     void failDailyRun_keepsAttemptOwnershipAndClampsUsageCounters() {
         LocalDate date = LocalDate.of(2026, 8, 10);
+        when(strategyTipAiMapper.failDailyRun(
+                date, 2, "provider validation failed", 0, 7, 3)).thenReturn(1);
 
         store.failDailyRun(date, 2, " provider validation failed ", -1, 7, 3);
 
         verify(strategyTipAiMapper).failDailyRun(
                 date, 2, "provider validation failed", 0, 7, 3);
+    }
+
+    @Test
+    void failDailyRun_rejectsLostAttemptOwnership() {
+        LocalDate date = LocalDate.of(2026, 8, 10);
+        when(strategyTipAiMapper.failDailyRun(
+                date, 2, "provider validation failed", 12, 7, 1)).thenReturn(0);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> store.failDailyRun(
+                        date, 2, "provider validation failed", 12, 7, 1));
+
+        assertTrue(exception.getMessage().contains("기록하지 못"));
     }
 
     @Test
