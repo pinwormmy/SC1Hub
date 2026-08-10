@@ -219,6 +219,41 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
+    void generate_acceptsSingleDraftCitationWithoutOffsets() {
+        String response = completedResponseWithAnnotations(
+                "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
+                escapedStructuredOutput(),
+                citationJsonWithoutOffsets(CITATION_URL, "Trusted Strategy Guide"));
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        StrategyTipAiGeneratedBatch batch = generateOne();
+
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
+        server.verify();
+    }
+
+    @Test
+    void generate_acceptsSingleDraftMalformedAndOutOfRangeOffsetsWhenUrlIsUnique() {
+        String malformed = "{\"type\":\"url_citation\",\"url\":\"" + CITATION_URL
+                + "\",\"title\":\"Trusted Strategy Guide\","
+                + "\"start_index\":\"not-a-number\",\"end_index\":{}}";
+        String outOfRange = citationJson(
+                CITATION_URL, "Trusted Strategy Guide", 999_999, 1_000_000);
+        String response = completedResponseWithAnnotations(
+                "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
+                escapedStructuredOutput(), malformed + "," + outOfRange);
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        StrategyTipAiGeneratedBatch batch = generateOne();
+
+        assertEquals(1, batch.getCitationTitlesByUrl().size());
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
+        server.verify();
+    }
+
+    @Test
     void generate_deduplicatesRepeatedSingleDraftCitationsToSameDestination() {
         String escapedOutput = escapedStructuredOutput();
         String plainOutput = escapedOutput.replace("\\\"", "\"");
@@ -249,6 +284,23 @@ class GeminiStrategyTipClientTest {
                 .andRespond(withSuccess(completedResponseWithAnnotations(
                         "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
                         escapedOutput, annotations), MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class, this::generateOne);
+
+        assertTrue(exception.getMessage().contains("exactly one native Google Search citation"));
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsTwoDistinctExternalDestinationsWithoutOffsetsForSingleDraft() {
+        String annotations = citationJsonWithoutOffsets(CITATION_URL, "First guide")
+                + "," + citationJsonWithoutOffsets(
+                "https://liquipedia.net/starcraft/Strategy", "Second guide");
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedResponseWithAnnotations(
+                        "zvp opening -site:sc1hub.com -site:www.sc1hub.com",
+                        escapedStructuredOutput(), annotations), MediaType.APPLICATION_JSON));
 
         GeminiStrategyTipException exception = assertThrows(
                 GeminiStrategyTipException.class, this::generateOne);
@@ -409,15 +461,14 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
-    void generate_rejectsCitationOutsideTheDraftOutputRange() {
+    void generate_acceptsSingleDraftCitationOutsideTheDraftOutputRange() {
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedResponse(CITATION_URL, 0, 1),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiGeneratedBatch batch = generateOne();
 
-        assertTrue(exception.getMessage().contains("exactly one native Google Search citation"));
+        assertEquals(CITATION_URL, batch.getDrafts().get(0).getExternalSourceUrl());
         server.verify();
     }
 
@@ -448,6 +499,24 @@ class GeminiStrategyTipClientTest {
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedTwoDraftResponseWithSingleCitation(
                         escapedOutput, citationStart, citationEnd), MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class,
+                () -> client.generate("system rules", "source data", 2,
+                        Arrays.asList("zvp", "tvp"), Arrays.asList("zvp:10", "tvp:20")));
+
+        assertTrue(exception.getMessage().contains("exactly one native Google Search citation"));
+        server.verify();
+    }
+
+    @Test
+    void generate_rejectsCitationWithoutOffsetsForMultipleDrafts() {
+        String escapedOutput = escapedTwoDraftStructuredOutput();
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(completedTwoDraftResponseWithAnnotations(
+                        escapedOutput,
+                        citationJsonWithoutOffsets(CITATION_URL, "Trusted Strategy Guide")),
+                        MediaType.APPLICATION_JSON));
 
         GeminiStrategyTipException exception = assertThrows(
                 GeminiStrategyTipException.class,
@@ -577,6 +646,12 @@ class GeminiStrategyTipClientTest {
 
     private String completedTwoDraftResponseWithSingleCitation(
             String escapedOutput, int citationStart, int citationEnd) {
+        return completedTwoDraftResponseWithAnnotations(escapedOutput,
+                citationJson(CITATION_URL, "Trusted Strategy Guide", citationStart, citationEnd));
+    }
+
+    private String completedTwoDraftResponseWithAnnotations(
+            String escapedOutput, String annotationsJson) {
         return "{"
                 + "\"status\":\"completed\","
                 + "\"model\":\"gemini-3.6-flash\","
@@ -586,9 +661,7 @@ class GeminiStrategyTipClientTest {
                 + "\"tvp defense -site:sc1hub.com -site:www.sc1hub.com\"]}},"
                 + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\","
                 + "\"text\":\"" + escapedOutput + "\","
-                + "\"annotations\":[{\"type\":\"url_citation\",\"url\":\"" + CITATION_URL
-                + "\",\"title\":\"Trusted Strategy Guide\",\"start_index\":" + citationStart
-                + ",\"end_index\":" + citationEnd + "}]}]}],"
+                + "\"annotations\":[" + annotationsJson + "]}]}],"
                 + "\"usage\":{\"total_input_tokens\":246,\"total_output_tokens\":90,"
                 + "\"total_thought_tokens\":14}"
                 + "}";
@@ -633,5 +706,10 @@ class GeminiStrategyTipClientTest {
         return "{\"type\":\"url_citation\",\"url\":\"" + url
                 + "\",\"title\":\"" + title + "\",\"start_index\":" + start
                 + ",\"end_index\":" + end + "}";
+    }
+
+    private String citationJsonWithoutOffsets(String url, String title) {
+        return "{\"type\":\"url_citation\",\"url\":\"" + url
+                + "\",\"title\":\"" + title + "\"}";
     }
 }

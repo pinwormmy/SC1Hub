@@ -338,15 +338,23 @@ public class GeminiStrategyTipClient {
             String title = annotation.path("title").asText("").trim();
             JsonNode startNode = annotation.get("start_index");
             JsonNode endNode = annotation.get("end_index");
+            int absoluteStart = -1;
+            int absoluteEnd = -1;
             if (startNode != null && endNode != null
+                    && startNode.isIntegralNumber() && endNode.isIntegralNumber()
                     && startNode.canConvertToInt() && endNode.canConvertToInt()) {
                 int start = startNode.asInt();
                 int end = endNode.asInt();
                 if (start >= 0 && end > start) {
-                    citations.add(new RawCitation(
-                            url, title, blockStartByte + start, blockStartByte + end));
+                    long shiftedStart = (long) blockStartByte + start;
+                    long shiftedEnd = (long) blockStartByte + end;
+                    if (shiftedEnd <= Integer.MAX_VALUE) {
+                        absoluteStart = (int) shiftedStart;
+                        absoluteEnd = (int) shiftedEnd;
+                    }
                 }
             }
+            citations.add(new RawCitation(url, title, absoluteStart, absoluteEnd));
         }
     }
 
@@ -546,6 +554,9 @@ public class GeminiStrategyTipClient {
         if (citations == null || citations.isEmpty()) {
             return Collections.emptyList();
         }
+        if (singleDraft) {
+            return new ArrayList<>(citations);
+        }
         List<RawCitation> matches = new ArrayList<>();
         for (RawCitation citation : citations) {
             if (citation.startByte < 0 || citation.endByte > outputLengthBytes
@@ -557,8 +568,8 @@ public class GeminiStrategyTipClient {
             if (!overlapsDraft) {
                 continue;
             }
-            if (!singleDraft && (citation.startByte < externalEvidenceRange.startByte
-                    || citation.endByte > externalEvidenceRange.endByte)) {
+            if (citation.startByte < externalEvidenceRange.startByte
+                    || citation.endByte > externalEvidenceRange.endByte) {
                 return Collections.emptyList();
             }
             matches.add(citation);
