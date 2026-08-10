@@ -73,6 +73,20 @@ class StrategyTipAiDraftStoreTest {
     }
 
     @Test
+    void getUsedCategories_returnsMapperValuesAndNormalizesNullResult() {
+        LocalDate date = LocalDate.of(2026, 8, 11);
+        List<String> categories = Arrays.asList("t_vs_z", "p_vs_t");
+        when(strategyTipAiMapper.selectUsedCategories(date))
+                .thenReturn(categories)
+                .thenReturn((List<String>) null);
+
+        assertEquals(categories, store.getUsedCategories(date));
+        assertTrue(store.getUsedCategories(date).isEmpty());
+
+        verify(strategyTipAiMapper, org.mockito.Mockito.times(2)).selectUsedCategories(date);
+    }
+
+    @Test
     void claimDailyApiCall_insertsRunThenClaimsAtomically() {
         LocalDate date = LocalDate.of(2026, 8, 10);
         LocalDateTime staleBefore = LocalDateTime.of(2026, 8, 10, 10, 0);

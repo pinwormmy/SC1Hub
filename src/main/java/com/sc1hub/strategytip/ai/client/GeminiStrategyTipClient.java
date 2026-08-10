@@ -20,7 +20,6 @@ import org.springframework.web.client.RestTemplate;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,25 +35,23 @@ import java.util.Set;
 public class GeminiStrategyTipClient {
 
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
-    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 600;
+    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 3000;
     private static final int MAX_GENERATED_CONTENT_CHARS = 96;
+    private static final int MIN_EVIDENCE_SUMMARY_CHARS = 10;
     private static final int MAX_EVIDENCE_SUMMARY_CHARS = 72;
     private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
 
     private final RestTemplate restTemplate;
     private final StrategyTipAiProperties properties;
     private final ObjectMapper objectMapper;
-    private final GroundingCitationUrlResolver citationUrlResolver;
 
     public GeminiStrategyTipClient(
             @Qualifier("strategyTipAiRestTemplate") RestTemplate restTemplate,
             StrategyTipAiProperties properties,
-            ObjectMapper objectMapper,
-            GroundingCitationUrlResolver citationUrlResolver) {
+            ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.citationUrlResolver = citationUrlResolver;
     }
 
     public StrategyTipAiGeneratedBatch generate(String systemPrompt,
@@ -120,8 +117,8 @@ public class GeminiStrategyTipClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("system_instruction", systemPrompt);
-        payload.put("input", buildConstrainedInput(userPrompt, requestedCount, categories, sourceIds));
-        payload.put("tools", Collections.singletonList(Collections.singletonMap("type", "google_search")));
+        payload.put("input", buildConstrainedInput(
+                userPrompt, requestedCount, categories, sourceIds));
         payload.put("store", false);
 
         Map<String, Object> generationConfig = new LinkedHashMap<>();
@@ -147,23 +144,20 @@ public class GeminiStrategyTipClient {
         constraints.put("exactDraftCount", requestedCount);
         constraints.put("allowedCategories", categories);
         constraints.put("allowedInternalSourceIds", sourceIds);
-        constraints.put("minimumGoogleSearchQueries", requestedCount);
-        constraints.put("maximumGoogleSearchQueries", requestedCount);
-        constraints.put("requiredGoogleSearchQueryExclusions",
-                Arrays.asList("-site:sc1hub.com", "-site:www.sc1hub.com"));
         constraints.put("maximumContentChars", MAX_GENERATED_CONTENT_CHARS);
         constraints.put("maximumEvidenceSummaryChars", MAX_EVIDENCE_SUMMARY_CHARS);
+        constraints.put("evidenceMustBeVerbatimFromSelectedExcerpt", true);
+        constraints.put("contentMustContainEvidenceSummaryVerbatim", true);
+        constraints.put("externalKnowledgeAllowed", false);
+        constraints.put("toolUseAllowed", false);
         try {
             return userPrompt
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
-                    + "\nGoogle Search query budget: execute exactly " + requestedCount
-                    + " queries total, exactly one query for each requested category. "
-                    + "Every query must contain these two literal, separate tokens: "
-                    + "-site:sc1hub.com -site:www.sc1hub.com. "
-                    + "Return only the schema JSON. Keep each evidence summary concise. "
-                    + "Put exactly one native url_citation annotation inside each corresponding "
-                    + "externalEvidenceSummary. Do not output a source URL or title; "
-                    + "the server reads both from the native annotation.";
+                    + "\nDo not use Google Search, URL Context, tools, or model-memory facts. "
+                    + "Use only SOURCE_DATA_JSON. Return only the schema JSON. "
+                    + "For evidenceSummary, copy one short, exact passage from the selected "
+                    + "source excerpt without paraphrasing it. Include the complete "
+                    + "evidenceSummary passage unchanged inside content.";
         } catch (JsonProcessingException e) {
             throw new GeminiStrategyTipException("Could not build the Gemini request.", e);
         }
@@ -181,24 +175,25 @@ public class GeminiStrategyTipClient {
         sourceId.put("enum", sourceIds);
 
         Map<String, Object> content = describedStringProperty(
-                "Korean one-line strategy, 12 to " + MAX_GENERATED_CONTENT_CHARS + " characters.");
+                "Korean one-line strategy directly supported by the selected internal source, "
+                        + "12 to " + MAX_GENERATED_CONTENT_CHARS + " characters; it must contain "
+                        + "the complete evidenceSummary passage unchanged.");
         Map<String, Object> evidenceSummary = describedStringProperty(
-                "Concise internal evidence, 5 to " + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
-        Map<String, Object> externalEvidenceSummary = describedStringProperty(
-                "Concise external evidence, 5 to " + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
+                "An exact passage copied verbatim from the selected internal source excerpt, "
+                        + MIN_EVIDENCE_SUMMARY_CHARS + " to "
+                        + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
 
         Map<String, Object> draftProperties = new LinkedHashMap<>();
         draftProperties.put("category", category);
         draftProperties.put("content", content);
         draftProperties.put("sourceId", sourceId);
         draftProperties.put("evidenceSummary", evidenceSummary);
-        draftProperties.put("externalEvidenceSummary", externalEvidenceSummary);
 
         Map<String, Object> draft = new LinkedHashMap<>();
         draft.put("type", "object");
         draft.put("properties", draftProperties);
-        draft.put("required", Arrays.asList("category", "content", "sourceId",
-                "evidenceSummary", "externalEvidenceSummary"));
+        draft.put("required", Arrays.asList(
+                "category", "content", "sourceId", "evidenceSummary"));
         draft.put("additionalProperties", false);
 
         Map<String, Object> drafts = new LinkedHashMap<>();
@@ -250,23 +245,25 @@ public class GeminiStrategyTipClient {
             if (parts.refusal) {
                 throw new GeminiStrategyTipException("Gemini refused the strategy tip request.");
             }
+            if (parts.unexpectedToolUse) {
+                throw new GeminiStrategyTipException(
+                        "Gemini unexpectedly attempted external tool use.");
+            }
             if (!StringUtils.hasText(parts.outputText)) {
                 throw new GeminiStrategyTipException("Gemini returned no structured text output.");
             }
-            validateSearchQueries(parts.searchQueries, requestedCount);
 
-            ParsedDrafts parsed = parseDrafts(parts.outputText,
-                    requestedCount, allowedCategories, allowedSourceIds, parts.citations);
+            List<StrategyTipAiGeneratedBatch.Draft> drafts = parseDrafts(parts.outputText,
+                    requestedCount, allowedCategories, allowedSourceIds);
             String model = root.path("model").asText(fallbackModel);
-            return new StrategyTipAiGeneratedBatch(parsed.drafts, model,
-                    usage.inputTokens, usage.outputTokens,
-                    parts.searchQueries.size(), parsed.citationTitlesByUrl);
+            return new StrategyTipAiGeneratedBatch(
+                    drafts, model, usage.inputTokens, usage.outputTokens);
         } catch (GeminiStrategyTipException e) {
             if (e.hasUsage() || !usage.available) {
                 throw e;
             }
             throw new GeminiStrategyTipException(e.getMessage(), e,
-                    usage.inputTokens, usage.outputTokens, usage.searchQueryCount);
+                    usage.inputTokens, usage.outputTokens, 0);
         }
     }
 
@@ -275,21 +272,14 @@ public class GeminiStrategyTipClient {
             throw new GeminiStrategyTipException("Gemini response is missing interaction steps.");
         }
 
-        List<RawCitation> citations = Collections.emptyList();
-        List<String> searchQueries = new ArrayList<>();
         boolean refusal = false;
+        boolean unexpectedToolUse = false;
         String outputText = null;
         for (JsonNode step : steps) {
             String stepType = step.path("type").asText("");
-            if ("google_search_call".equals(stepType)) {
-                JsonNode queries = step.path("arguments").path("queries");
-                if (queries.isArray()) {
-                    for (JsonNode query : queries) {
-                        if (StringUtils.hasText(query.asText(""))) {
-                            searchQueries.add(query.asText("").trim());
-                        }
-                    }
-                }
+            if ("google_search_call".equals(stepType)
+                    || "url_context_call".equals(stepType)) {
+                unexpectedToolUse = true;
                 continue;
             }
             if (!"model_output".equals(stepType)) {
@@ -300,70 +290,26 @@ public class GeminiStrategyTipClient {
                 continue;
             }
             StringBuilder stepText = new StringBuilder();
-            List<RawCitation> stepCitations = new ArrayList<>();
             for (JsonNode block : content) {
                 String blockType = block.path("type").asText("");
                 if ("refusal".equals(blockType)) {
                     refusal = true;
-                    continue;
+                } else if ("text".equals(blockType)) {
+                    stepText.append(block.path("text").asText(""));
                 }
-                if (!"text".equals(blockType)) {
-                    continue;
-                }
-                int blockStartByte = utf8Length(stepText.toString());
-                stepText.append(block.path("text").asText(""));
-                collectCitations(block.path("annotations"), stepCitations, blockStartByte);
             }
             if (StringUtils.hasText(stepText.toString())) {
                 outputText = stepText.toString();
-                citations = stepCitations;
             }
         }
-        return new ResponseParts(outputText, citations, searchQueries, refusal);
+        return new ResponseParts(outputText, refusal, unexpectedToolUse);
     }
 
-    private void collectCitations(JsonNode annotations, List<RawCitation> citations,
-                                  int blockStartByte) {
-        if (!annotations.isArray()) {
-            return;
-        }
-        for (JsonNode annotation : annotations) {
-            if (!"url_citation".equals(annotation.path("type").asText(""))) {
-                continue;
-            }
-            String url = annotation.path("url").asText("").trim();
-            if (!StringUtils.hasText(url)) {
-                continue;
-            }
-            String title = annotation.path("title").asText("").trim();
-            JsonNode startNode = annotation.get("start_index");
-            JsonNode endNode = annotation.get("end_index");
-            int absoluteStart = -1;
-            int absoluteEnd = -1;
-            if (startNode != null && endNode != null
-                    && startNode.isIntegralNumber() && endNode.isIntegralNumber()
-                    && startNode.canConvertToInt() && endNode.canConvertToInt()) {
-                int start = startNode.asInt();
-                int end = endNode.asInt();
-                if (start >= 0 && end > start) {
-                    long shiftedStart = (long) blockStartByte + start;
-                    long shiftedEnd = (long) blockStartByte + end;
-                    if (shiftedEnd <= Integer.MAX_VALUE) {
-                        absoluteStart = (int) shiftedStart;
-                        absoluteEnd = (int) shiftedEnd;
-                    }
-                }
-            }
-            citations.add(new RawCitation(url, title, absoluteStart, absoluteEnd));
-        }
-    }
-
-    private ParsedDrafts parseDrafts(
+    private List<StrategyTipAiGeneratedBatch.Draft> parseDrafts(
             String outputText,
             int requestedCount,
             List<String> allowedCategories,
-            List<String> allowedSourceIds,
-            List<RawCitation> citations) {
+            List<String> allowedSourceIds) {
         JsonNode output;
         try {
             output = objectMapper.readTree(outputText);
@@ -371,274 +317,45 @@ public class GeminiStrategyTipClient {
             throw new GeminiStrategyTipException("Gemini structured output is invalid JSON.", e);
         }
         JsonNode draftNodes = output.path("drafts");
-        if (!output.isObject() || !draftNodes.isArray() || draftNodes.size() != requestedCount) {
+        if (!output.isObject() || !draftNodes.isArray()
+                || draftNodes.size() != requestedCount) {
             throw new GeminiStrategyTipException("Gemini returned an unexpected draft count.");
         }
 
         Set<String> categorySet = new LinkedHashSet<>(allowedCategories);
         Set<String> sourceIdSet = new LinkedHashSet<>(allowedSourceIds);
-        List<DraftByteRanges> draftRanges = findDraftByteRanges(outputText);
-        if (draftRanges.size() != requestedCount) {
-            throw new GeminiStrategyTipException("Gemini structured output draft ranges are invalid.");
-        }
+        Set<String> seenCategories = new LinkedHashSet<>();
+        Set<String> seenSourceIds = new LinkedHashSet<>();
         List<StrategyTipAiGeneratedBatch.Draft> drafts = new ArrayList<>();
-        Map<String, String> resolvedCitations = new LinkedHashMap<>();
-        Map<String, GroundingCitationUrlResolver.ResolvedDestination> destinationsByRawUrl =
-                new LinkedHashMap<>();
-        for (int draftIndex = 0; draftIndex < draftNodes.size(); draftIndex++) {
-            JsonNode draftNode = draftNodes.get(draftIndex);
+        for (JsonNode draftNode : draftNodes) {
             String category = requiredOutputText(draftNode, "category");
             String content = requiredOutputText(draftNode, "content");
             String sourceId = requiredOutputText(draftNode, "sourceId");
             String evidenceSummary = requiredOutputText(draftNode, "evidenceSummary");
-            String externalEvidenceSummary = requiredOutputText(draftNode, "externalEvidenceSummary");
 
             if (!categorySet.contains(category) || !sourceIdSet.contains(sourceId)) {
-                throw new GeminiStrategyTipException("Gemini returned a draft outside the allowed source scope.");
-            }
-            DraftByteRanges ranges = draftRanges.get(draftIndex);
-            List<RawCitation> draftCitations = citationsForDraft(
-                    ranges.draftRange, ranges.externalEvidenceRange, citations,
-                    requestedCount == 1, utf8Length(outputText));
-            ResolvedCitation resolvedCitation = resolveSingleCitation(
-                    draftCitations, destinationsByRawUrl);
-            if (resolvedCitation == null) {
                 throw new GeminiStrategyTipException(
-                        "Gemini did not bind exactly one native Google Search citation to that draft.");
+                        "Gemini returned a draft outside the allowed source scope.");
             }
-            String externalSourceUrl = resolvedCitation.url;
-            String externalSourceTitle = resolvedCitation.title;
-            resolvedCitations.putIfAbsent(externalSourceUrl, externalSourceTitle);
-            drafts.add(new StrategyTipAiGeneratedBatch.Draft(category, content, sourceId,
-                    evidenceSummary, externalSourceUrl, externalSourceTitle, externalEvidenceSummary));
+            if (!seenCategories.add(category) || !seenSourceIds.add(sourceId)) {
+                throw new GeminiStrategyTipException(
+                        "Gemini returned duplicate draft categories or sources.");
+            }
+            drafts.add(new StrategyTipAiGeneratedBatch.Draft(
+                    category, content, sourceId, evidenceSummary));
         }
-        return new ParsedDrafts(drafts, resolvedCitations);
-    }
-
-    private List<DraftByteRanges> findDraftByteRanges(String outputText) {
-        int field = outputText.indexOf("\"drafts\"");
-        int arrayStart = field < 0 ? -1 : outputText.indexOf('[', field + 8);
-        if (arrayStart < 0) {
-            return Collections.emptyList();
-        }
-
-        List<DraftByteRanges> ranges = new ArrayList<>();
-        int index = arrayStart + 1;
-        while (index < outputText.length()) {
-            char current = outputText.charAt(index);
-            if (Character.isWhitespace(current) || current == ',') {
-                index++;
-                continue;
-            }
-            if (current == ']') {
-                break;
-            }
-            if (current != '{') {
-                return Collections.emptyList();
-            }
-
-            int objectStart = index;
-            int depth = 0;
-            boolean inString = false;
-            boolean escaped = false;
-            for (; index < outputText.length(); index++) {
-                char value = outputText.charAt(index);
-                if (inString) {
-                    if (escaped) {
-                        escaped = false;
-                    } else if (value == '\\') {
-                        escaped = true;
-                    } else if (value == '"') {
-                        inString = false;
-                    }
-                    continue;
-                }
-                if (value == '"') {
-                    inString = true;
-                } else if (value == '{') {
-                    depth++;
-                } else if (value == '}' && --depth == 0) {
-                    int objectEnd = index + 1;
-                    ByteRange draftRange = new ByteRange(
-                            utf8Length(outputText.substring(0, objectStart)),
-                            utf8Length(outputText.substring(0, objectEnd)));
-                    ByteRange externalEvidenceRange = findStringPropertyByteRange(
-                            outputText, objectStart, objectEnd, "externalEvidenceSummary");
-                    if (externalEvidenceRange == null) {
-                        return Collections.emptyList();
-                    }
-                    ranges.add(new DraftByteRanges(draftRange, externalEvidenceRange));
-                    index = objectEnd;
-                    break;
-                }
-            }
-            if (depth != 0) {
-                return Collections.emptyList();
-            }
-        }
-        return ranges;
-    }
-
-    private ByteRange findStringPropertyByteRange(String json, int objectStart,
-                                                  int objectEnd, String propertyName) {
-        ByteRange result = null;
-        int index = objectStart + 1;
-        while (index < objectEnd - 1) {
-            while (index < objectEnd - 1
-                    && (Character.isWhitespace(json.charAt(index)) || json.charAt(index) == ',')) {
-                index++;
-            }
-            if (index >= objectEnd - 1 || json.charAt(index) == '}') {
-                break;
-            }
-            if (json.charAt(index) != '"') {
-                return null;
-            }
-            int keyEnd = findJsonStringEnd(json, index, objectEnd);
-            if (keyEnd < 0) {
-                return null;
-            }
-            String key = json.substring(index + 1, keyEnd);
-            index = keyEnd + 1;
-            while (index < objectEnd && Character.isWhitespace(json.charAt(index))) {
-                index++;
-            }
-            if (index >= objectEnd || json.charAt(index) != ':') {
-                return null;
-            }
-            index++;
-            while (index < objectEnd && Character.isWhitespace(json.charAt(index))) {
-                index++;
-            }
-            if (index >= objectEnd || json.charAt(index) != '"') {
-                return null;
-            }
-            int valueEnd = findJsonStringEnd(json, index, objectEnd);
-            if (valueEnd < 0) {
-                return null;
-            }
-            if (propertyName.equals(key)) {
-                if (result != null) {
-                    return null;
-                }
-                result = new ByteRange(
-                        utf8Length(json.substring(0, index + 1)),
-                        utf8Length(json.substring(0, valueEnd)));
-            }
-            index = valueEnd + 1;
-        }
-        return result;
-    }
-
-    private int findJsonStringEnd(String json, int openingQuote, int limit) {
-        boolean escaped = false;
-        for (int index = openingQuote + 1; index < limit; index++) {
-            char value = json.charAt(index);
-            if (escaped) {
-                escaped = false;
-            } else if (value == '\\') {
-                escaped = true;
-            } else if (value == '"') {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private List<RawCitation> citationsForDraft(
-            ByteRange draftRange,
-            ByteRange externalEvidenceRange,
-            List<RawCitation> citations,
-            boolean singleDraft,
-            int outputLengthBytes) {
-        if (citations == null || citations.isEmpty()) {
-            return Collections.emptyList();
-        }
-        if (singleDraft) {
-            return new ArrayList<>(citations);
-        }
-        List<RawCitation> matches = new ArrayList<>();
-        for (RawCitation citation : citations) {
-            if (citation.startByte < 0 || citation.endByte > outputLengthBytes
-                    || citation.endByte <= citation.startByte) {
-                continue;
-            }
-            boolean overlapsDraft = citation.startByte < draftRange.endByte
-                    && citation.endByte > draftRange.startByte;
-            if (!overlapsDraft) {
-                continue;
-            }
-            if (citation.startByte < externalEvidenceRange.startByte
-                    || citation.endByte > externalEvidenceRange.endByte) {
-                return Collections.emptyList();
-            }
-            matches.add(citation);
-        }
-        return matches;
-    }
-
-    private ResolvedCitation resolveSingleCitation(
-            List<RawCitation> rawCitations,
-            Map<String, GroundingCitationUrlResolver.ResolvedDestination> destinationsByRawUrl) {
-        if (rawCitations == null || rawCitations.isEmpty()) {
-            return null;
-        }
-
-        Map<String, String> titlesByFinalUrl = new LinkedHashMap<>();
-        for (RawCitation rawCitation : rawCitations) {
-            GroundingCitationUrlResolver.ResolvedDestination destination =
-                    destinationsByRawUrl.get(rawCitation.url);
-            if (destination == null) {
-                destination = citationUrlResolver.resolveDestination(rawCitation.url);
-                destinationsByRawUrl.put(rawCitation.url, destination);
-            }
-            String title = citationUrlResolver.safeDisplayTitle(destination, rawCitation.title);
-            String previous = titlesByFinalUrl.get(destination.getUrl());
-            if (previous == null || (!StringUtils.hasText(previous) && StringUtils.hasText(title))) {
-                titlesByFinalUrl.put(destination.getUrl(), title);
-            }
-        }
-        if (titlesByFinalUrl.size() != 1) {
-            return null;
-        }
-        Map.Entry<String, String> citation = titlesByFinalUrl.entrySet().iterator().next();
-        return new ResolvedCitation(citation.getKey(), citation.getValue());
-    }
-
-    private void validateSearchQueries(List<String> searchQueries, int requestedCount) {
-        if (searchQueries == null || searchQueries.size() != requestedCount) {
+        if (seenCategories.size() != categorySet.size()) {
             throw new GeminiStrategyTipException(
-                    "Gemini did not execute exactly one safe Google Search query per draft.");
+                    "Gemini did not return every requested category.");
         }
-        for (String query : searchQueries) {
-            if (!containsQueryToken(query, "-site:sc1hub.com")
-                    || !containsQueryToken(query, "-site:www.sc1hub.com")) {
-                throw new GeminiStrategyTipException(
-                        "Gemini Google Search query did not exclude SC1Hub.");
-            }
-        }
-    }
-
-    private boolean containsQueryToken(String query, String requiredToken) {
-        if (!StringUtils.hasText(query)) {
-            return false;
-        }
-        for (String token : query.trim().split("\\s+")) {
-            if (requiredToken.equals(token.toLowerCase(Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private int utf8Length(String value) {
-        return value == null ? 0 : value.getBytes(StandardCharsets.UTF_8).length;
+        return drafts;
     }
 
     private String requiredOutputText(JsonNode node, String fieldName) {
         JsonNode value = node.get(fieldName);
         if (value == null || !value.isTextual() || !StringUtils.hasText(value.asText())) {
-            throw new GeminiStrategyTipException("Gemini structured output is missing " + fieldName + ".");
+            throw new GeminiStrategyTipException(
+                    "Gemini structured output is missing " + fieldName + ".");
         }
         return value.asText().trim();
     }
@@ -650,12 +367,14 @@ public class GeminiStrategyTipClient {
         Set<String> distinct = new LinkedHashSet<>();
         for (String value : values) {
             if (!StringUtils.hasText(value)) {
-                throw new GeminiStrategyTipException(fieldName + " must not contain blank values.");
+                throw new GeminiStrategyTipException(
+                        fieldName + " must not contain blank values.");
             }
             distinct.add(value.trim());
         }
         if (distinct.size() != values.size()) {
-            throw new GeminiStrategyTipException(fieldName + " must not contain duplicate values.");
+            throw new GeminiStrategyTipException(
+                    fieldName + " must not contain duplicate values.");
         }
         return new ArrayList<>(distinct);
     }
@@ -663,12 +382,12 @@ public class GeminiStrategyTipClient {
     private String resolveThinkingLevel() {
         String value = properties.getThinkingLevel();
         if (!StringUtils.hasText(value)) {
-            return "minimal";
+            return "high";
         }
-        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
         if (!Arrays.asList("minimal", "low", "medium", "high").contains(normalized)) {
-            log.warn("Invalid strategy tip thinkingLevel; using minimal.");
-            return "minimal";
+            log.warn("Invalid strategy tip thinkingLevel; using high.");
+            return "high";
         }
         return normalized;
     }
@@ -704,31 +423,7 @@ public class GeminiStrategyTipClient {
         int outputTokens = saturatingAdd(
                 nonNegativeInt(usage.path("total_output_tokens")),
                 nonNegativeInt(usage.path("total_thought_tokens")));
-        int searchQueryCount = countSearchQueries(root.path("steps"));
-        return new UsageSnapshot(usage.isObject() || searchQueryCount > 0,
-                inputTokens, outputTokens, searchQueryCount);
-    }
-
-    private int countSearchQueries(JsonNode steps) {
-        if (!steps.isArray()) {
-            return 0;
-        }
-        int count = 0;
-        for (JsonNode step : steps) {
-            if (!"google_search_call".equals(step.path("type").asText(""))) {
-                continue;
-            }
-            JsonNode queries = step.path("arguments").path("queries");
-            if (!queries.isArray()) {
-                continue;
-            }
-            for (JsonNode query : queries) {
-                if (StringUtils.hasText(query.asText(""))) {
-                    count = saturatingAdd(count, 1);
-                }
-            }
-        }
-        return count;
+        return new UsageSnapshot(usage.isObject(), inputTokens, outputTokens);
     }
 
     private int nonNegativeInt(JsonNode node) {
@@ -788,18 +483,14 @@ public class GeminiStrategyTipClient {
 
     private static final class ResponseParts {
         private final String outputText;
-        private final List<RawCitation> citations;
-        private final List<String> searchQueries;
         private final boolean refusal;
+        private final boolean unexpectedToolUse;
 
-        private ResponseParts(String outputText,
-                              List<RawCitation> citations,
-                              List<String> searchQueries,
-                              boolean refusal) {
+        private ResponseParts(String outputText, boolean refusal,
+                              boolean unexpectedToolUse) {
             this.outputText = outputText;
-            this.citations = citations;
-            this.searchQueries = searchQueries;
             this.refusal = refusal;
+            this.unexpectedToolUse = unexpectedToolUse;
         }
     }
 
@@ -807,69 +498,11 @@ public class GeminiStrategyTipClient {
         private final boolean available;
         private final int inputTokens;
         private final int outputTokens;
-        private final int searchQueryCount;
 
-        private UsageSnapshot(boolean available, int inputTokens,
-                              int outputTokens, int searchQueryCount) {
+        private UsageSnapshot(boolean available, int inputTokens, int outputTokens) {
             this.available = available;
             this.inputTokens = inputTokens;
             this.outputTokens = outputTokens;
-            this.searchQueryCount = searchQueryCount;
-        }
-    }
-
-    private static final class RawCitation {
-        private final String url;
-        private final String title;
-        private final int startByte;
-        private final int endByte;
-
-        private RawCitation(String url, String title, int startByte, int endByte) {
-            this.url = url;
-            this.title = title;
-            this.startByte = startByte;
-            this.endByte = endByte;
-        }
-    }
-
-    private static final class ResolvedCitation {
-        private final String url;
-        private final String title;
-
-        private ResolvedCitation(String url, String title) {
-            this.url = url;
-            this.title = title;
-        }
-    }
-
-    private static final class ParsedDrafts {
-        private final List<StrategyTipAiGeneratedBatch.Draft> drafts;
-        private final Map<String, String> citationTitlesByUrl;
-
-        private ParsedDrafts(List<StrategyTipAiGeneratedBatch.Draft> drafts,
-                             Map<String, String> citationTitlesByUrl) {
-            this.drafts = drafts;
-            this.citationTitlesByUrl = citationTitlesByUrl;
-        }
-    }
-
-    private static final class ByteRange {
-        private final int startByte;
-        private final int endByte;
-
-        private ByteRange(int startByte, int endByte) {
-            this.startByte = startByte;
-            this.endByte = endByte;
-        }
-    }
-
-    private static final class DraftByteRanges {
-        private final ByteRange draftRange;
-        private final ByteRange externalEvidenceRange;
-
-        private DraftByteRanges(ByteRange draftRange, ByteRange externalEvidenceRange) {
-            this.draftRange = draftRange;
-            this.externalEvidenceRange = externalEvidenceRange;
         }
     }
 }

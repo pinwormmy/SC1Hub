@@ -77,14 +77,14 @@ class StrategyTipAiAdminControllerTest {
 
     @Test
     void generate_addsSafeFailureMessageAndStillRedirects() {
-        when(draftService.generateDailyDrafts()).thenThrow(new IllegalStateException("검색 근거 부족"));
+        when(draftService.generateDailyDrafts()).thenThrow(new IllegalStateException("내부 근거 부족"));
         RedirectAttributesModelMap redirect = new RedirectAttributesModelMap();
         MockHttpSession session = adminSession("operator");
 
         String view = controller.generate(CSRF_TOKEN, session, redirect);
 
         assertEquals(REDIRECT_VIEW, view);
-        assertEquals("검색 근거 부족", redirect.getFlashAttributes().get("msg"));
+        assertEquals("내부 근거 부족", redirect.getFlashAttributes().get("msg"));
     }
 
     @Test
@@ -143,6 +143,23 @@ class StrategyTipAiAdminControllerTest {
 
         assertEquals(REDIRECT_VIEW, view);
         assertTrue(String.valueOf(redirect.getFlashAttributes().get("msg")).contains("토큰"));
+        verifyNoInteractions(draftService);
+    }
+
+    @Test
+    void generate_rejectsNonAdminSessionEvenWithValidCsrfToken() {
+        MemberDTO member = new MemberDTO();
+        member.setId("ordinary-user");
+        member.setGrade(2);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", member);
+        session.setAttribute("strategyTipAiCsrfToken", CSRF_TOKEN);
+        RedirectAttributesModelMap redirect = new RedirectAttributesModelMap();
+
+        String view = controller.generate(CSRF_TOKEN, session, redirect);
+
+        assertEquals(REDIRECT_VIEW, view);
+        assertTrue(String.valueOf(redirect.getFlashAttributes().get("msg")).contains("관리자"));
         verifyNoInteractions(draftService);
     }
 

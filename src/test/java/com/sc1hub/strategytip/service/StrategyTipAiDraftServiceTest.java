@@ -17,11 +17,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -53,10 +53,16 @@ class StrategyTipAiDraftServiceTest {
     private static final List<String> BOARDS =
             Arrays.asList("tvszboard", "tvspboard", "tvstboard");
     private static final List<String> CONTENTS = Arrays.asList(
-            "저그의 초반 압박을 확인하면 입구 수비 동선을 먼저 정리하세요.",
-            "프로토스의 정찰 경로를 살핀 뒤 병력 진출 방향을 조정하세요.",
-            "상대 생산 건물 움직임을 보며 중앙 시야를 천천히 확보하세요."
+            "저그의 초반 압박을 보면 입구 수비 동선을 정리하세요.",
+            "프로토스 정찰 경로를 살핀 뒤 병력 진출 방향을 조정하세요.",
+            "상대 생산 건물을 확인하며 중앙 시야를 천천히 확보하세요."
     );
+    private static final List<String> EVIDENCES = Arrays.asList(
+            "입구 수비 동선을 정리",
+            "프로토스 정찰 경로를 살핀",
+            "상대 생산 건물을 확인"
+    );
+    private static final String EXACT_EVIDENCE = EVIDENCES.get(0);
 
     @Mock
     private StrategyTipAiDraftStore store;
@@ -74,10 +80,10 @@ class StrategyTipAiDraftServiceTest {
         properties.setEnabled(true);
         properties.setAllowLiveCalls(true);
         properties.setApiKey("test-gemini-key");
-        properties.setModel("gemini-test-model");
+        properties.setModel("gemini-3.6-flash");
         properties.setDailyDraftLimit(3);
         properties.setMaxPendingDrafts(3);
-        properties.setMaxDailyApiCalls(3);
+        properties.setMaxDailyApiCalls(2);
         properties.setStaleRunMinutes(10);
         properties.setSourcePostsPerCategory(3);
         properties.setSourceExcerptChars(480);
@@ -95,26 +101,19 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
-    void generateDailyDrafts_skipsWithoutTouchingStoreOrClientWhenDisabled() {
+    void generateDailyDrafts_skipsBeforeStoreWhenFeatureIsNotReady() {
         properties.setEnabled(false);
-
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("SKIPPED", result.getOutcome());
-        assertTrue(result.getMessage().contains("비활성화"));
+        assertEquals("SKIPPED", generate().getOutcome());
         verifyNoInteractions(store, geminiClient);
-    }
 
-    @Test
-    void generateDailyDrafts_skipsWithoutApiKey() {
-        properties.setApiKey("  ");
+        properties.setEnabled(true);
+        properties.setAllowLiveCalls(false);
+        assertEquals("SKIPPED", generate().getOutcome());
+        verifyNoInteractions(store, geminiClient);
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("SKIPPED", result.getOutcome());
-        assertTrue(result.getMessage().contains("API 키"));
+        properties.setAllowLiveCalls(true);
+        properties.setApiKey(" ");
+        assertEquals("SKIPPED", generate().getOutcome());
         verifyNoInteractions(store, geminiClient);
     }
 
@@ -122,8 +121,7 @@ class StrategyTipAiDraftServiceTest {
     void generateDailyDrafts_rejectsInvalidEndpointBeforeClaimingPaidCall() {
         properties.setBaseUrl("https://example.org/v1beta/interactions");
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals("SKIPPED", result.getOutcome());
         assertTrue(result.getMessage().contains("API 주소"));
@@ -131,434 +129,388 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
-    void generateDailyDrafts_skipsWhenLiveCallsAreNotExplicitlyAllowed() {
-        properties.setAllowLiveCalls(false);
-
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("SKIPPED", result.getOutcome());
-        assertTrue(result.getMessage().contains("실호출"));
-        verifyNoInteractions(store, geminiClient);
-    }
-
-    @Test
-    void generateDailyDrafts_skipsAtAbsoluteDailyLimit() {
+    void generateDailyDrafts_skipsAtDailyOrPendingLimit() {
         when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(3);
-
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("SKIPPED", result.getOutcome());
-        assertTrue(result.getMessage().contains("이미 채웠"));
+        assertTrue(generate().getMessage().contains("이미 채웠"));
         verifyNoInteractions(geminiClient);
-    }
 
-    @Test
-    void generateDailyDrafts_skipsWhenPendingReviewQueueHasThreeDrafts() {
         when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(0);
         when(store.countPending()).thenReturn(3);
-
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("SKIPPED", result.getOutcome());
-        assertTrue(result.getMessage().contains("검수 대기"));
+        assertTrue(generate().getMessage().contains("검수 대기"));
         verifyNoInteractions(geminiClient);
     }
 
     @Test
-    void generateDailyDrafts_clampsActualCallBudgetToThree() {
+    void generateDailyDrafts_clampsBatchRetryBudgetToTwo() {
         properties.setMaxDailyApiCalls(99);
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(0);
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals("SKIPPED", result.getOutcome());
         assertTrue(result.getMessage().contains("호출 상한"));
-        verify(store).claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10));
+        verify(store).claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10));
         verifyNoInteractions(geminiClient);
     }
 
     @Test
-    void generateDailyDrafts_callsOncePerCategoryAndSavesThreeSlotsWithActualUsage() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(1, 2, 3);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenReturn(singleBatch(0, false, 101, 21),
-                        singleBatch(1, false, 102, 22),
-                        singleBatch(2, false, 103, 23));
+    void generateDailyDrafts_createsThreeDraftsInOneInternalOnlyBatch() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
+                .thenReturn(1);
+        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList(), anyList()))
+                .thenReturn(batchForIndexes(4100, 700, 0, 1, 2));
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals("CREATED", result.getOutcome());
         assertEquals(3, result.getCreatedCount());
-        verify(geminiClient).generate(anyString(), contains("SOURCE_DATA_JSON"), eq(1),
-                eq(Collections.singletonList("t_vs_z")),
-                eq(Collections.singletonList("tvszboard:101")));
-        verify(geminiClient).generate(anyString(), contains("SOURCE_DATA_JSON"), eq(1),
-                eq(Collections.singletonList("t_vs_p")),
-                eq(Collections.singletonList("tvspboard:102")));
-        verify(geminiClient).generate(anyString(), contains("SOURCE_DATA_JSON"), eq(1),
-                eq(Collections.singletonList("t_vs_t")),
-                eq(Collections.singletonList("tvstboard:103")));
+        verify(geminiClient, times(1)).generate(
+                contains("오직 SOURCE_DATA_JSON"), contains("SOURCE_DATA_JSON"), eq(3),
+                eq(CATEGORIES), eq(Arrays.asList(
+                        "tvszboard:101", "tvspboard:102", "tvstboard:103")));
 
-        ArgumentCaptor<Integer> attemptCaptor = ArgumentCaptor.forClass(Integer.class);
         ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
-        ArgumentCaptor<Integer> inputCaptor = ArgumentCaptor.forClass(Integer.class);
-        ArgumentCaptor<Integer> outputCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(store, times(3)).saveGeneratedDrafts(
-                eq(GENERATION_DATE), attemptCaptor.capture(), draftsCaptor.capture(),
-                inputCaptor.capture(), outputCaptor.capture(), eq(1));
-        assertEquals(Arrays.asList(1, 2, 3), attemptCaptor.getAllValues());
-        assertEquals(Arrays.asList(101, 102, 103), inputCaptor.getAllValues());
-        assertEquals(306, inputCaptor.getAllValues().stream().mapToInt(Integer::intValue).sum());
-        assertEquals(66, outputCaptor.getAllValues().stream().mapToInt(Integer::intValue).sum());
-        for (int index = 0; index < draftsCaptor.getAllValues().size(); index++) {
-            List<StrategyTipAiDraftDTO> saved = draftsCaptor.getAllValues().get(index);
-            assertEquals(1, saved.size());
-            StrategyTipAiDraftDTO draft = saved.get(0);
+        verify(store).saveGeneratedDrafts(
+                eq(GENERATION_DATE), eq(1), draftsCaptor.capture(), eq(4100), eq(700), eq(0));
+        assertEquals(3, draftsCaptor.getValue().size());
+        for (int index = 0; index < 3; index++) {
+            StrategyTipAiDraftDTO draft = draftsCaptor.getValue().get(index);
             assertEquals(index + 1, draft.getSlotNo());
             assertEquals(CATEGORIES.get(index), draft.getCategory());
             assertEquals(BOARDS.get(index), draft.getSourceBoard());
-            assertEquals(101 + index, draft.getSourcePostNum());
-            assertEquals(externalUrl(index), draft.getExternalSourceUrl());
-            assertEquals("외부 전략 가이드 " + (index + 1), draft.getExternalSourceTitle());
-            assertEquals("gemini-test-model", draft.getModel());
+            assertEquals(EVIDENCES.get(index), draft.getEvidenceSummary());
+            assertEquals("", draft.getExternalSourceUrl());
+            assertEquals("", draft.getExternalSourceTitle());
+            assertEquals("", draft.getExternalEvidenceSummary());
         }
     }
 
     @Test
-    void generateDailyDrafts_secondCallFailurePreservesFirstAndStopsBeforeThird() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(1, 2);
-        GeminiStrategyTipException failure = new GeminiStrategyTipException(
-                "second interaction failed", null, 222, 44, 1);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenReturn(singleBatch(0, false, 111, 33))
-                .thenThrow(failure);
-
-        assertThrows(GeminiStrategyTipException.class,
-                () -> service.generateDailyDrafts(GENERATION_DATE, NOW));
-
-        ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
-        verify(store).saveGeneratedDrafts(
-                eq(GENERATION_DATE), eq(1), draftsCaptor.capture(), eq(111), eq(33), eq(1));
-        assertEquals(1, draftsCaptor.getValue().size());
-        assertEquals(1, draftsCaptor.getValue().get(0).getSlotNo());
-        verify(store).failDailyRun(GENERATION_DATE, 2,
-                "second interaction failed", 222, 44, 1);
-        verify(geminiClient, times(2)).generate(
-                anyString(), anyString(), eq(1), anyList(), anyList());
-        verify(store, times(2)).claimDailyApiCall(
-                GENERATION_DATE, 3, NOW.minusMinutes(10));
-        verify(store, never()).getSourcePosts("tvstboard", 3);
-    }
-
-    @Test
-    void generateDailyDrafts_laterTopUpUsesRemainingSlotsAndCallBudget() {
+    void generateDailyDrafts_topUpUsesRemainingSlotsInOneBatch() {
         arrangeReadyGeneration(1, 0, Collections.emptyList(),
-                Collections.singletonList(1), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(2, 3);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenReturn(singleBatch(1, false), singleBatch(2, false));
+                Collections.singletonList(1), Collections.singletonList("t_vs_z"));
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
+                .thenReturn(2);
+        when(geminiClient.generate(anyString(), anyString(), eq(2), anyList(), anyList()))
+                .thenReturn(batchForIndexes(2500, 420, 1, 2));
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult result = generate();
 
-        assertEquals("CREATED", result.getOutcome());
         assertEquals(2, result.getCreatedCount());
         ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
-        verify(store, times(2)).saveGeneratedDrafts(
-                eq(GENERATION_DATE), anyInt(), draftsCaptor.capture(), eq(120), eq(45), eq(1));
-        assertEquals(2, draftsCaptor.getAllValues().get(0).get(0).getSlotNo());
-        assertEquals("t_vs_p", draftsCaptor.getAllValues().get(0).get(0).getCategory());
-        assertEquals(3, draftsCaptor.getAllValues().get(1).get(0).getSlotNo());
-        assertEquals("t_vs_t", draftsCaptor.getAllValues().get(1).get(0).getCategory());
-        verify(store, times(2)).claimDailyApiCall(
-                GENERATION_DATE, 3, NOW.minusMinutes(10));
-        verify(store, never()).getSourcePosts("tvszboard", 3);
+        verify(store).saveGeneratedDrafts(
+                eq(GENERATION_DATE), eq(2), draftsCaptor.capture(), eq(2500), eq(420), eq(0));
+        assertEquals(2, draftsCaptor.getValue().get(0).getSlotNo());
+        assertEquals(3, draftsCaptor.getValue().get(1).getSlotNo());
+        verify(geminiClient).generate(anyString(), anyString(), eq(2),
+                eq(Arrays.asList("t_vs_p", "t_vs_t")),
+                eq(Arrays.asList("tvspboard:102", "tvstboard:103")));
     }
 
     @Test
-    void generateDailyDrafts_returnsCreatedCountWhenCallBudgetEndsAfterPartialSuccess() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(3, 0);
+    void generateDailyDrafts_skipsEmptyCategoryAndUsesNextInternalSource() {
+        when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(2);
+        when(store.countPending()).thenReturn(0);
+        when(store.getRecentContents(20)).thenReturn(Collections.emptyList());
+        when(store.getUsedSlots(GENERATION_DATE)).thenReturn(Arrays.asList(2, 3));
+        when(store.getUsedCategories(GENERATION_DATE))
+                .thenReturn(Arrays.asList("t_vs_t", "z_vs_t"));
+        when(store.getSourcePosts("tvszboard", 3)).thenReturn(Collections.emptyList());
+        when(store.getSourcePosts("tvspboard", 3))
+                .thenReturn(Collections.singletonList(internalPost("tvspboard")));
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
+                .thenReturn(1);
         when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenReturn(singleBatch(0, false));
+                .thenReturn(batchForIndexes(1200, 240, 1));
 
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult result = generate();
 
-        assertEquals("CREATED", result.getOutcome());
         assertEquals(1, result.getCreatedCount());
-        verify(geminiClient).generate(anyString(), anyString(), eq(1), anyList(), anyList());
-        verify(store).saveGeneratedDrafts(
-                eq(GENERATION_DATE), eq(3), anyList(), eq(120), eq(45), eq(1));
+        verify(geminiClient).generate(anyString(), anyString(), eq(1),
+                eq(Collections.singletonList("t_vs_p")),
+                eq(Collections.singletonList("tvspboard:102")));
+    }
+
+    @Test
+    void generateDailyDrafts_skipsBeforePaidCallWhenNoInternalSourcesExist() {
+        when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(0);
+        when(store.countPending()).thenReturn(0);
+        when(store.getRecentContents(20)).thenReturn(Collections.emptyList());
+        when(store.getUsedSlots(GENERATION_DATE)).thenReturn(Collections.emptyList());
+        when(store.getUsedCategories(GENERATION_DATE)).thenReturn(Collections.emptyList());
+        when(store.getSourcePosts(anyString(), eq(3))).thenReturn(Collections.emptyList());
+
+        StrategyTipAiDraftService.GenerationResult result = generate();
+
+        assertEquals("SKIPPED", result.getOutcome());
+        assertTrue(result.getMessage().contains("내부 근거"));
+        verify(store, never()).claimDailyApiCall(any(), anyInt(), any());
+        verifyNoInteractions(geminiClient);
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsWholeBatchWhenDraftCountIsWrong() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        assertInvalidBatchFails(new StrategyTipAiGeneratedBatch(
+                Collections.emptyList(), "gemini-3.6-flash", 100, 20), "요청한 수");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsWrongCategory() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "honey_tip", CONTENTS.get(0), "tvszboard:101", EXACT_EVIDENCE));
+        assertInvalidBatchFails(batch(drafts, 100, 20), "카테고리");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsCategorySourceMismatch() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", CONTENTS.get(0), "tvspboard:102", EXACT_EVIDENCE));
+        assertInvalidBatchFails(batch(drafts, 100, 20), "근거 출처");
+    }
+
+    @Test
+    void generateDailyDrafts_requiresEvidenceCopiedFromSelectedExcerpt() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", CONTENTS.get(0), "tvszboard:101", "원문에 없는 근거 문장입니다"));
+
+        assertInvalidBatchFails(batch(drafts, 100, 20), "원문에 없습니다");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsContentUnrelatedToExactEvidence() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", "아비터로 본진에 리콜해 생산 건물을 노리세요.",
+                "tvszboard:101", EXACT_EVIDENCE));
+
+        assertInvalidBatchFails(batch(drafts, 100, 20), "근거 구절 전체");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsUngroundedNumber() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", "초반 9분에는 입구 수비 동선을 먼저 정리하세요.",
+                "tvszboard:101", EXACT_EVIDENCE));
+        assertInvalidBatchFails(batch(drafts, 100, 20), "숫자");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsDuplicateContent() {
+        arrangeReadyGeneration(0, 0, Collections.singletonList(CONTENTS.get(0)),
+                Collections.emptyList(), Collections.emptyList());
+        assertInvalidBatchFails(batchForIndexes(100, 20, 0, 1, 2), "유사");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsCurrentMetaClaim() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", "현재 메타에서는 입구 수비 동선을 먼저 정리하세요.",
+                "tvszboard:101", EXACT_EVIDENCE));
+        assertInvalidBatchFails(batch(drafts, 100, 20), "시의성");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsRecentPatchClaim() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(0, 1, 2);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                "t_vs_z", "최근 패치 후에는 입구 수비 동선을 먼저 정리하세요.",
+                "tvszboard:101", EXACT_EVIDENCE));
+        assertInvalidBatchFails(batch(drafts, 100, 20), "시의성");
+    }
+
+    @Test
+    void generateDailyDrafts_recordsTokenUsageButNeverSearchUsageOnFailure() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList());
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
+                .thenReturn(1);
+        GeminiStrategyTipException failure = new GeminiStrategyTipException(
+                "structured output failed", null, 321, 87, 4);
+        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList(), anyList()))
+                .thenThrow(failure);
+
+        assertThrows(GeminiStrategyTipException.class, this::generate);
+
+        verify(store).failDailyRun(GENERATION_DATE, 1,
+                "structured output failed", 321, 87, 0);
     }
 
     @Test
     void generateDailyDrafts_skipsConcurrentInvocationInsideOneJvm() throws Exception {
-        arrangeReadyGeneration(2, 0, Collections.emptyList(), Arrays.asList(1, 2), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(3);
+        arrangeReadyGeneration(2, 0, Collections.emptyList(),
+                Arrays.asList(1, 2), Arrays.asList("t_vs_z", "t_vs_p"));
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
+                .thenReturn(1);
         CountDownLatch enteredClient = new CountDownLatch(1);
         CountDownLatch releaseClient = new CountDownLatch(1);
         when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
                 .thenAnswer(invocation -> {
                     enteredClient.countDown();
                     assertTrue(releaseClient.await(5, TimeUnit.SECONDS));
-                    return singleBatch(2, false);
+                    return batchForIndexes(1200, 240, 2);
                 });
         executor = Executors.newSingleThreadExecutor();
-        Future<StrategyTipAiDraftService.GenerationResult> first = executor.submit(
-                () -> service.generateDailyDrafts(GENERATION_DATE, NOW));
+        Future<StrategyTipAiDraftService.GenerationResult> first = executor.submit(this::generate);
         assertTrue(enteredClient.await(5, TimeUnit.SECONDS));
 
-        StrategyTipAiDraftService.GenerationResult concurrent =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
+        StrategyTipAiDraftService.GenerationResult concurrent = generate();
         releaseClient.countDown();
 
         assertEquals("SKIPPED", concurrent.getOutcome());
         assertTrue(concurrent.getMessage().contains("이미 실행 중"));
         assertEquals("CREATED", first.get(5, TimeUnit.SECONDS).getOutcome());
-        verify(geminiClient).generate(anyString(), anyString(), eq(1), anyList(), anyList());
+        verify(geminiClient, times(1)).generate(
+                anyString(), anyString(), eq(1), anyList(), anyList());
     }
 
     @Test
-    void generateDailyDrafts_allowsExternalOnlyDraftWithoutFabricatingInternalEvidence() {
-        arrangeReadyGeneration(2, 0, Collections.emptyList(), Arrays.asList(1, 2), false);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(3);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenReturn(singleBatch(2, true));
-
-        StrategyTipAiDraftService.GenerationResult result =
-                service.generateDailyDrafts(GENERATION_DATE, NOW);
-
-        assertEquals("CREATED", result.getOutcome());
-        ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
-        verify(store).saveGeneratedDrafts(
-                eq(GENERATION_DATE), eq(3), draftsCaptor.capture(), eq(120), eq(45), eq(1));
-        StrategyTipAiDraftDTO draft = draftsCaptor.getValue().get(0);
-        assertEquals(0, draft.getSourcePostNum());
-        assertEquals("", draft.getSourceExcerpt());
-        assertTrue(draft.getEvidenceSummary().contains("사이트 내부 근거 없음"));
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsMalformedDraftCount() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch malformed = new StrategyTipAiGeneratedBatch(
-                Collections.emptyList(), "gemini-test-model", 120, 45, 1,
-                citationsForIndexes(0));
-
-        assertInvalidBatchFails(malformed, "요청한 수");
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsWrongCategory() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch.Draft first = validDraftForIndex(0, false);
-        StrategyTipAiGeneratedBatch.Draft invalid = new StrategyTipAiGeneratedBatch.Draft(
-                "honey_tip", first.getContent(), first.getSourceId(), first.getEvidenceSummary(),
-                first.getExternalSourceUrl(), first.getExternalSourceTitle(),
-                first.getExternalEvidenceSummary());
-
-        assertInvalidBatchFails(singleBatch(invalid, 120, 45, 1, citationsForIndexes(0)),
-                "카테고리");
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsWrongCategorySource() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch.Draft first = validDraftForIndex(0, false);
-        StrategyTipAiGeneratedBatch.Draft invalid = new StrategyTipAiGeneratedBatch.Draft(
-                first.getCategory(), first.getContent(), "tvspboard:102", first.getEvidenceSummary(),
-                first.getExternalSourceUrl(), first.getExternalSourceTitle(),
-                first.getExternalEvidenceSummary());
-
-        assertInvalidBatchFails(singleBatch(invalid, 120, 45, 1, citationsForIndexes(0)),
-                "근거 출처");
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsCitationMissingFromNativeSearchResults() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch.Draft first = validDraftForIndex(0, false);
-        StrategyTipAiGeneratedBatch.Draft invalid = new StrategyTipAiGeneratedBatch.Draft(
-                first.getCategory(), first.getContent(), first.getSourceId(),
-                first.getEvidenceSummary(), "https://uncited.example.org/guide",
-                first.getExternalSourceTitle(), first.getExternalEvidenceSummary());
-
-        assertInvalidBatchFails(singleBatch(invalid, 120, 45, 1, citationsForIndexes(0)),
-                "외부 출처");
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsUngroundedNumericClaim() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch.Draft first = validDraftForIndex(0, false);
-        StrategyTipAiGeneratedBatch.Draft invalid = new StrategyTipAiGeneratedBatch.Draft(
-                first.getCategory(), "초반 9분에는 입구 수비 동선을 먼저 정리하세요.",
-                first.getSourceId(), first.getEvidenceSummary(), first.getExternalSourceUrl(),
-                first.getExternalSourceTitle(), first.getExternalEvidenceSummary());
-
-        assertInvalidBatchFails(singleBatch(invalid, 120, 45, 1, citationsForIndexes(0)),
-                "숫자");
-    }
-
-    @Test
-    void generateDailyDrafts_rejectsDuplicateContent() {
-        arrangeReadyGeneration(0, 0, Collections.singletonList(CONTENTS.get(0)),
-                Collections.emptyList(), true);
-
-        assertInvalidBatchFails(singleBatch(0, false), "유사");
-    }
-
-    @Test
-    void generateDailyDrafts_requiresExactlyOneSearchPerCall() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        StrategyTipAiGeneratedBatch noSearch = singleBatch(
-                validDraftForIndex(0, false), 120, 45, 0, citationsForIndexes(0));
-
-        assertInvalidBatchFails(noSearch, "정확히 한 번");
-    }
-
-    @Test
-    void generateDailyDrafts_recordsUsageCarriedByGeminiFailure() {
-        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
-                .thenReturn(1);
-        GeminiStrategyTipException failure = new GeminiStrategyTipException(
-                "Gemini structured output failed", null, 321, 87, 1);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
-                .thenThrow(failure);
-
-        assertThrows(GeminiStrategyTipException.class,
-                () -> service.generateDailyDrafts(GENERATION_DATE, NOW));
-
-        verify(store).failDailyRun(GENERATION_DATE, 1,
-                "Gemini structured output failed", 321, 87, 1);
-    }
-
-    @Test
-    void approve_revalidatesEditedContentAgainstPendingDraftAndPublishedTips() {
+    void approve_revalidatesEditedContentAndPublishes() {
         StrategyTipAiDraftDTO draft = pendingDraft(41L, "t_vs_z",
-                "상대가 5분에 진출하면 입구 시야부터 확인합니다.");
+                "상대가 5분에 진출하면 입구 시야부터 확인합니다.",
+                "상대가 5분에 진출하면 입구 시야부터 확인");
         when(store.getPendingDraft(41L)).thenReturn(draft);
-        when(store.getRecentPublishedContents(20))
-                .thenReturn(Collections.singletonList("중앙 시야를 확보하면 병력 동선을 조정하세요."));
-        when(store.approve(41L, "t_vs_z", "상대가 5분에 진출하면 입구 시야부터 확인하세요.",
+        when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
+        when(store.approve(41L, "t_vs_z",
+                "상대가 5분에 진출하면 입구 시야부터 확인하세요.",
                 "admin", "SC1Hub")).thenReturn(501);
 
         int tipNum = service.approve(41L, "t_vs_z",
-                "  상대가 5분에 진출하면  입구 시야부터 확인하세요. ", "admin");
+                " 상대가 5분에 진출하면  입구 시야부터 확인하세요. ", "admin");
 
         assertEquals(501, tipNum);
-        verify(store).approve(41L, "t_vs_z",
-                "상대가 5분에 진출하면 입구 시야부터 확인하세요.", "admin", "SC1Hub");
     }
 
     @Test
-    void approve_rejectsMissingOrNonPendingDraftBeforeCasApproval() {
-        when(store.getPendingDraft(42L)).thenReturn(null);
-
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+    void approve_rejectsMissingInternalSourceOrChangedCategory() {
+        StrategyTipAiDraftDTO legacy = pendingDraft(42L, "t_vs_z", "근거 문장");
+        legacy.setSourcePostNum(0);
+        when(store.getPendingDraft(42L)).thenReturn(legacy);
+        IllegalArgumentException noSource = assertThrows(IllegalArgumentException.class,
                 () -> service.approve(42L, "t_vs_z",
                         "입구 시야를 확인한 뒤 병력 동선을 조정하세요.", "admin"));
+        assertTrue(noSource.getMessage().contains("내부 근거"));
 
-        assertTrue(exception.getMessage().contains("이미 처리"));
+        when(store.getPendingDraft(43L)).thenReturn(
+                pendingDraft(43L, "t_vs_z", "근거 문장"));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.approve(43L, "t_vs_p",
+                        "입구 시야를 확인한 뒤 병력 동선을 조정하세요.", "admin"));
         verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
-    void approve_rejectsEditedContentOutsideAllowedLength() {
-        when(store.getPendingDraft(43L)).thenReturn(pendingDraft(43L, "t_vs_z", "숫자 없는 근거"));
-
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> service.approve(43L, "t_vs_z", "짧은 공략", "admin"));
-
-        assertTrue(exception.getMessage().contains("12~160"));
-        verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
-    }
-
-    @Test
-    void approve_allowsEditedContentLongerThanGeneratedLimitUpTo160Characters() {
-        String editedContent = repeated("가", 120);
-        when(store.getPendingDraft(47L)).thenReturn(
-                pendingDraft(47L, "t_vs_z", "숫자 없는 근거"));
-        when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
-        when(store.approve(47L, "t_vs_z", editedContent, "admin", "SC1Hub"))
-                .thenReturn(507);
-
-        int tipNum = service.approve(47L, "t_vs_z", editedContent, "admin");
-
-        assertEquals(507, tipNum);
-        verify(store).approve(47L, "t_vs_z", editedContent, "admin", "SC1Hub");
-    }
-
-    @Test
-    void approve_rejectsAbsoluteClaimInEditedContent() {
-        when(store.getPendingDraft(44L)).thenReturn(pendingDraft(44L, "t_vs_z", "숫자 없는 근거"));
+    void approve_rejectsLegacyEvidenceThatIsNotAnExactInternalQuote() {
+        StrategyTipAiDraftDTO legacy = pendingDraft(44L, "t_vs_z",
+                "입구 수비 동선을 정리해 초반 압박에 대비합니다.",
+                "입구를 잘 막아 초반을 버틴다");
+        when(store.getPendingDraft(44L)).thenReturn(legacy);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> service.approve(44L, "t_vs_z",
-                        "정찰을 한 뒤에는 무조건 입구를 막으세요.", "admin"));
+                        "입구 수비 동선을 정리해 초반 압박에 대비하세요.", "admin"));
 
-        assertTrue(exception.getMessage().contains("단정"));
+        assertTrue(exception.getMessage().contains("원문에서 확인할 수 없어"));
         verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
-    void approve_rejectsNumberMissingFromOriginalSourceExcerpt() {
-        when(store.getPendingDraft(45L)).thenReturn(pendingDraft(45L, "t_vs_z",
-                "상대가 5분에 진출하면 시야를 확보합니다."));
+    void approve_rejectsLengthAbsoluteNumberDuplicateAndCurrentMeta() {
+        when(store.getPendingDraft(anyLong())).thenAnswer(invocation -> pendingDraft(
+                invocation.getArgument(0), "t_vs_z", "상대가 5분에 진출하면 시야를 확보합니다."));
 
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> service.approve(45L, "t_vs_z",
-                        "상대가 7분에 진출하면 입구 시야부터 확인하세요.", "admin"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.approve(50L, "t_vs_z", "짧은 공략", "admin"))
+                .getMessage().contains("12~160"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.approve(51L, "t_vs_z",
+                        "정찰을 한 뒤에는 무조건 입구를 막으세요.", "admin"))
+                .getMessage().contains("단정"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.approve(52L, "t_vs_z",
+                        "상대가 7분에 진출하면 입구 시야부터 확인하세요.", "admin"))
+                .getMessage().contains("숫자"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.approve(53L, "t_vs_z",
+                        "현재 메타에서는 입구 시야부터 확인하세요.", "admin"))
+                .getMessage().contains("시의성"));
 
-        assertTrue(exception.getMessage().contains("숫자"));
-        verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
-    }
-
-    @Test
-    void approve_rejectsContentSimilarToRecentPublishedTip() {
-        when(store.getPendingDraft(46L)).thenReturn(pendingDraft(46L, "t_vs_z", "숫자 없는 근거"));
         when(store.getRecentPublishedContents(20)).thenReturn(Collections.singletonList(
                 "상대 정찰 경로를 확인한 뒤 입구 수비 동선을 조정하세요."));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> service.approve(54L, "t_vs_z",
+                        "상대 정찰 경로를 확인한 뒤 입구 수비 동선을 조정하세요.", "admin"))
+                .getMessage().contains("이미 공개"));
+    }
+
+    @Test
+    void approve_rejectsEditedContentUnrelatedToEvidence() {
+        StrategyTipAiDraftDTO draft = pendingDraft(55L, "t_vs_z",
+                "상대 정찰 경로를 확인하고 입구 수비 동선을 조정합니다.");
+        when(store.getPendingDraft(55L)).thenReturn(draft);
+        when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> service.approve(46L, "t_vs_z",
-                        "상대 정찰 경로를 확인한 뒤 입구 수비 동선을 조정하세요.", "admin"));
+                () -> service.approve(55L, "t_vs_z",
+                        "아비터로 본진에 리콜해 생산 건물을 노리세요.", "admin"));
 
-        assertTrue(exception.getMessage().contains("이미 공개"));
+        assertTrue(exception.getMessage().contains("근거 구절 전체"));
         verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void approve_allowsEditedContentUpTo160Characters() {
+        String editedContent = String.join("", Collections.nCopies(120, "가"));
+        when(store.getPendingDraft(60L)).thenReturn(
+                pendingDraft(60L, "t_vs_z", "가가가가가가가가가가가가 숫자 없는 근거",
+                        "가가가가가가가가가가가가"));
+        when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
+        when(store.approve(60L, "t_vs_z", editedContent, "admin", "SC1Hub"))
+                .thenReturn(560);
+
+        assertEquals(560, service.approve(60L, "t_vs_z", editedContent, "admin"));
+    }
+
+    private StrategyTipAiDraftService.GenerationResult generate() {
+        return service.generateDailyDrafts(GENERATION_DATE, NOW);
     }
 
     private void arrangeReadyGeneration(int generatedToday, int pendingCount,
                                         List<String> recentContents, List<Integer> usedSlots,
-                                        boolean internalSources) {
+                                        List<String> usedCategories) {
         when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(generatedToday);
         when(store.countPending()).thenReturn(pendingCount);
-        if (internalSources) {
-            when(store.getSourcePosts(anyString(), eq(3)))
-                    .thenAnswer(invocation -> Collections.singletonList(
-                            internalPost(invocation.getArgument(0))));
-        } else {
-            when(store.getSourcePosts(anyString(), eq(3))).thenReturn(Collections.emptyList());
-        }
         when(store.getRecentContents(20)).thenReturn(recentContents);
         when(store.getUsedSlots(GENERATION_DATE)).thenReturn(usedSlots);
+        when(store.getUsedCategories(GENERATION_DATE)).thenReturn(usedCategories);
+        when(store.getSourcePosts(anyString(), eq(3)))
+                .thenAnswer(invocation -> Collections.singletonList(
+                        internalPost(invocation.getArgument(0))));
     }
 
     private BoardDTO internalPost(String boardTitle) {
@@ -566,68 +518,51 @@ class StrategyTipAiDraftServiceTest {
         if (index < 0) {
             index = 3;
         }
+        int evidenceIndex = Math.min(index, EVIDENCES.size() - 1);
         BoardDTO post = new BoardDTO();
         post.setPostNum(101 + index);
         post.setTitle(boardTitle + " 내부 공략");
-        post.setContent("이 내부 공략은 상대 정찰과 병력 동선을 먼저 확인하라고 설명합니다.");
+        post.setContent("이 내부 공략은 " + EVIDENCES.get(evidenceIndex)
+                + "하라고 설명합니다.");
         return post;
     }
 
-    private StrategyTipAiGeneratedBatch singleBatch(int index, boolean externalOnly) {
-        return singleBatch(index, externalOnly, 120, 45);
+    private StrategyTipAiGeneratedBatch batchForIndexes(
+            int inputTokens, int outputTokens, int... indexes) {
+        return batch(validDrafts(indexes), inputTokens, outputTokens);
     }
 
-    private StrategyTipAiGeneratedBatch singleBatch(int index, boolean externalOnly,
-                                                      int inputTokens, int outputTokens) {
-        return singleBatch(validDraftForIndex(index, externalOnly), inputTokens, outputTokens,
-                1, citationsForIndexes(index));
-    }
-
-    private StrategyTipAiGeneratedBatch singleBatch(StrategyTipAiGeneratedBatch.Draft draft,
-                                                      int inputTokens, int outputTokens,
-                                                      int searchQueryCount,
-                                                      Map<String, String> citations) {
+    private StrategyTipAiGeneratedBatch batch(
+            List<StrategyTipAiGeneratedBatch.Draft> drafts,
+            int inputTokens, int outputTokens) {
         return new StrategyTipAiGeneratedBatch(
-                Collections.singletonList(draft), "gemini-test-model",
-                inputTokens, outputTokens, searchQueryCount, citations);
+                drafts, "gemini-3.6-flash", inputTokens, outputTokens);
     }
 
-    private StrategyTipAiGeneratedBatch.Draft validDraftForIndex(int index,
-                                                                  boolean externalOnly) {
-        String sourceId = externalOnly
-                ? "external-only:" + CATEGORIES.get(index)
-                : BOARDS.get(index) + ":" + (101 + index);
-        return new StrategyTipAiGeneratedBatch.Draft(
-                CATEGORIES.get(index), CONTENTS.get(index), sourceId,
-                "내부 글의 정찰과 병력 동선 설명이 공략을 뒷받침합니다.",
-                externalUrl(index), "모델이 제안한 출처 제목 " + (index + 1),
-                "외부 자료의 정찰과 병력 운용 설명이 같은 행동을 뒷받침합니다."
-        );
-    }
-
-    private Map<String, String> citationsForIndexes(int... indexes) {
-        Map<String, String> citations = new LinkedHashMap<>();
+    private List<StrategyTipAiGeneratedBatch.Draft> validDrafts(int... indexes) {
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = new ArrayList<>();
         for (int index : indexes) {
-            citations.put(externalUrl(index), "외부 전략 가이드 " + (index + 1));
+            drafts.add(new StrategyTipAiGeneratedBatch.Draft(
+                    CATEGORIES.get(index), CONTENTS.get(index),
+                    BOARDS.get(index) + ":" + (101 + index), EVIDENCES.get(index)));
         }
-        return citations;
+        return drafts;
     }
 
     private void assertInvalidBatchFails(StrategyTipAiGeneratedBatch invalidBatch,
                                          String expectedMessagePart) {
-        when(store.claimDailyApiCall(GENERATION_DATE, 3, NOW.minusMinutes(10)))
+        when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList(), anyList()))
+        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList(), anyList()))
                 .thenReturn(invalidBatch);
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> service.generateDailyDrafts(GENERATION_DATE, NOW));
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class, this::generate);
 
         assertTrue(exception.getMessage().contains(expectedMessagePart));
         ArgumentCaptor<String> errorCaptor = ArgumentCaptor.forClass(String.class);
         verify(store).failDailyRun(eq(GENERATION_DATE), eq(1), errorCaptor.capture(),
-                eq(invalidBatch.getInputTokens()), eq(invalidBatch.getOutputTokens()),
-                eq(invalidBatch.getSearchQueryCount()));
+                eq(invalidBatch.getInputTokens()), eq(invalidBatch.getOutputTokens()), eq(0));
         assertTrue(errorCaptor.getValue().contains(expectedMessagePart));
         verify(store, never()).saveGeneratedDrafts(
                 eq(GENERATION_DATE), anyInt(), anyList(), anyInt(), anyInt(), anyInt());
@@ -635,20 +570,20 @@ class StrategyTipAiDraftServiceTest {
 
     private StrategyTipAiDraftDTO pendingDraft(long draftId, String category,
                                                 String sourceExcerpt) {
+        return pendingDraft(draftId, category, sourceExcerpt, sourceExcerpt);
+    }
+
+    private StrategyTipAiDraftDTO pendingDraft(long draftId, String category,
+                                                String sourceExcerpt, String evidenceSummary) {
         StrategyTipAiDraftDTO draft = new StrategyTipAiDraftDTO();
         draft.setDraftId(draftId);
         draft.setStatus("PENDING");
         draft.setCategory(category);
+        draft.setSourceBoard("tvszboard");
+        draft.setSourcePostNum(101);
         draft.setSourceExcerpt(sourceExcerpt);
+        draft.setEvidenceSummary(evidenceSummary);
         return draft;
-    }
-
-    private String externalUrl(int index) {
-        return "https://strategy.example.org/brood-war/guide-" + (index + 1);
-    }
-
-    private String repeated(String value, int count) {
-        return String.join("", Collections.nCopies(count, value));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

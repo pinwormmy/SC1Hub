@@ -79,6 +79,13 @@
         order by slot_no
     </select>
 
+    <select id="selectUsedCategories" resultType="string">
+        select category
+        from one_line_strategy_ai_draft
+        where generation_date = #{generationDate}
+        order by slot_no
+    </select>
+
     <insert id="insertDraft" parameterType="com.sc1hub.strategytip.dto.StrategyTipAiDraftDTO"
             useGeneratedKeys="true" keyProperty="draftId">
         insert into one_line_strategy_ai_draft(

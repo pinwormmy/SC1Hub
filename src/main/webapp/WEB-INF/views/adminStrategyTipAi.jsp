@@ -38,25 +38,25 @@
                             <span class="ai-review-eyebrow">ADMIN / AI EDITORIAL QUEUE</span>
                             <h1 class="ai-review-title">AI 한줄 공략 검토</h1>
                             <p class="ai-review-intro">
-                                사이트 게시글과 Google Search 외부 출처를 대조하고, 운영자가 확인한 최종 문장만 공개합니다.
+                                사이트 내부 공략 글만 근거로 AI가 초안을 만들고, 운영자가 확인한 최종 문장만 공개합니다.
                             </p>
                         </div>
                         <div class="ai-review-header__actions">
                             <a class="ai-review-button ai-review-button--ghost" href="/adminPage">관리자 홈</a>
                             <form class="ai-review-generate" action="/adminPage/strategy-tips/ai/generate"
                                   method="post"
-                                  onsubmit="return window.confirm('AI 한줄 공략 초안을 생성할까요? API 호출이 발생할 수 있습니다.');">
+                                  onsubmit="if (!window.confirm('오늘 남은 AI 한줄 공략 초안을 수동 생성할까요? 1회의 API 배치 호출이 발생합니다.')) return false; this.setAttribute('aria-busy', 'true'); this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = '생성 요청 중…'; this.querySelector('.ai-review-generate__help').textContent = '요청을 처리하고 있습니다. 잠시만 기다려 주세요.'; return true;">
                                 <input type="hidden" name="csrfToken" value="<c:out value='${csrfToken}' />">
                                 <button class="ai-review-button ai-review-button--primary" type="submit"
                                         <c:if test="${generationBlocked}">disabled aria-disabled="true"</c:if>>
-                                    AI 초안 생성
+                                    오늘 남은 AI 초안 수동 생성
                                 </button>
                                 <span class="ai-review-generate__help">
                                     <c:choose>
                                         <c:when test="${not aiStatus.enabled}">AI 생성 기능이 비활성화되어 있습니다.</c:when>
                                         <c:when test="${pendingLimitReached}">대기 초안이 최대치에 도달했습니다.</c:when>
                                         <c:when test="${dailyLimitReached}">오늘 생성 한도를 모두 사용했습니다.</c:when>
-                                        <c:otherwise>필요할 때만 호출해 API 비용을 아낍니다.</c:otherwise>
+                                        <c:otherwise>수동 1회 호출로 오늘 남은 초안을 최대 3건까지 만듭니다.</c:otherwise>
                                     </c:choose>
                                 </span>
                             </form>
@@ -111,12 +111,12 @@
                                 <dd><fmt:formatNumber value="${empty aiStatus.inputTokens ? 0 : aiStatus.inputTokens}" type="number" /></dd>
                             </div>
                             <div class="ai-review-metric">
-                                <dt>출력 토큰</dt>
+                                <dt>출력+사고 토큰</dt>
                                 <dd><fmt:formatNumber value="${empty aiStatus.outputTokens ? 0 : aiStatus.outputTokens}" type="number" /></dd>
                             </div>
                             <div class="ai-review-metric">
-                                <dt>검색 질의</dt>
-                                <dd><fmt:formatNumber value="${empty aiStatus.searchQueryCount ? 0 : aiStatus.searchQueryCount}" type="number" /><span>회</span></dd>
+                                <dt>근거 범위</dt>
+                                <dd class="ai-review-metric__text">사이트 내부</dd>
                             </div>
                         </dl>
 
@@ -146,7 +146,7 @@
                         <span class="ai-review-policy__icon" aria-hidden="true">검</span>
                         <div>
                             <strong>승인 전 초안은 사이트에 공개되지 않습니다.</strong>
-                            <p>각 초안은 내부 글과 Gemini가 실제 인용한 외부 링크를 함께 저장하며, 하루 생성량과 대기 초안은 각각 최대 3개입니다.</p>
+                            <p>Google Search를 사용하지 않고 연결된 내부 원문만 근거로 삼으며, 하루 생성량과 대기 초안은 각각 최대 3개입니다.</p>
                         </div>
                     </aside>
 
@@ -155,7 +155,7 @@
                             <div>
                                 <span class="ai-review-kicker">REVIEW QUEUE</span>
                                 <h2 id="pending-drafts-title">검토 대기 초안</h2>
-                                <p>사이트 원문과 외부 원문을 모두 열어 근거를 대조한 뒤 승인하세요.</p>
+                                <p>연결된 사이트 내부 원문과 초안 내용을 대조한 뒤 승인하세요.</p>
                             </div>
                             <span class="ai-review-count" aria-label="검토 대기 초안 수">
                                 <fmt:formatNumber value="${empty aiStatus.pendingCount ? 0 : aiStatus.pendingCount}" type="number" />개 대기
@@ -209,7 +209,7 @@
                                                     <p class="ai-review-source__title"><c:out value="${draft.sourceTitle}" /></p>
                                                 </c:when>
                                                 <c:when test="${draft.sourcePostNum le 0}">
-                                                    <p class="ai-review-source__warning">이 분류에는 사용할 만한 사이트 내부 글이 없어 외부 근거로만 생성됐습니다.</p>
+                                                    <p class="ai-review-source__warning">내부 근거가 없는 과거 초안입니다. 승인하지 말고 반려하세요.</p>
                                                 </c:when>
                                                 <c:otherwise>
                                                     <p class="ai-review-source__warning">연결된 출처 제목이 없습니다. 승인 전에 원문을 확인하세요.</p>
@@ -223,31 +223,26 @@
                                                 <c:if test="${draft.sourcePostNum gt 0}">#<c:out value="${draft.sourcePostNum}" /></c:if>
                                             </p>
                                             <c:if test="${not empty draft.evidenceSummary}">
-                                                <p class="ai-review-source__evidence"><c:out value="${draft.evidenceSummary}" /></p>
+                                                <p class="ai-review-source__evidence">원문 근거 구절: <c:out value="${draft.evidenceSummary}" /></p>
                                             </c:if>
                                         </section>
 
-                                        <section class="ai-review-evidence" aria-labelledby="evidence-title-${draftLoop.index}">
-                                            <div class="ai-review-source__heading">
-                                                <h4 id="evidence-title-${draftLoop.index}">Google Search 외부 근거</h4>
-                                                <c:if test="${not empty draft.externalSourceUrl}">
+                                        <c:if test="${not empty draft.externalSourceUrl}">
+                                            <section class="ai-review-evidence" aria-labelledby="evidence-title-${draftLoop.index}">
+                                                <div class="ai-review-source__heading">
+                                                    <h4 id="evidence-title-${draftLoop.index}">과거 방식의 외부 근거</h4>
                                                     <a href="<c:out value='${draft.externalSourceUrl}' />"
                                                        target="_blank" rel="noopener noreferrer">
                                                         외부 원문 열기 <span class="sc-visually-hidden">(새 창)</span><span aria-hidden="true">↗</span>
                                                     </a>
-                                                </c:if>
-                                            </div>
-                                            <c:choose>
-                                                <c:when test="${not empty draft.externalSourceUrl and not empty draft.externalSourceTitle and not empty draft.externalEvidenceSummary}">
+                                                </div>
+                                                <c:if test="${not empty draft.externalSourceTitle and not empty draft.externalEvidenceSummary}">
                                                     <p class="ai-review-source__title"><c:out value="${draft.externalSourceTitle}" /></p>
                                                     <p><c:out value="${draft.externalEvidenceSummary}" /></p>
                                                     <p class="ai-review-source__reference"><c:out value="${draft.externalSourceUrl}" /></p>
-                                                </c:when>
-                                                <c:otherwise>
-                                                    <p class="ai-review-source__warning">검증 가능한 외부 인용이 없습니다. 이 초안은 승인하지 말고 반려하세요.</p>
-                                                </c:otherwise>
-                                            </c:choose>
-                                        </section>
+                                                </c:if>
+                                            </section>
+                                        </c:if>
                                     </div>
 
                                     <div class="ai-review-decision">
@@ -275,7 +270,7 @@
                                                               data-counter-id="draft-count-${draftLoop.index}"
                                                               aria-describedby="draft-help-${draftLoop.index} draft-count-${draftLoop.index}"><c:out value="${draft.content}" /></textarea>
                                                     <div class="ai-review-field__meta">
-                                                        <span id="draft-help-${draftLoop.index}">원문의 사실 범위를 벗어나지 않게 다듬어 주세요.</span>
+                                                        <span id="draft-help-${draftLoop.index}">원문 근거 구절 전체를 그대로 남긴 채 다듬어 주세요.</span>
                                                         <span id="draft-count-${draftLoop.index}" class="ai-review-character-count" aria-live="polite">0 / 160</span>
                                                     </div>
                                                 </div>
@@ -325,7 +320,7 @@
                                         <th scope="col">처리 상태</th>
                                         <th scope="col">초안 내용</th>
                                         <th scope="col">검토 정보</th>
-                                        <th scope="col">내부·외부 근거</th>
+                                        <th scope="col">내부 근거</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -370,7 +365,7 @@
                                                             <p>내부: <c:out value="${draft.evidenceSummary}" /></p>
                                                         </c:if>
                                                         <c:if test="${not empty draft.externalEvidenceSummary}">
-                                                            <p>외부: <c:out value="${draft.externalEvidenceSummary}" /></p>
+                                                            <p>과거 외부 근거: <c:out value="${draft.externalEvidenceSummary}" /></p>
                                                         </c:if>
                                                         <c:if test="${not empty draft.sourceExcerpt}">
                                                             <blockquote><c:out value="${draft.sourceExcerpt}" /></blockquote>
@@ -398,7 +393,7 @@
                                                     </a>
                                                 </c:if>
                                             </td>
-                                            <td data-label="내부·외부 근거">
+                                            <td data-label="내부 근거">
                                                 <c:choose>
                                                     <c:when test="${not empty draft.sourceBoard and draft.sourcePostNum gt 0}">
                                                         <c:url var="recentSourceUrl" value="/boards/${draft.sourceBoard}/readPost">
@@ -431,7 +426,7 @@
                                                         </c:choose>
                                                         <span class="sc-visually-hidden">(새 창)</span><span aria-hidden="true">↗</span>
                                                     </a>
-                                                    <p class="ai-review-history__meta">Google Search 인용</p>
+                                                    <p class="ai-review-history__meta">과거 방식의 외부 인용</p>
                                                 </c:if>
                                             </td>
                                         </tr>

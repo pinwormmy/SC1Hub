@@ -425,7 +425,7 @@
                                 <h2 class="admin-card-title">AI 한줄 공략 검수</h2>
                                 <p class="admin-card-subtitle">하루 최대 3개 초안의 근거 확인·편집·승인</p>
                             </div>
-                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/strategy-tips/ai'">검수하기</button>
+                            <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/strategy-tips/ai'">AI 생성·검수</button>
                         </div>
                     </div>
                     <div class="admin-card admin-card--indexing">

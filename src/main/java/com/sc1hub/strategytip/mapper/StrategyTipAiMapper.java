@@ -40,6 +40,8 @@ public interface StrategyTipAiMapper {
 
     List<Integer> selectUsedSlots(@Param("generationDate") LocalDate generationDate);
 
+    List<String> selectUsedCategories(@Param("generationDate") LocalDate generationDate);
+
     void insertDraft(StrategyTipAiDraftDTO draft);
 
     List<StrategyTipAiDraftDTO> selectPendingDrafts();

@@ -2,6 +2,7 @@ package com.sc1hub.strategytip.controller;
 
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.strategytip.service.StrategyTipAiDraftService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +19,7 @@ import java.util.Base64;
 
 @Controller
 @RequestMapping("/adminPage/strategy-tips/ai")
+@Slf4j
 public class StrategyTipAiAdminController {
 
     private static final String REDIRECT_URL = "redirect:/adminPage/strategy-tips/ai";
@@ -45,7 +47,10 @@ public class StrategyTipAiAdminController {
                            RedirectAttributes redirectAttributes) {
         try {
             verifyCsrfToken(session, csrfToken);
+            String requestedBy = reviewerId(session);
             StrategyTipAiDraftService.GenerationResult result = draftService.generateDailyDrafts();
+            log.info("AI 한줄 공략 수동 생성 결과. requestedBy={}, outcome={}, createdCount={}",
+                    requestedBy, result.getOutcome(), result.getCreatedCount());
             redirectAttributes.addFlashAttribute("msg", result.getMessage());
         } catch (RuntimeException e) {
             redirectAttributes.addFlashAttribute("msg", safeMessage(e, "AI 초안 생성에 실패했습니다."));

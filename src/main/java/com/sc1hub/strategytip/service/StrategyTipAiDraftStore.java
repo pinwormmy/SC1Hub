@@ -40,6 +40,11 @@ public class StrategyTipAiDraftStore {
         return slots == null ? Collections.emptyList() : slots;
     }
 
+    public List<String> getUsedCategories(LocalDate generationDate) {
+        List<String> categories = strategyTipAiMapper.selectUsedCategories(generationDate);
+        return categories == null ? Collections.emptyList() : categories;
+    }
+
     public List<StrategyTipAiDraftDTO> getPendingDrafts() {
         List<StrategyTipAiDraftDTO> drafts = strategyTipAiMapper.selectPendingDrafts();
         return drafts == null ? Collections.emptyList() : drafts;

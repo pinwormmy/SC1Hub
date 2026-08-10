@@ -22,11 +22,11 @@ class StrategyTipAiConfigTest {
         assertEquals("https://generativelanguage.googleapis.com/v1beta/interactions",
                 properties.getBaseUrl());
         assertEquals("gemini-3.6-flash", properties.getModel());
-        assertEquals("minimal", properties.getThinkingLevel());
-        assertEquals(600, properties.getMaxOutputTokens());
+        assertEquals("high", properties.getThinkingLevel());
+        assertEquals(3000, properties.getMaxOutputTokens());
         assertEquals(3, properties.getDailyDraftLimit());
         assertEquals(3, properties.getMaxPendingDrafts());
-        assertEquals(3, properties.getMaxDailyApiCalls());
+        assertEquals(2, properties.getMaxDailyApiCalls());
         assertEquals(360, properties.getSourceExcerptChars());
     }
 

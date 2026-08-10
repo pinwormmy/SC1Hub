@@ -49,6 +49,20 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
+    void strategyTipAiAdminView_hasCsrfProtectedManualGenerationForm() throws IOException {
+        String source = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("adminStrategyTipAi.jsp")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("action=\"/adminPage/strategy-tips/ai/generate\""));
+        assertTrue(source.contains("name=\"csrfToken\""));
+        assertTrue(source.contains("오늘 남은 AI 초안 수동 생성"));
+        assertTrue(source.contains("generationBlocked"));
+        assertTrue(source.contains("생성 요청 중…"));
+        assertTrue(source.contains("aria-busy"));
+    }
+
+    @Test
     void loginKeepAliveTracksCkeditorActivityForLongPostEditing() throws IOException {
         Path scriptPath = Paths.get("src/main/resources/static/js/site-header.js");
         String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
