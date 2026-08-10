@@ -160,10 +160,12 @@ ssh "$REMOTE" \
      return 1
    }
    wait_for_tomcat_shutdown() {
-     for attempt in \$(seq 1 50); do
+     attempt=0
+     while [ \"\$attempt\" -lt 50 ]; do
        if ! curl -fsS -I --max-time 2 \"http://127.0.0.1:\$REMOTE_HTTP_PORT/\" >/dev/null 2>&1; then
          return 0
        fi
+       attempt=\$((attempt + 1))
        perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
      done
      return 1
