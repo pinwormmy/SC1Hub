@@ -65,7 +65,7 @@ class GeminiStrategyTipClientTest {
                 .andExpect(jsonPath("$.tools[0].type").value("google_search"))
                 .andExpect(jsonPath("$.store").value(false))
                 .andExpect(jsonPath("$.generation_config.thinking_level").value("low"))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(900))
+                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(1200))
                 .andExpect(jsonPath("$.response_format.length()").value(1))
                 .andExpect(jsonPath("$.response_format[0].type").value("text"))
                 .andExpect(jsonPath("$.response_format[0].mime_type").value("application/json"))
