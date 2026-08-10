@@ -41,8 +41,14 @@ public class StrategyTipAiDraftService {
     private static final int ABSOLUTE_DAILY_DRAFT_LIMIT = 3;
     private static final int ABSOLUTE_DAILY_API_CALL_LIMIT = 2;
     private static final int MAX_CONTENT_LENGTH = 160;
+    private static final int MAX_GENERATED_CONTENT_LENGTH = 96;
     private static final int MIN_CONTENT_LENGTH = 12;
-    private static final int MAX_EVIDENCE_LENGTH = 500;
+    private static final int MIN_EVIDENCE_LENGTH = 5;
+    private static final int MAX_GENERATED_EVIDENCE_LENGTH = 72;
+    private static final int MAX_PROMPT_SOURCE_EXCERPT_LENGTH = 480;
+    private static final int MAX_PROMPT_SOURCE_TITLE_LENGTH = 120;
+    private static final int MAX_PROMPT_DUPLICATE_EXAMPLES = 12;
+    private static final int MAX_PROMPT_DUPLICATE_LENGTH = 96;
     private static final double DUPLICATE_SIMILARITY_THRESHOLD = 0.72;
     private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^0-9a-z가-힣]");
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+(?:\\.\\d+)?");
@@ -230,7 +236,8 @@ public class StrategyTipAiDraftService {
         if (posts == null || posts.isEmpty()) {
             return Collections.emptyList();
         }
-        int excerptLimit = Math.max(120, Math.min(properties.getSourceExcerptChars(), 1000));
+        int excerptLimit = Math.max(120,
+                Math.min(properties.getSourceExcerptChars(), MAX_PROMPT_SOURCE_EXCERPT_LENGTH));
         List<SourceReference> result = new ArrayList<>();
         for (BoardDTO post : posts) {
             if (post == null || post.getPostNum() < 1) {
@@ -259,7 +266,7 @@ public class StrategyTipAiDraftService {
                 sourceData.put("sourceId", source.sourceId);
                 sourceData.put("category", source.category);
                 sourceData.put("internalSourceAvailable", source.postNum > 0);
-                sourceData.put("title", source.title);
+                sourceData.put("title", truncate(source.title, MAX_PROMPT_SOURCE_TITLE_LENGTH));
                 sourceData.put("excerpt", source.excerpt);
                 sources.add(sourceData);
             }
@@ -269,7 +276,11 @@ public class StrategyTipAiDraftService {
         if (recentContents != null) {
             for (String content : recentContents) {
                 if (StringUtils.hasText(content)) {
-                    duplicateExamples.add(truncate(normalizeWhitespace(content), MAX_CONTENT_LENGTH));
+                    duplicateExamples.add(truncate(normalizeWhitespace(content),
+                            MAX_PROMPT_DUPLICATE_LENGTH));
+                    if (duplicateExamples.size() >= MAX_PROMPT_DUPLICATE_EXAMPLES) {
+                        break;
+                    }
                 }
             }
         }
@@ -287,12 +298,14 @@ public class StrategyTipAiDraftService {
                 + "추측, 현재 브루드 워와 무관한 패치 정보, 출처에 없는 수치나 효과를 추가하지 않는다. "
                 + "각 요청 카테고리마다 정확히 한 건을 만들고, 해당 카테고리에 속한 sourceId 하나를 고른다. "
                 + "internalSourceAvailable이 false이면 내부 글이 있다고 꾸미지 말고 evidenceSummary를 '사이트 내부 근거 없음'으로 쓴다. "
-                + "각 결과에는 sc1hub.com이 아닌 Google Search 응답이 실제 인용한 HTTPS externalSourceUrl 하나와 그 제목을 넣는다. "
-                + "content는 출처가 직접 뒷받침하는 실전 행동 한 가지를 한국어 12~160자로 요약한다. "
+                + "각 결과의 externalEvidenceSummary 안에는 sc1hub.com이 아닌 외부 자료를 가리키는 네이티브 url_citation을 정확히 하나 연결하고, URL과 제목 필드는 출력하지 않는다. "
+                + "content는 출처가 직접 뒷받침하는 실전 행동 한 가지를 한국어 "
+                + MIN_CONTENT_LENGTH + "~" + MAX_GENERATED_CONTENT_LENGTH + "자로 요약한다. "
                 + "숫자를 쓰면 선택한 출처 본문에 동일한 숫자가 있어야 한다. "
                 + "'항상', '무조건', '절대', '100%' 같은 단정은 쓰지 않는다. "
-                + "evidenceSummary에는 내부 글의 어느 내용이 공략을 뒷받침하는지 짧게 설명하고, "
-                + "externalEvidenceSummary에는 외부 출처의 어느 내용이 같은 공략을 뒷받침하는지 짧게 설명한다. "
+                + "evidenceSummary와 externalEvidenceSummary는 각각 "
+                + MIN_EVIDENCE_LENGTH + "~" + MAX_GENERATED_EVIDENCE_LENGTH
+                + "자로 근거만 짧게 설명한다. "
                 + "기존 한줄 공략과 같은 내용이나 말만 바꾼 중복은 만들지 않는다.";
     }
 
@@ -367,14 +380,16 @@ public class StrategyTipAiDraftService {
 
             String content = normalizeWhitespace(candidate.getContent());
             validateGeneratedContent(content, source.excerpt, comparisonContents);
+            String candidateEvidence = normalizeWhitespace(candidate.getEvidenceSummary());
+            if (candidateEvidence.length() < MIN_EVIDENCE_LENGTH
+                    || candidateEvidence.length() > MAX_GENERATED_EVIDENCE_LENGTH) {
+                throw new IllegalStateException("AI 초안의 근거 설명 길이가 올바르지 않습니다.");
+            }
             String evidence;
             if (source.postNum < 1) {
                 evidence = "사이트 내부 근거 없음(외부 자료만 확인)";
             } else {
-                evidence = normalizeWhitespace(candidate.getEvidenceSummary());
-                if (evidence.length() < 5 || evidence.length() > MAX_EVIDENCE_LENGTH) {
-                    throw new IllegalStateException("AI 초안의 근거 설명 길이가 올바르지 않습니다.");
-                }
+                evidence = candidateEvidence;
             }
             String externalUrl = validateExternalSourceUrl(candidate.getExternalSourceUrl(), generated);
             String nativeCitationTitle = normalizeWhitespace(generated.citationTitle(externalUrl));
@@ -386,7 +401,8 @@ public class StrategyTipAiDraftService {
             }
             externalTitle = truncate(externalTitle, 255);
             String externalEvidence = normalizeWhitespace(candidate.getExternalEvidenceSummary());
-            if (externalEvidence.length() < 5 || externalEvidence.length() > MAX_EVIDENCE_LENGTH) {
+            if (externalEvidence.length() < MIN_EVIDENCE_LENGTH
+                    || externalEvidence.length() > MAX_GENERATED_EVIDENCE_LENGTH) {
                 throw new IllegalStateException("AI 초안의 외부 근거 설명 길이가 올바르지 않습니다.");
             }
 
@@ -444,8 +460,9 @@ public class StrategyTipAiDraftService {
 
     private void validateGeneratedContent(String content, String sourceExcerpt,
                                           List<String> comparisonContents) {
-        if (content.length() < MIN_CONTENT_LENGTH || content.length() > MAX_CONTENT_LENGTH) {
-            throw new IllegalStateException("AI 한줄 공략은 12~160자여야 합니다.");
+        if (content.length() < MIN_CONTENT_LENGTH
+                || content.length() > MAX_GENERATED_CONTENT_LENGTH) {
+            throw new IllegalStateException("AI 한줄 공략 초안은 12~96자여야 합니다.");
         }
         String lowered = content.toLowerCase(Locale.ROOT);
         if (lowered.contains("무조건") || lowered.contains("항상") || lowered.contains("절대")

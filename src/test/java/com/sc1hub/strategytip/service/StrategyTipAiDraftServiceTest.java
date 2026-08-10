@@ -304,6 +304,58 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
+    void generateDailyDrafts_rejectsGeneratedContentAbove96Characters() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(3, false);
+        StrategyTipAiGeneratedBatch.Draft first = drafts.get(0);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                first.getCategory(), repeated("가", 97), first.getSourceId(),
+                first.getEvidenceSummary(), first.getExternalSourceUrl(),
+                first.getExternalSourceTitle(), first.getExternalEvidenceSummary()));
+
+        assertInvalidBatchFails(batch(drafts, 3, citations(3)), "12~96");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsInternalEvidenceAbove72Characters() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(3, false);
+        StrategyTipAiGeneratedBatch.Draft first = drafts.get(0);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                first.getCategory(), first.getContent(), first.getSourceId(), repeated("나", 73),
+                first.getExternalSourceUrl(), first.getExternalSourceTitle(),
+                first.getExternalEvidenceSummary()));
+
+        assertInvalidBatchFails(batch(drafts, 3, citations(3)), "근거 설명 길이");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsExternalOnlyInternalEvidenceAbove72Characters() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), false);
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(3, true);
+        StrategyTipAiGeneratedBatch.Draft first = drafts.get(0);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                first.getCategory(), first.getContent(), first.getSourceId(), repeated("나", 73),
+                first.getExternalSourceUrl(), first.getExternalSourceTitle(),
+                first.getExternalEvidenceSummary()));
+
+        assertInvalidBatchFails(batch(drafts, 3, citations(3)), "근거 설명 길이");
+    }
+
+    @Test
+    void generateDailyDrafts_rejectsExternalEvidenceAbove72Characters() {
+        arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), true);
+        List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(3, false);
+        StrategyTipAiGeneratedBatch.Draft first = drafts.get(0);
+        drafts.set(0, new StrategyTipAiGeneratedBatch.Draft(
+                first.getCategory(), first.getContent(), first.getSourceId(),
+                first.getEvidenceSummary(), first.getExternalSourceUrl(),
+                first.getExternalSourceTitle(), repeated("다", 73)));
+
+        assertInvalidBatchFails(batch(drafts, 3, citations(3)), "외부 근거 설명 길이");
+    }
+
+    @Test
     void generateDailyDrafts_failsForNumericClaimWhenOnlyExternalSourceExists() {
         arrangeReadyGeneration(0, 0, Collections.emptyList(), Collections.emptyList(), false);
         List<StrategyTipAiGeneratedBatch.Draft> drafts = validDrafts(3, true);
@@ -419,6 +471,21 @@ class StrategyTipAiDraftServiceTest {
 
         assertTrue(exception.getMessage().contains("12~160"));
         verify(store, never()).approve(anyLong(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void approve_allowsEditedContentLongerThanGeneratedLimitUpTo160Characters() {
+        String editedContent = repeated("가", 120);
+        when(store.getPendingDraft(47L)).thenReturn(
+                pendingDraft(47L, "t_vs_z", "숫자 없는 근거"));
+        when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
+        when(store.approve(47L, "t_vs_z", editedContent, "admin", "SC1Hub"))
+                .thenReturn(507);
+
+        int tipNum = service.approve(47L, "t_vs_z", editedContent, "admin");
+
+        assertEquals(507, tipNum);
+        verify(store).approve(47L, "t_vs_z", editedContent, "admin", "SC1Hub");
     }
 
     @Test
@@ -571,6 +638,10 @@ class StrategyTipAiDraftServiceTest {
 
     private String externalUrl(int index) {
         return "https://strategy.example.org/brood-war/guide-" + (index + 1);
+    }
+
+    private String repeated(String value, int count) {
+        return String.join("", Collections.nCopies(count, value));
     }
 
     private void assertInvalidBatchFails(StrategyTipAiGeneratedBatch invalidBatch,

@@ -36,6 +36,8 @@ public class GeminiStrategyTipClient {
 
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
     private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 1200;
+    private static final int MAX_GENERATED_CONTENT_CHARS = 96;
+    private static final int MAX_EVIDENCE_SUMMARY_CHARS = 72;
     private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
 
     private final RestTemplate restTemplate;
@@ -120,6 +122,7 @@ public class GeminiStrategyTipClient {
 
         Map<String, Object> generationConfig = new LinkedHashMap<>();
         generationConfig.put("thinking_level", resolveThinkingLevel());
+        generationConfig.put("thinking_summaries", "none");
         generationConfig.put("max_output_tokens", Math.max(1,
                 Math.min(properties.getMaxOutputTokens(), ABSOLUTE_MAX_OUTPUT_TOKENS)));
         payload.put("generation_config", generationConfig);
@@ -142,13 +145,17 @@ public class GeminiStrategyTipClient {
         constraints.put("allowedInternalSourceIds", sourceIds);
         constraints.put("minimumGoogleSearchQueries", requestedCount);
         constraints.put("maximumGoogleSearchQueries", requestedCount);
+        constraints.put("maximumContentChars", MAX_GENERATED_CONTENT_CHARS);
+        constraints.put("maximumEvidenceSummaryChars", MAX_EVIDENCE_SUMMARY_CHARS);
         try {
             return userPrompt
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
                     + "\nGoogle Search query budget: execute exactly " + requestedCount
                     + " queries total, exactly one query for each requested category. "
-                    + "Use an externalSourceUrl exactly as it appears in a native url_citation annotation, "
-                    + "and keep that annotation inside the corresponding draft JSON object.";
+                    + "Return only the schema JSON. Keep each evidence summary concise. "
+                    + "Put exactly one native url_citation annotation inside each corresponding "
+                    + "externalEvidenceSummary. Do not output a source URL or title; "
+                    + "the server reads both from the native annotation.";
         } catch (JsonProcessingException e) {
             throw new GeminiStrategyTipException("Could not build the Gemini request.", e);
         }
@@ -157,8 +164,6 @@ public class GeminiStrategyTipClient {
     private Map<String, Object> buildResponseSchema(int requestedCount,
                                                     List<String> categories,
                                                     List<String> sourceIds) {
-        Map<String, Object> stringProperty = Collections.singletonMap("type", "string");
-
         Map<String, Object> category = new LinkedHashMap<>();
         category.put("type", "string");
         category.put("enum", categories);
@@ -167,25 +172,25 @@ public class GeminiStrategyTipClient {
         sourceId.put("type", "string");
         sourceId.put("enum", sourceIds);
 
-        Map<String, Object> content = new LinkedHashMap<>();
-        content.put("type", "string");
-        content.put("minLength", 12);
-        content.put("maxLength", 160);
+        Map<String, Object> content = describedStringProperty(
+                "Korean one-line strategy, 12 to " + MAX_GENERATED_CONTENT_CHARS + " characters.");
+        Map<String, Object> evidenceSummary = describedStringProperty(
+                "Concise internal evidence, 5 to " + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
+        Map<String, Object> externalEvidenceSummary = describedStringProperty(
+                "Concise external evidence, 5 to " + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
 
         Map<String, Object> draftProperties = new LinkedHashMap<>();
         draftProperties.put("category", category);
         draftProperties.put("content", content);
         draftProperties.put("sourceId", sourceId);
-        draftProperties.put("evidenceSummary", stringProperty);
-        draftProperties.put("externalSourceUrl", stringProperty);
-        draftProperties.put("externalSourceTitle", stringProperty);
-        draftProperties.put("externalEvidenceSummary", stringProperty);
+        draftProperties.put("evidenceSummary", evidenceSummary);
+        draftProperties.put("externalEvidenceSummary", externalEvidenceSummary);
 
         Map<String, Object> draft = new LinkedHashMap<>();
         draft.put("type", "object");
         draft.put("properties", draftProperties);
-        draft.put("required", Arrays.asList("category", "content", "sourceId", "evidenceSummary",
-                "externalSourceUrl", "externalSourceTitle", "externalEvidenceSummary"));
+        draft.put("required", Arrays.asList("category", "content", "sourceId",
+                "evidenceSummary", "externalEvidenceSummary"));
         draft.put("additionalProperties", false);
 
         Map<String, Object> drafts = new LinkedHashMap<>();
@@ -200,6 +205,13 @@ public class GeminiStrategyTipClient {
         schema.put("required", Collections.singletonList("drafts"));
         schema.put("additionalProperties", false);
         return schema;
+    }
+
+    private Map<String, Object> describedStringProperty(String description) {
+        Map<String, Object> property = new LinkedHashMap<>();
+        property.put("type", "string");
+        property.put("description", description);
+        return property;
     }
 
     private StrategyTipAiGeneratedBatch parseResponse(String rawResponse,
@@ -358,7 +370,7 @@ public class GeminiStrategyTipClient {
 
         Set<String> categorySet = new LinkedHashSet<>(allowedCategories);
         Set<String> sourceIdSet = new LinkedHashSet<>(allowedSourceIds);
-        List<ByteRange> draftRanges = findDraftByteRanges(outputText);
+        List<DraftByteRanges> draftRanges = findDraftByteRanges(outputText);
         if (draftRanges.size() != requestedCount) {
             throw new GeminiStrategyTipException("Gemini structured output draft ranges are invalid.");
         }
@@ -369,33 +381,35 @@ public class GeminiStrategyTipClient {
             String content = requiredOutputText(draftNode, "content");
             String sourceId = requiredOutputText(draftNode, "sourceId");
             String evidenceSummary = requiredOutputText(draftNode, "evidenceSummary");
-            String externalSourceUrl = requiredOutputText(draftNode, "externalSourceUrl");
-            String externalSourceTitle = requiredOutputText(draftNode, "externalSourceTitle");
             String externalEvidenceSummary = requiredOutputText(draftNode, "externalEvidenceSummary");
 
             if (!categorySet.contains(category) || !sourceIdSet.contains(sourceId)) {
                 throw new GeminiStrategyTipException("Gemini returned a draft outside the allowed source scope.");
             }
-            if (!citations.containsKey(externalSourceUrl)
-                    || !hasCitationWithinRange(externalSourceUrl,
-                    draftRanges.get(draftIndex), citationSpans)) {
+            DraftByteRanges ranges = draftRanges.get(draftIndex);
+            String externalSourceUrl = singleCitationUrlWithinEvidenceRange(
+                    ranges.draftRange, ranges.externalEvidenceRange, citationSpans);
+            if (!StringUtils.hasText(externalSourceUrl)
+                    || !citations.containsKey(externalSourceUrl)) {
                 throw new GeminiStrategyTipException(
-                        "Gemini returned an external source without a native Google Search citation bound to that draft.");
+                        "Gemini did not bind exactly one native Google Search citation to that draft.");
             }
+            String externalSourceTitle = citationTitleOrHost(
+                    externalSourceUrl, citations.get(externalSourceUrl));
             drafts.add(new StrategyTipAiGeneratedBatch.Draft(category, content, sourceId,
                     evidenceSummary, externalSourceUrl, externalSourceTitle, externalEvidenceSummary));
         }
         return drafts;
     }
 
-    private List<ByteRange> findDraftByteRanges(String outputText) {
+    private List<DraftByteRanges> findDraftByteRanges(String outputText) {
         int field = outputText.indexOf("\"drafts\"");
         int arrayStart = field < 0 ? -1 : outputText.indexOf('[', field + 8);
         if (arrayStart < 0) {
             return Collections.emptyList();
         }
 
-        List<ByteRange> ranges = new ArrayList<>();
+        List<DraftByteRanges> ranges = new ArrayList<>();
         int index = arrayStart + 1;
         while (index < outputText.length()) {
             char current = outputText.charAt(index);
@@ -432,9 +446,15 @@ public class GeminiStrategyTipClient {
                     depth++;
                 } else if (value == '}' && --depth == 0) {
                     int objectEnd = index + 1;
-                    ranges.add(new ByteRange(
+                    ByteRange draftRange = new ByteRange(
                             utf8Length(outputText.substring(0, objectStart)),
-                            utf8Length(outputText.substring(0, objectEnd))));
+                            utf8Length(outputText.substring(0, objectEnd)));
+                    ByteRange externalEvidenceRange = findStringPropertyByteRange(
+                            outputText, objectStart, objectEnd, "externalEvidenceSummary");
+                    if (externalEvidenceRange == null) {
+                        return Collections.emptyList();
+                    }
+                    ranges.add(new DraftByteRanges(draftRange, externalEvidenceRange));
                     index = objectEnd;
                     break;
                 }
@@ -446,19 +466,111 @@ public class GeminiStrategyTipClient {
         return ranges;
     }
 
-    private boolean hasCitationWithinRange(String url, ByteRange draftRange,
-                                           List<CitationSpan> citationSpans) {
-        if (citationSpans == null) {
-            return false;
+    private ByteRange findStringPropertyByteRange(String json, int objectStart,
+                                                  int objectEnd, String propertyName) {
+        ByteRange result = null;
+        int index = objectStart + 1;
+        while (index < objectEnd - 1) {
+            while (index < objectEnd - 1
+                    && (Character.isWhitespace(json.charAt(index)) || json.charAt(index) == ',')) {
+                index++;
+            }
+            if (index >= objectEnd - 1 || json.charAt(index) == '}') {
+                break;
+            }
+            if (json.charAt(index) != '"') {
+                return null;
+            }
+            int keyEnd = findJsonStringEnd(json, index, objectEnd);
+            if (keyEnd < 0) {
+                return null;
+            }
+            String key = json.substring(index + 1, keyEnd);
+            index = keyEnd + 1;
+            while (index < objectEnd && Character.isWhitespace(json.charAt(index))) {
+                index++;
+            }
+            if (index >= objectEnd || json.charAt(index) != ':') {
+                return null;
+            }
+            index++;
+            while (index < objectEnd && Character.isWhitespace(json.charAt(index))) {
+                index++;
+            }
+            if (index >= objectEnd || json.charAt(index) != '"') {
+                return null;
+            }
+            int valueEnd = findJsonStringEnd(json, index, objectEnd);
+            if (valueEnd < 0) {
+                return null;
+            }
+            if (propertyName.equals(key)) {
+                if (result != null) {
+                    return null;
+                }
+                result = new ByteRange(
+                        utf8Length(json.substring(0, index + 1)),
+                        utf8Length(json.substring(0, valueEnd)));
+            }
+            index = valueEnd + 1;
         }
-        for (CitationSpan citation : citationSpans) {
-            if (url.equals(citation.url)
-                    && citation.startByte < draftRange.endByte
-                    && citation.endByte > draftRange.startByte) {
-                return true;
+        return result;
+    }
+
+    private int findJsonStringEnd(String json, int openingQuote, int limit) {
+        boolean escaped = false;
+        for (int index = openingQuote + 1; index < limit; index++) {
+            char value = json.charAt(index);
+            if (escaped) {
+                escaped = false;
+            } else if (value == '\\') {
+                escaped = true;
+            } else if (value == '"') {
+                return index;
             }
         }
-        return false;
+        return -1;
+    }
+
+    private String singleCitationUrlWithinEvidenceRange(
+            ByteRange draftRange,
+            ByteRange externalEvidenceRange,
+            List<CitationSpan> citationSpans) {
+        if (citationSpans == null) {
+            return null;
+        }
+        String citationUrl = null;
+        int citationCount = 0;
+        for (CitationSpan citation : citationSpans) {
+            boolean overlapsDraft = citation.startByte < draftRange.endByte
+                    && citation.endByte > draftRange.startByte;
+            if (!overlapsDraft) {
+                continue;
+            }
+            if (citation.startByte < externalEvidenceRange.startByte
+                    || citation.endByte > externalEvidenceRange.endByte) {
+                return null;
+            }
+            citationCount++;
+            if (citationCount > 1) {
+                return null;
+            }
+            citationUrl = citation.url;
+        }
+        return citationUrl;
+    }
+
+    private String citationTitleOrHost(String url, String title) {
+        if (StringUtils.hasText(title)) {
+            return title.trim();
+        }
+        try {
+            String host = new URI(url).getHost();
+            return StringUtils.hasText(host)
+                    ? host.toLowerCase(java.util.Locale.ROOT) : "";
+        } catch (URISyntaxException e) {
+            return "";
+        }
     }
 
     private int utf8Length(String value) {
@@ -492,7 +604,15 @@ public class GeminiStrategyTipClient {
 
     private String resolveThinkingLevel() {
         String value = properties.getThinkingLevel();
-        return StringUtils.hasText(value) ? value.trim() : "low";
+        if (!StringUtils.hasText(value)) {
+            return "minimal";
+        }
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!Arrays.asList("minimal", "low", "medium", "high").contains(normalized)) {
+            log.warn("Invalid strategy tip thinkingLevel; using minimal.");
+            return "minimal";
+        }
+        return normalized;
     }
 
     private String requireText(String value, String message) {
@@ -662,6 +782,16 @@ public class GeminiStrategyTipClient {
         private ByteRange(int startByte, int endByte) {
             this.startByte = startByte;
             this.endByte = endByte;
+        }
+    }
+
+    private static final class DraftByteRanges {
+        private final ByteRange draftRange;
+        private final ByteRange externalEvidenceRange;
+
+        private DraftByteRanges(ByteRange draftRange, ByteRange externalEvidenceRange) {
+            this.draftRange = draftRange;
+            this.externalEvidenceRange = externalEvidenceRange;
         }
     }
 }
