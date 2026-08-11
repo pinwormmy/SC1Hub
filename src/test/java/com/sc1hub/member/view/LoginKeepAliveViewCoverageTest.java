@@ -92,6 +92,9 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(headSource.contains("window.stop()"));
         assertTrue(headSource.contains("fetchPriority = 'low'"));
         assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
+        assertTrue(headSource.contains("rel=\"preload\""));
+        assertTrue(headSource.contains("font-display: optional"));
+        assertFalse(headSource.contains("neodgm_pro/style.css"));
         assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
