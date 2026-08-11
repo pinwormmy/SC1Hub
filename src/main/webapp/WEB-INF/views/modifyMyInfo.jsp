@@ -75,26 +75,27 @@ function checkSignupForm() {
     modifyMyInfoForm.submit();
 }
 
-function confirmDelete() {
+async function confirmDelete() {
     if(confirm("정말로 탈퇴하시겠습니까? 탈퇴 시 모든 데이터가 삭제됩니다.")) {
-        $.ajax({
-            url: '/deleteMyAccount',
-            type: 'POST',
-            contentType: 'application/json',
-            dataType: 'json',
-            success: function(data) {
-                if(data.success) {
-                    alert("탈퇴가 완료되었습니다. 감사합니다.");
-                    location.href = '/';
-                } else {
-                    alert("탈퇴 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+        try {
+            const response = await fetch('/deleteMyAccount', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
-            },
-            error: function(err) {
-                console.error(err); // 오류 발생 시 콘솔에 오류 로그 출력
-                alert("탈퇴 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+            });
+            const data = await response.json();
+            if (response.ok && data.success) {
+                alert("탈퇴가 완료되었습니다. 감사합니다.");
+                location.href = '/';
+                return;
             }
-        });
+        } catch (error) {
+            console.error('계정 탈퇴 처리 실패', error);
+        }
+        alert("탈퇴 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
     }
 }
 </script>

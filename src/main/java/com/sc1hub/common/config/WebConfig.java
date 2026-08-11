@@ -7,9 +7,12 @@ import com.sc1hub.common.interceptor.MemberLoginInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.concurrent.TimeUnit;
 
 @Configuration
 @Slf4j
@@ -35,6 +38,14 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        CacheControl versionedAssetCache = CacheControl.maxAge(365, TimeUnit.DAYS)
+                .cachePublic();
+        registry.addResourceHandler("/css/**")
+                .addResourceLocations("classpath:/static/css/")
+                .setCacheControl(versionedAssetCache);
+        registry.addResourceHandler("/js/**")
+                .addResourceLocations("classpath:/static/js/")
+                .setCacheControl(versionedAssetCache);
         // Uploaded post images need controller-based recovery for legacy filenames.
         registry.addResourceHandler("/favicon.ico")
                 .addResourceLocations("classpath:/static/favicon.ico");

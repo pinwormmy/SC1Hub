@@ -459,23 +459,29 @@
 <%@ include file="/WEB-INF/views/include/footer.jspf" %>
 
 <script>
-function confirmDelete(id) {
+async function confirmDelete(id) {
     if(confirm("정말로 탈퇴시키겠습니까?")) {
-        // AJAX 요청
-        $.ajax({
-            url: '/deleteMember',
-            type: 'POST',
-            data: { id: id },
-            success: function(data) {
-                // 응답 처리
-                if(data.success) {
-                    alert("탈퇴가 완료되었습니다.");
-                    location.href = '/adminPage';
-                } else {
-                    alert("탈퇴 처리 중 오류가 발생했습니다.");
-                }
+        try {
+            var response = await fetch('/deleteMember', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: new URLSearchParams({ id: id }).toString()
+            });
+            var data = await response.json();
+            if (response.ok && data.success) {
+                alert("탈퇴가 완료되었습니다.");
+                location.href = '/adminPage';
+                return;
             }
-        });
+        } catch (error) {
+            console.error('회원 탈퇴 처리 실패', error);
+        }
+        alert("탈퇴 처리 중 오류가 발생했습니다.");
     }
 }
 

@@ -77,4 +77,17 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("CKEDITOR"));
         assertTrue(source.contains("instanceReady"));
     }
+
+    @Test
+    void sharedPageDefersAdsAndDoesNotLoadGlobalJquery() throws IOException {
+        String headSource = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
+        String footerSource = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("include/footer.jspf")), StandardCharsets.UTF_8);
+
+        assertTrue(headSource.contains("requestIdleCallback"));
+        assertTrue(headSource.contains("window.addEventListener('load'"));
+        assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
+        assertFalse(footerSource.contains("jquery"));
+    }
 }

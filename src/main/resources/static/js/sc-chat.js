@@ -21,6 +21,7 @@
     let recentRoles = [];
     let sinceLastAd = Number.POSITIVE_INFINITY;
     let adObserver = null;
+    let batchRendering = false;
 
     function getMemberMeta() {
         const metaEl = document.getElementById('scMemberMeta');
@@ -108,7 +109,7 @@
     // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
     function insertAdLine(config) {
         const logEl = ensureChatLog();
-        const shouldScroll = isNearBottom();
+        const shouldScroll = !batchRendering && isNearBottom();
 
         const lineEl = document.createElement('div');
         lineEl.className = 'sc-chat__line sc-chat__ad';
@@ -201,7 +202,7 @@
         const logEl = ensureChatLog();
         renderedIds.add(message.id);
 
-        const shouldScroll = isNearBottom();
+        const shouldScroll = !batchRendering && isNearBottom();
 
         const lineEl = document.createElement('div');
         lineEl.className = 'sc-chat__line';
@@ -238,6 +239,22 @@
             scrollToBottom();
         }
         maybeInsertAd(message);
+    }
+
+    function renderMessages(messages) {
+        if (!Array.isArray(messages) || messages.length === 0) {
+            return;
+        }
+        const shouldScroll = isNearBottom();
+        batchRendering = true;
+        try {
+            messages.forEach(renderMessage);
+        } finally {
+            batchRendering = false;
+        }
+        if (shouldScroll) {
+            scrollToBottom();
+        }
     }
 
     function markDeleted(messageId) {
@@ -294,7 +311,7 @@
                 systemLine(self.mutedText);
             }
         }
-        (data.messages || []).forEach(renderMessage);
+        renderMessages(data.messages);
         (data.deletedIds || []).forEach(markDeleted);
         if (typeof data.lastSeq === 'number' && data.lastSeq > lastSeq) {
             lastSeq = data.lastSeq;

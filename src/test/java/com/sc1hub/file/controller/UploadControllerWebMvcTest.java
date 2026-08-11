@@ -31,8 +31,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.mockito.BDDMockito.given;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(SpringExtension.class)
@@ -130,5 +133,14 @@ class UploadControllerWebMvcTest {
         mockMvc.perform(get("/uploadedImg/{imageName}", uid + "_" + storedFileName))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(imageBytes));
+    }
+
+    @Test
+    void versionedJavaScript_isServedWithLongLivedPublicCache() throws Exception {
+        mockMvc.perform(get("/js/sc-chat.js?v=test-version"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", allOf(
+                        containsString("max-age=31536000"),
+                        containsString("public"))));
     }
 }
