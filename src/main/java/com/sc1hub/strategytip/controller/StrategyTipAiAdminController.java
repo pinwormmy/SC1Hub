@@ -35,7 +35,7 @@ public class StrategyTipAiAdminController {
     @GetMapping
     public String reviewPage(Model model, HttpSession session) {
         model.addAttribute("pendingDrafts", draftService.getPendingDrafts());
-        model.addAttribute("recentDrafts", draftService.getRecentDrafts(30));
+        model.addAttribute("recentDrafts", draftService.getRecentDrafts(10));
         model.addAttribute("aiStatus", draftService.getStatus());
         model.addAttribute("csrfToken", getOrCreateCsrfToken(session));
         return "adminStrategyTipAi";
@@ -48,7 +48,7 @@ public class StrategyTipAiAdminController {
         try {
             verifyCsrfToken(session, csrfToken);
             String requestedBy = reviewerId(session);
-            StrategyTipAiDraftService.GenerationResult result = draftService.generateDailyDrafts();
+            StrategyTipAiDraftService.GenerationResult result = draftService.generateManualDrafts();
             log.info("AI 한줄 공략 수동 생성 결과. requestedBy={}, outcome={}, createdCount={}",
                     requestedBy, result.getOutcome(), result.getCreatedCount());
             redirectAttributes.addFlashAttribute("msg", result.getMessage());

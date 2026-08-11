@@ -73,12 +73,28 @@ public class StrategyTipAiDraftService {
         return generateDailyDrafts(LocalDate.now(zone), LocalDateTime.now(zone));
     }
 
+    public GenerationResult generateManualDrafts() {
+        ZoneId zone = resolveZone();
+        return generateManualDrafts(LocalDate.now(zone), LocalDateTime.now(zone));
+    }
+
     GenerationResult generateDailyDrafts(LocalDate generationDate, LocalDateTime now) {
         if (!generationInProgress.compareAndSet(false, true)) {
             return GenerationResult.skipped("AI 한줄 공략 생성이 이미 실행 중입니다.");
         }
         try {
             return generateDailyDraftsWithLock(generationDate, now);
+        } finally {
+            generationInProgress.set(false);
+        }
+    }
+
+    GenerationResult generateManualDrafts(LocalDate generationDate, LocalDateTime now) {
+        if (!generationInProgress.compareAndSet(false, true)) {
+            return GenerationResult.skipped("AI 한줄 공략 생성이 이미 실행 중입니다.");
+        }
+        try {
+            return generateManualDraftsWithLock(generationDate, now);
         } finally {
             generationInProgress.set(false);
         }
@@ -121,7 +137,8 @@ public class StrategyTipAiDraftService {
         List<Integer> slots = findAvailableSlots(generationDate, targetCount, dailyLimit);
         List<String> comparisonContents = new ArrayList<>(
                 store.getRecentContents(properties.getDuplicateContextLimit()));
-        List<StrategyTipSourceCatalog.Entry> categories = selectCategories(generationDate, slots);
+        List<StrategyTipSourceCatalog.Entry> categories = selectCategories(
+                generationDate, slots, true);
         if (categories.size() != targetCount) {
             return GenerationResult.skipped("한줄 공략 분류를 충분히 준비하지 못했습니다.");
         }
@@ -151,6 +168,70 @@ public class StrategyTipAiDraftService {
             recordFailedCall(generationDate, attemptNo, generated, e);
             throw e;
         }
+    }
+
+    private GenerationResult generateManualDraftsWithLock(LocalDate generationDate,
+                                                            LocalDateTime now) {
+        String unavailableMessage = generationUnavailableMessage();
+        if (StringUtils.hasText(unavailableMessage)) {
+            return GenerationResult.skipped(unavailableMessage);
+        }
+
+        int targetCount = ABSOLUTE_DAILY_DRAFT_LIMIT;
+        List<Integer> slots = findAvailableManualSlots(generationDate, targetCount);
+        List<String> comparisonContents = new ArrayList<>(
+                store.getRecentContents(properties.getDuplicateContextLimit()));
+        List<StrategyTipSourceCatalog.Entry> categories = selectCategories(
+                generationDate, slots, false);
+        if (categories.size() != targetCount) {
+            return GenerationResult.skipped("한줄 공략 분류를 충분히 준비하지 못했습니다.");
+        }
+        PromptInput promptInput = buildPromptInput(categories, comparisonContents);
+        String serializedPrompt = serializePromptInput(promptInput);
+        LocalDateTime staleBefore = now.minusMinutes(
+                Math.max(1, properties.getStaleRunMinutes()));
+
+        // Manual administrator requests intentionally bypass daily API, draft and pending
+        // limits. The shared JVM/DB claim still prevents the same request from racing.
+        int attemptNo = store.claimDailyApiCall(
+                generationDate, Integer.MAX_VALUE, staleBefore);
+        if (attemptNo < 1) {
+            return GenerationResult.skipped("다른 AI 한줄 공략 생성 요청이 실행 중입니다.");
+        }
+
+        StrategyTipAiGeneratedBatch generated = null;
+        try {
+            generated = geminiClient.generate(
+                    buildSystemPrompt(), serializedPrompt, targetCount,
+                    promptInput.categories);
+            List<StrategyTipAiDraftDTO> drafts = validateAndMap(
+                    generationDate, slots, categories, comparisonContents, generated);
+            store.saveGeneratedDrafts(generationDate, attemptNo, drafts,
+                    generated.getInputTokens(), generated.getOutputTokens(), 0);
+            return GenerationResult.created(drafts.size());
+        } catch (RuntimeException e) {
+            recordFailedCall(generationDate, attemptNo, generated, e);
+            throw e;
+        }
+    }
+
+    private String generationUnavailableMessage() {
+        if (!properties.isEnabled()) {
+            return "AI 한줄 공략 생성이 비활성화되어 있습니다.";
+        }
+        if (!properties.isAllowLiveCalls()) {
+            return "Gemini 실호출이 비활성화되어 있습니다.";
+        }
+        if (!StringUtils.hasText(properties.getApiKey())) {
+            return "Gemini API 키가 설정되지 않았습니다.";
+        }
+        if (!StringUtils.hasText(properties.getModel())) {
+            return "Gemini 모델이 설정되지 않았습니다.";
+        }
+        if (!isTrustedGeminiApiEndpoint(properties.getBaseUrl())) {
+            return "Gemini API 주소 설정을 확인해주세요.";
+        }
+        return "";
     }
 
     private void recordFailedCall(LocalDate generationDate, int attemptNo,
@@ -248,7 +329,8 @@ public class StrategyTipAiDraftService {
     }
 
     private List<StrategyTipSourceCatalog.Entry> selectCategories(LocalDate generationDate,
-                                                                  List<Integer> slots) {
+                                                                  List<Integer> slots,
+                                                                  boolean avoidUsedCategories) {
         List<StrategyTipSourceCatalog.Entry> catalog = StrategyTipSourceCatalog.entries();
         if (catalog.isEmpty() || slots == null || slots.isEmpty()) {
             return Collections.emptyList();
@@ -256,10 +338,13 @@ public class StrategyTipAiDraftService {
 
         int start = (int) Math.floorMod(generationDate.toEpochDay() * ABSOLUTE_DAILY_DRAFT_LIMIT,
                 (long) catalog.size());
-        Set<String> usedCategories = new HashSet<>(store.getUsedCategories(generationDate));
+        Set<String> usedCategories = avoidUsedCategories
+                ? new HashSet<>(store.getUsedCategories(generationDate))
+                : new HashSet<>();
         List<StrategyTipSourceCatalog.Entry> selected = new ArrayList<>();
         for (Integer slot : slots) {
-            if (slot == null || slot < 1 || slot > ABSOLUTE_DAILY_DRAFT_LIMIT) {
+            if (slot == null || slot < 1
+                    || (avoidUsedCategories && slot > ABSOLUTE_DAILY_DRAFT_LIMIT)) {
                 throw new IllegalStateException("AI 한줄 공략 슬롯 번호가 올바르지 않습니다.");
             }
             StrategyTipSourceCatalog.Entry match = null;
@@ -339,6 +424,23 @@ public class StrategyTipAiDraftService {
         }
         if (available.size() != requestedCount) {
             throw new IllegalStateException("오늘 사용할 AI 초안 슬롯이 부족합니다.");
+        }
+        return available;
+    }
+
+    private List<Integer> findAvailableManualSlots(LocalDate generationDate,
+                                                   int requestedCount) {
+        Set<Integer> used = new HashSet<>(store.getUsedSlots(generationDate));
+        List<Integer> available = new ArrayList<>();
+        int slot = 1;
+        while (available.size() < requestedCount) {
+            if (!used.contains(slot)) {
+                available.add(slot);
+            }
+            if (slot == Integer.MAX_VALUE) {
+                throw new IllegalStateException("수동 AI 초안 슬롯을 더 만들 수 없습니다.");
+            }
+            slot++;
         }
         return available;
     }

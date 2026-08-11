@@ -46,7 +46,7 @@ class StrategyTipAiAdminControllerTest {
         List<StrategyTipAiDraftDTO> recent = Collections.singletonList(new StrategyTipAiDraftDTO());
         StrategyTipAiStatusDTO status = new StrategyTipAiStatusDTO();
         when(draftService.getPendingDrafts()).thenReturn(pending);
-        when(draftService.getRecentDrafts(30)).thenReturn(recent);
+        when(draftService.getRecentDrafts(10)).thenReturn(recent);
         when(draftService.getStatus()).thenReturn(status);
         ExtendedModelMap model = new ExtendedModelMap();
         MockHttpSession session = new MockHttpSession();
@@ -63,7 +63,7 @@ class StrategyTipAiAdminControllerTest {
 
     @Test
     void generate_addsResultMessageAndRedirectsToReviewPage() {
-        when(draftService.generateDailyDrafts())
+        when(draftService.generateManualDrafts())
                 .thenReturn(StrategyTipAiDraftService.GenerationResult.created(3));
         RedirectAttributesModelMap redirect = new RedirectAttributesModelMap();
         MockHttpSession session = adminSession("operator");
@@ -73,18 +73,19 @@ class StrategyTipAiAdminControllerTest {
         assertEquals(REDIRECT_VIEW, view);
         assertEquals("AI 한줄 공략 초안 3건을 생성했습니다.",
                 redirect.getFlashAttributes().get("msg"));
+        verify(draftService).generateManualDrafts();
     }
 
     @Test
     void generate_addsSafeFailureMessageAndStillRedirects() {
-        when(draftService.generateDailyDrafts()).thenThrow(new IllegalStateException("내부 근거 부족"));
+        when(draftService.generateManualDrafts()).thenThrow(new IllegalStateException("생성 실패"));
         RedirectAttributesModelMap redirect = new RedirectAttributesModelMap();
         MockHttpSession session = adminSession("operator");
 
         String view = controller.generate(CSRF_TOKEN, session, redirect);
 
         assertEquals(REDIRECT_VIEW, view);
-        assertEquals("내부 근거 부족", redirect.getFlashAttributes().get("msg"));
+        assertEquals("생성 실패", redirect.getFlashAttributes().get("msg"));
     }
 
     @Test

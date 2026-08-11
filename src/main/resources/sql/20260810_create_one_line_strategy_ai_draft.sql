@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS one_line_strategy_ai_daily_run (
 CREATE TABLE IF NOT EXISTS one_line_strategy_ai_draft (
     draft_id BIGINT NOT NULL AUTO_INCREMENT,
     generation_date DATE NOT NULL,
-    slot_no TINYINT NOT NULL,
+    slot_no INT NOT NULL,
     category VARCHAR(32) NOT NULL,
     content VARCHAR(160) NOT NULL,
     evidence_summary VARCHAR(500) NOT NULL,
@@ -40,3 +40,8 @@ CREATE TABLE IF NOT EXISTS one_line_strategy_ai_draft (
         FOREIGN KEY (published_tip_num) REFERENCES one_line_strategy(tip_num)
         ON DELETE SET NULL
 );
+
+-- Existing installations originally used TINYINT because only three daily slots existed.
+-- Manual administrator batches can continue with higher slot numbers on the same date.
+ALTER TABLE one_line_strategy_ai_draft
+    MODIFY COLUMN slot_no INT NOT NULL;

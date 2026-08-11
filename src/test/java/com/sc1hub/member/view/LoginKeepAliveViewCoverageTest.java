@@ -10,6 +10,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoginKeepAliveViewCoverageTest {
@@ -56,15 +57,16 @@ class LoginKeepAliveViewCoverageTest {
 
         assertTrue(source.contains("action=\"/adminPage/strategy-tips/ai/generate\""));
         assertTrue(source.contains("name=\"csrfToken\""));
-        assertTrue(source.contains("오늘 남은 AI 초안 수동 생성"));
-        assertTrue(source.contains("generationBlocked"));
-        assertTrue(source.contains("apiCallLimitReached"));
-        assertTrue(source.contains("오늘의 API 호출 상한을 모두 사용했습니다."));
-        assertTrue(source.contains("생성 요청 중…"));
+        assertTrue(source.contains("초안 3건 생성"));
+        assertTrue(source.contains("API 요금이 청구될 수 있습니다"));
+        assertTrue(source.contains("not aiStatus.enabled"));
+        assertTrue(source.contains("생성 중…"));
         assertTrue(source.contains("aria-busy"));
-        assertTrue(source.contains("Gemini 체크포인트"));
-        assertTrue(source.contains("승인 대기는 최대 30개"));
-        assertTrue(source.contains("Search · URL Context · 사이트 내부 글 미사용"));
+        assertFalse(source.contains("generationBlocked"));
+        assertFalse(source.contains("apiCallLimitReached"));
+        assertFalse(source.contains("사이트 내부 근거"));
+        assertFalse(source.contains("원문 근거 구절"));
+        assertFalse(source.contains("Google Search"));
     }
 
     @Test

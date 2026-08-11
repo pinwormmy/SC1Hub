@@ -207,6 +207,41 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
+    void generateManualDrafts_bypassesAutomaticLimitsAndUsesNextThreeSlots() {
+        List<String> manualCategories = Arrays.asList("z_vs_t", "z_vs_p", "z_vs_z");
+        List<StrategyTipAiGeneratedBatch.Draft> manualDrafts = Arrays.asList(
+                new StrategyTipAiGeneratedBatch.Draft(
+                        "z_vs_t", "상대 진출 경로를 살핀 뒤 수비 병력의 위치를 조정하세요."),
+                new StrategyTipAiGeneratedBatch.Draft(
+                        "z_vs_p", "정찰 정보를 바탕으로 멀티 타이밍과 병력 생산을 조율하세요."),
+                new StrategyTipAiGeneratedBatch.Draft(
+                        "z_vs_z", "시야를 먼저 확보하고 상대 병력 이동에 맞춰 진형을 바꾸세요."));
+        when(store.getRecentContents(20)).thenReturn(Collections.emptyList());
+        when(store.getUsedSlots(GENERATION_DATE)).thenReturn(Arrays.asList(1, 2, 3));
+        when(store.claimDailyApiCall(
+                GENERATION_DATE, Integer.MAX_VALUE, NOW.minusMinutes(10)))
+                .thenReturn(3);
+        when(geminiClient.generate(anyString(), anyString(), eq(3), eq(manualCategories)))
+                .thenReturn(batch(1800, 360, manualDrafts));
+
+        StrategyTipAiDraftService.GenerationResult result =
+                service.generateManualDrafts(GENERATION_DATE, NOW);
+
+        assertEquals("CREATED", result.getOutcome());
+        assertEquals(3, result.getCreatedCount());
+        verify(store, never()).countGeneratedOn(any(LocalDate.class));
+        verify(store, never()).countPending();
+        verify(store, never()).getUsedCategories(any(LocalDate.class));
+        ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
+        verify(store).saveGeneratedDrafts(
+                eq(GENERATION_DATE), eq(3), draftsCaptor.capture(), eq(1800), eq(360), eq(0));
+        assertEquals(Arrays.asList(4, 5, 6), Arrays.asList(
+                draftsCaptor.getValue().get(0).getSlotNo(),
+                draftsCaptor.getValue().get(1).getSlotNo(),
+                draftsCaptor.getValue().get(2).getSlotNo()));
+    }
+
+    @Test
     void generateDailyDrafts_topUpUsesRemainingSlotsAndCategories() {
         arrangeReadyGeneration(1, 3, Collections.emptyList(),
                 Collections.singletonList(1), Collections.singletonList("t_vs_z"));
