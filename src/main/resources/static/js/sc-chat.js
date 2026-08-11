@@ -21,6 +21,8 @@
     let recentRoles = [];
     let sinceLastAd = Number.POSITIVE_INFINITY;
     let adObserver = null;
+    let currentAdLineEl = null;
+    let currentAdIframeEl = null;
     let batchRendering = false;
 
     function getMemberMeta() {
@@ -35,6 +37,7 @@
         if (!logEl) {
             // The terminal `clear` command wipes the whole output — rebuild and
             // let the next poll re-render history from the server buffer.
+            removePreviousChatAd();
             logEl = document.createElement('div');
             logEl.id = 'scChatLog';
             logEl.className = 'sc-chat__log';
@@ -84,7 +87,7 @@
         };
     }
 
-    // 히스토리 재렌더링으로 광고가 여러 개 생겨도 화면에 보일 때만 iframe을 로드한다.
+    // 최신 광고가 실제 화면에 보일 때만 iframe을 로드한다.
     function getAdObserver() {
         if (adObserver || typeof IntersectionObserver === 'undefined') {
             return adObserver;
@@ -95,6 +98,10 @@
                     return;
                 }
                 const iframeEl = entry.target;
+                if (iframeEl !== currentAdIframeEl || !iframeEl.isConnected) {
+                    adObserver.unobserve(iframeEl);
+                    return;
+                }
                 if (iframeEl.dataset.src) {
                     iframeEl.src = iframeEl.dataset.src;
                     delete iframeEl.dataset.src;
@@ -105,11 +112,25 @@
         return adObserver;
     }
 
+    function removePreviousChatAd() {
+        if (currentAdIframeEl && adObserver) {
+            adObserver.unobserve(currentAdIframeEl);
+        }
+        if (currentAdLineEl) {
+            currentAdLineEl.remove();
+        }
+        currentAdLineEl = null;
+        currentAdIframeEl = null;
+    }
+
     // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
     // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
     function insertAdLine(config) {
         const logEl = ensureChatLog();
         const shouldScroll = !batchRendering && isNearBottom();
+
+        // 새 광고 후보가 생기는 즉시 이전 광고와 대기 중인 iframe 로드를 제거한다.
+        removePreviousChatAd();
 
         const lineEl = document.createElement('div');
         lineEl.className = 'sc-chat__line sc-chat__ad';
@@ -134,6 +155,8 @@
         lineEl.appendChild(iframeEl);
         lineEl.appendChild(noticeEl);
         logEl.appendChild(lineEl);
+        currentAdLineEl = lineEl;
+        currentAdIframeEl = iframeEl;
 
         const observer = getAdObserver();
         if (observer) {

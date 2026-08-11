@@ -35,6 +35,7 @@
 
 <%-- 채팅창 인라인 쿠팡 배너 설정. 배너 id/trackingCode는 coupangDynamicAd.jspf와 동일하게 유지한다.
      tracking-code 또는 pc-id를 비우면 채팅 광고가 비활성화된다.
+     새 광고가 삽입되면 이전 채팅 광고를 제거해 항상 최신 1개만 유지한다.
      message-interval: 메시지 id 기준 N개마다 광고 삽입 (페이지 이동 후에도 같은 자리 유지)
      ai-recent-window: AI 답변 광고는 직전 N개 채팅에 AI 답변이 없을 때만, 광고 간 최소 간격도 N --%>
 <div id="scChatAdMeta"

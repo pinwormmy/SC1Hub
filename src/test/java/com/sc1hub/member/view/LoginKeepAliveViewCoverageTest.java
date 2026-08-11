@@ -99,4 +99,21 @@ class LoginKeepAliveViewCoverageTest {
         assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(footerSource.contains("jquery"));
     }
+
+    @Test
+    void sharedChatKeepsOnlyLatestPartnerAdAndCancelsPreviousLazyLoad() throws IOException {
+        Path scriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
+        String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
+
+        int insertAdStart = source.indexOf("function insertAdLine(config)");
+        int removePreviousAd = source.indexOf("removePreviousChatAd();", insertAdStart);
+        int appendNewAd = source.indexOf("logEl.appendChild(lineEl);", insertAdStart);
+
+        assertTrue(source.contains("adObserver.unobserve(currentAdIframeEl)"));
+        assertTrue(source.contains("currentAdLineEl.remove()"));
+        assertTrue(source.contains("iframeEl !== currentAdIframeEl || !iframeEl.isConnected"));
+        assertTrue(insertAdStart >= 0);
+        assertTrue(removePreviousAd > insertAdStart);
+        assertTrue(appendNewAd > removePreviousAd);
+    }
 }
