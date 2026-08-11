@@ -45,15 +45,58 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
 <script>
 (() => {
+    const VIGNETTE_ATTRIBUTE = 'data-google-vignette';
+    const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
+
+    const markInternalLink = (linkEl) => {
+        if (!(linkEl instanceof HTMLAnchorElement)) {
+            return;
+        }
+        const rawHref = linkEl.getAttribute('href');
+        if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) {
+            return;
+        }
+        try {
+            const url = new URL(rawHref, window.location.href);
+            if (url.origin === window.location.origin) {
+                linkEl.setAttribute(VIGNETTE_ATTRIBUTE, 'false');
+            }
+        } catch (error) {
+            // 브라우저가 해석할 수 없는 링크는 기존 동작에 맡긴다.
+        }
+    };
+
+    const markInternalLinks = (rootEl) => {
+        if (rootEl instanceof HTMLAnchorElement) {
+            markInternalLink(rootEl);
+        }
+        if (typeof rootEl.querySelectorAll === 'function') {
+            rootEl.querySelectorAll('a[href]').forEach(markInternalLink);
+        }
+    };
+
+    const protectInternalNavigation = () => {
+        markInternalLinks(document);
+        const observer = new MutationObserver((records) => {
+            records.forEach((record) => {
+                record.addedNodes.forEach((node) => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        markInternalLinks(node);
+                    }
+                });
+            });
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    };
+
     const loadAdsense = () => {
-        if (document.querySelector('script[data-sc-adsense]')) {
+        if (Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
             return;
         }
         const scriptEl = document.createElement('script');
         scriptEl.async = true;
         scriptEl.crossOrigin = 'anonymous';
-        scriptEl.dataset.scAdsense = 'true';
-        scriptEl.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
+        scriptEl.src = ADSENSE_SRC;
         document.head.appendChild(scriptEl);
     };
 
@@ -69,6 +112,12 @@
         scheduleAdsense();
     } else {
         window.addEventListener('load', scheduleAdsense, { once: true });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', protectInternalNavigation, { once: true });
+    } else {
+        protectInternalNavigation();
     }
 })();
 </script>

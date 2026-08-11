@@ -87,6 +87,10 @@ class LoginKeepAliveViewCoverageTest {
 
         assertTrue(headSource.contains("requestIdleCallback"));
         assertTrue(headSource.contains("window.addEventListener('load'"));
+        assertTrue(headSource.contains("data-google-vignette"));
+        assertTrue(headSource.contains("url.origin === window.location.origin"));
+        assertTrue(headSource.contains("MutationObserver"));
+        assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertFalse(footerSource.contains("jquery"));
     }
