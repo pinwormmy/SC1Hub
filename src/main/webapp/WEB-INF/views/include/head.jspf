@@ -46,7 +46,6 @@
 <script>
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';
-    const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
 
     const markInternalLink = (linkEl) => {
         if (!(linkEl instanceof HTMLAnchorElement)) {
@@ -89,31 +88,6 @@
         observer.observe(document.documentElement, { childList: true, subtree: true });
     };
 
-    const loadAdsense = () => {
-        if (Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
-            return;
-        }
-        const scriptEl = document.createElement('script');
-        scriptEl.async = true;
-        scriptEl.crossOrigin = 'anonymous';
-        scriptEl.src = ADSENSE_SRC;
-        document.head.appendChild(scriptEl);
-    };
-
-    const scheduleAdsense = () => {
-        if ('requestIdleCallback' in window) {
-            window.requestIdleCallback(loadAdsense, { timeout: 2000 });
-            return;
-        }
-        window.setTimeout(loadAdsense, 0);
-    };
-
-    if (document.readyState === 'complete') {
-        scheduleAdsense();
-    } else {
-        window.addEventListener('load', scheduleAdsense, { once: true });
-    }
-
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', protectInternalNavigation, { once: true });
     } else {
@@ -121,3 +95,5 @@
     }
 })();
 </script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802"
+        crossorigin="anonymous"></script>

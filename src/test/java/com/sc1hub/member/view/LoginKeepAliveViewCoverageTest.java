@@ -79,19 +79,21 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void sharedPageDefersAdsAndDoesNotLoadGlobalJquery() throws IOException {
+    void sharedPageLoadsAdsWithNativeAsyncAndDoesNotLoadGlobalJquery() throws IOException {
         String headSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
         String footerSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/footer.jspf")), StandardCharsets.UTF_8);
 
-        assertTrue(headSource.contains("requestIdleCallback"));
-        assertTrue(headSource.contains("window.addEventListener('load'"));
+        assertTrue(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
+        assertFalse(headSource.contains("requestIdleCallback"));
+        assertFalse(headSource.contains("window.addEventListener('load'"));
+        assertFalse(headSource.contains("scheduleAdsense"));
+        assertFalse(headSource.contains("document.head.appendChild(scriptEl)"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
         assertTrue(headSource.contains("MutationObserver"));
         assertFalse(headSource.contains("data-sc-adsense"));
-        assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertFalse(footerSource.contains("jquery"));
     }
 }
