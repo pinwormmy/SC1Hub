@@ -8,6 +8,8 @@ import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
+import com.sc1hub.strategytip.dto.StrategyTipDTO;
+import com.sc1hub.strategytip.mapper.StrategyTipMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -39,6 +41,7 @@ public class AssistantRagIndexService {
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
 
     private final BoardMapper boardMapper;
+    private final StrategyTipMapper strategyTipMapper;
     private final GeminiEmbeddingClient embeddingClient;
     private final GeminiProperties geminiProperties;
     private final AssistantRagProperties ragProperties;
@@ -53,6 +56,7 @@ public class AssistantRagIndexService {
     private volatile ReindexResult lastReindexResult;
 
     public AssistantRagIndexService(BoardMapper boardMapper,
+                                   StrategyTipMapper strategyTipMapper,
                                    GeminiEmbeddingClient embeddingClient,
                                    GeminiProperties geminiProperties,
                                    AssistantRagProperties ragProperties,
@@ -60,6 +64,7 @@ public class AssistantRagIndexService {
                                    ObjectMapper objectMapper,
                                    @Qualifier("ragIndexExecutor") TaskExecutor ragIndexExecutor) {
         this.boardMapper = boardMapper;
+        this.strategyTipMapper = strategyTipMapper;
         this.embeddingClient = embeddingClient;
         this.geminiProperties = geminiProperties;
         this.ragProperties = ragProperties;
@@ -157,36 +162,39 @@ public class AssistantRagIndexService {
         );
 
         List<BoardListDTO> boards = loadIndexableBoards();
-        if (boards == null || boards.isEmpty()) {
-            finalizeIndex(index, boards);
-            return new ReindexResult(true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath(),
-                    embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
-        }
-
-        for (BoardListDTO board : boards) {
-            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (!isIndexableBoardTitle(boardTitle)) {
-                continue;
-            }
-
-            List<BoardDTO> posts = loadPostsForReindex(boardTitle);
-
-            if (posts == null || posts.isEmpty()) {
-                continue;
-            }
-
-            for (BoardDTO post : posts) {
-                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
-                if (!result.hasSourceChunks()) {
+        if (boards != null) {
+            for (BoardListDTO board : boards) {
+                String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+                if (!isIndexableBoardTitle(boardTitle)) {
                     continue;
                 }
-                indexedPosts += 1;
-                if (!result.getChunks().isEmpty()) {
-                    index.getChunks().addAll(result.getChunks());
-                    indexedChunks += result.getChunks().size();
+
+                List<BoardDTO> posts = loadPostsForReindex(boardTitle);
+
+                if (posts == null || posts.isEmpty()) {
+                    continue;
+                }
+
+                for (BoardDTO post : posts) {
+                    PostChunkResult result = buildChunksForPost(
+                            boardTitle, post, indexingContext, chunkSize, overlap,
+                            embeddingBudget, reusableEmbeddings);
+                    if (!result.hasSourceChunks()) {
+                        continue;
+                    }
+                    indexedPosts += 1;
+                    if (!result.getChunks().isEmpty()) {
+                        index.getChunks().addAll(result.getChunks());
+                        indexedChunks += result.getChunks().size();
+                    }
                 }
             }
         }
+
+        SourceIndexResult strategyTips = indexStrategyTips(
+                index, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
+        indexedPosts += strategyTips.posts;
+        indexedChunks += strategyTips.chunks;
 
         finalizeIndex(index, boards);
         return new ReindexResult(true, indexedPosts, indexedChunks, indexingContext.getDimension(), ragProperties.getIndexPath(),
@@ -239,54 +247,60 @@ public class AssistantRagIndexService {
 
         List<BoardListDTO> boards = loadIndexableBoards();
         Set<String> allowedBoards = buildIndexableBoardSet(boards);
+        allowedBoards.add(AssistantRagSources.STRATEGY_TIP_BOARD);
         removeChunksForMissingBoards(index, allowedBoards);
 
-        if (boards == null || boards.isEmpty()) {
-            finalizeIndex(index, boards);
-            return new UpdateResult(true, true, 0, 0, indexingContext.getDimension(), ragProperties.getIndexPath(),
-                    embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
-        }
-
-        for (BoardListDTO board : boards) {
-            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (!isIndexableBoardTitle(boardTitle)) {
-                continue;
-            }
-
-            int sincePostNum = maxPostNumByBoard.getOrDefault(boardTitle, 0);
-            Date sinceRegDate = maxRegDateByBoard.get(boardTitle);
-            if (sinceRegDate == null) {
-                sinceRegDate = new Date(0);
-            }
-
-            Map<Integer, BoardDTO> postsByPostNum = loadCandidatePostsForUpdate(boardTitle, sincePostNum, sinceRegDate);
-
-            if (postsByPostNum.isEmpty()) {
-                continue;
-            }
-
-            for (BoardDTO post : postsByPostNum.values()) {
-                int postNum = post.getPostNum();
-
-                if (post.getNotice() != 0) {
-                    removeChunksForPost(index, boardTitle, postNum);
+        if (boards != null) {
+            for (BoardListDTO board : boards) {
+                String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+                if (!isIndexableBoardTitle(boardTitle)) {
                     continue;
                 }
 
-                if (!shouldReindex(existingRegDateByPost, boardTitle, postNum, post.getRegDate())) {
+                int sincePostNum = maxPostNumByBoard.getOrDefault(boardTitle, 0);
+                Date sinceRegDate = maxRegDateByBoard.get(boardTitle);
+                if (sinceRegDate == null) {
+                    sinceRegDate = new Date(0);
+                }
+
+                Map<Integer, BoardDTO> postsByPostNum = loadCandidatePostsForUpdate(
+                        boardTitle, sincePostNum, sinceRegDate);
+
+                if (postsByPostNum.isEmpty()) {
                     continue;
                 }
 
-                PostChunkResult result = buildChunksForPost(boardTitle, post, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
+                for (BoardDTO post : postsByPostNum.values()) {
+                    int postNum = post.getPostNum();
 
-                if (!result.getChunks().isEmpty()) {
-                    removeChunksForPost(index, boardTitle, postNum);
-                    index.getChunks().addAll(result.getChunks());
-                    updatedPosts += 1;
-                    updatedChunks += result.getChunks().size();
+                    if (post.getNotice() != 0) {
+                        removeChunksForPost(index, boardTitle, postNum);
+                        continue;
+                    }
+
+                    if (!shouldReindex(
+                            existingRegDateByPost, boardTitle, postNum, post.getRegDate())) {
+                        continue;
+                    }
+
+                    PostChunkResult result = buildChunksForPost(
+                            boardTitle, post, indexingContext, chunkSize, overlap,
+                            embeddingBudget, reusableEmbeddings);
+
+                    if (!result.getChunks().isEmpty()) {
+                        removeChunksForPost(index, boardTitle, postNum);
+                        index.getChunks().addAll(result.getChunks());
+                        updatedPosts += 1;
+                        updatedChunks += result.getChunks().size();
+                    }
                 }
             }
         }
+
+        SourceIndexResult strategyTips = synchronizeStrategyTips(
+                index, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
+        updatedPosts += strategyTips.posts;
+        updatedChunks += strategyTips.chunks;
 
         finalizeIndex(index, boards);
         return new UpdateResult(true, true, updatedPosts, updatedChunks, indexingContext.getDimension(), ragProperties.getIndexPath(),
@@ -370,6 +384,128 @@ public class AssistantRagIndexService {
             log.warn("RAG 인덱싱 중 게시판 로드 실패. boardTitle={}", boardTitle, e);
             return new ArrayList<>();
         }
+    }
+
+    private List<StrategyTipDTO> loadStrategyTips() {
+        List<StrategyTipDTO> tips = strategyTipMapper.selectTipsForRag();
+        return tips == null ? new ArrayList<>() : tips;
+    }
+
+    private SourceIndexResult indexStrategyTips(AssistantRagIndex index,
+                                                IndexingContext context,
+                                                int chunkSize,
+                                                int overlap,
+                                                EmbeddingBudget embeddingBudget,
+                                                ReusableEmbeddingStore reusableEmbeddings) {
+        int indexedPosts = 0;
+        int indexedChunks = 0;
+        for (StrategyTipDTO tip : loadStrategyTips()) {
+            BoardDTO post = toStrategyTipPost(tip);
+            PostChunkResult result = buildChunksForPost(
+                    AssistantRagSources.STRATEGY_TIP_BOARD, post, context, chunkSize,
+                    overlap, embeddingBudget, reusableEmbeddings);
+            if (!result.hasSourceChunks()) {
+                continue;
+            }
+            indexedPosts += 1;
+            if (!result.getChunks().isEmpty()) {
+                index.getChunks().addAll(result.getChunks());
+                indexedChunks += result.getChunks().size();
+            }
+        }
+        return new SourceIndexResult(indexedPosts, indexedChunks);
+    }
+
+    private SourceIndexResult synchronizeStrategyTips(AssistantRagIndex index,
+                                                       IndexingContext context,
+                                                       int chunkSize,
+                                                       int overlap,
+                                                       EmbeddingBudget embeddingBudget,
+                                                       ReusableEmbeddingStore reusableEmbeddings) {
+        Map<Integer, List<AssistantRagChunk>> existingByTip = new HashMap<>();
+        for (AssistantRagChunk chunk : new ArrayList<>(index.getChunks())) {
+            if (chunk == null || !AssistantRagSources.STRATEGY_TIP_BOARD.equals(
+                    normalizeBoardTitle(chunk.getBoardTitle()))) {
+                continue;
+            }
+            existingByTip.computeIfAbsent(chunk.getPostNum(), ignored -> new ArrayList<>())
+                    .add(chunk);
+        }
+
+        Set<Integer> publicTipIds = new HashSet<>();
+        int updatedPosts = 0;
+        int updatedChunks = 0;
+        for (StrategyTipDTO tip : loadStrategyTips()) {
+            BoardDTO post = toStrategyTipPost(tip);
+            if (post.getPostNum() <= 0) {
+                continue;
+            }
+            publicTipIds.add(post.getPostNum());
+            List<String> expectedTexts = chunkText(buildPostText(post), chunkSize, overlap);
+            List<AssistantRagChunk> existing = existingByTip.get(post.getPostNum());
+            if (sameStrategyTipChunks(existing, expectedTexts)) {
+                for (AssistantRagChunk chunk : existing) {
+                    chunk.setTitle(post.getTitle());
+                    chunk.setRegDate(post.getRegDate());
+                    chunk.setUrl(AssistantRagSources.STRATEGY_TIP_URL);
+                }
+                continue;
+            }
+
+            PostChunkResult result = buildChunksForPost(
+                    AssistantRagSources.STRATEGY_TIP_BOARD, post, context, chunkSize,
+                    overlap, embeddingBudget, reusableEmbeddings);
+            if (!result.getChunks().isEmpty()) {
+                removeChunksForPost(
+                        index, AssistantRagSources.STRATEGY_TIP_BOARD, post.getPostNum());
+                index.getChunks().addAll(result.getChunks());
+                updatedChunks += result.getChunks().size();
+                updatedPosts += 1;
+            }
+        }
+
+        Set<Integer> deletedTipIds = new HashSet<>(existingByTip.keySet());
+        deletedTipIds.removeAll(publicTipIds);
+        for (Integer deletedTipId : deletedTipIds) {
+            removeChunksForPost(
+                    index, AssistantRagSources.STRATEGY_TIP_BOARD, deletedTipId);
+            updatedPosts += 1;
+        }
+        return new SourceIndexResult(updatedPosts, updatedChunks);
+    }
+
+    private static boolean sameStrategyTipChunks(List<AssistantRagChunk> existing,
+                                                 List<String> expectedTexts) {
+        if (existing == null || expectedTexts == null || existing.size() != expectedTexts.size()) {
+            return false;
+        }
+        existing.sort((left, right) -> Integer.compare(
+                left == null ? -1 : left.getChunkIndex(),
+                right == null ? -1 : right.getChunkIndex()));
+        for (int index = 0; index < existing.size(); index++) {
+            AssistantRagChunk chunk = existing.get(index);
+            if (chunk == null || chunk.getChunkIndex() != index
+                    || !expectedTexts.get(index).equals(chunk.getText())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static BoardDTO toStrategyTipPost(StrategyTipDTO tip) {
+        BoardDTO post = new BoardDTO();
+        if (tip == null) {
+            return post;
+        }
+        post.setPostNum(tip.getTipNum());
+        String categoryName = StringUtils.hasText(tip.getCategoryName())
+                ? tip.getCategoryName().trim() : tip.getCategory();
+        post.setTitle("한줄 공략 · " + (categoryName == null ? "분류 없음" : categoryName));
+        post.setContent(tip.getContent());
+        post.setWriter(tip.getWriter());
+        post.setRegDate(tip.getRegDate());
+        post.setRecommendCount(tip.getRecommendCount());
+        return post;
     }
 
     private Map<Integer, BoardDTO> loadCandidatePostsForUpdate(String boardTitle, int sincePostNum, Date sinceRegDate) {
@@ -504,6 +640,9 @@ public class AssistantRagIndexService {
     }
 
     private static String buildPostUrl(String boardTitle, int postNum) {
+        if (AssistantRagSources.STRATEGY_TIP_BOARD.equals(normalizeBoardTitle(boardTitle))) {
+            return AssistantRagSources.STRATEGY_TIP_URL;
+        }
         return "/boards/" + boardTitle + "/readPost?postNum=" + postNum;
     }
 
@@ -581,28 +720,37 @@ public class AssistantRagIndexService {
 
     private List<AssistantRagBoardSnapshot> buildBoardSnapshots(List<BoardListDTO> boards) {
         List<AssistantRagBoardSnapshot> snapshots = new ArrayList<>();
-        if (boards == null || boards.isEmpty()) {
-            return snapshots;
+        if (boards != null) {
+            for (BoardListDTO board : boards) {
+                String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
+                if (!isIndexableBoardTitle(boardTitle)) {
+                    continue;
+                }
+                if (isExcludedBoardTitle(boardTitle)) {
+                    continue;
+                }
+                try {
+                    AssistantRagBoardSnapshot snapshot = boardMapper.selectBoardRagStats(boardTitle);
+                    if (snapshot == null) {
+                        snapshot = new AssistantRagBoardSnapshot();
+                    }
+                    snapshot.setBoardTitle(boardTitle);
+                    snapshots.add(snapshot);
+                } catch (Exception e) {
+                    log.warn("RAG 스냅샷 로드 실패. boardTitle={}", boardTitle, e);
+                }
+            }
         }
 
-        for (BoardListDTO board : boards) {
-            String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());
-            if (!isIndexableBoardTitle(boardTitle)) {
-                continue;
+        try {
+            AssistantRagBoardSnapshot strategyTipSnapshot = strategyTipMapper.selectRagStats();
+            if (strategyTipSnapshot == null) {
+                strategyTipSnapshot = new AssistantRagBoardSnapshot();
             }
-            if (isExcludedBoardTitle(boardTitle)) {
-                continue;
-            }
-            try {
-                AssistantRagBoardSnapshot snapshot = boardMapper.selectBoardRagStats(boardTitle);
-                if (snapshot == null) {
-                    snapshot = new AssistantRagBoardSnapshot();
-                }
-                snapshot.setBoardTitle(boardTitle);
-                snapshots.add(snapshot);
-            } catch (Exception e) {
-                log.warn("RAG 스냅샷 로드 실패. boardTitle={}", boardTitle, e);
-            }
+            strategyTipSnapshot.setBoardTitle(AssistantRagSources.STRATEGY_TIP_BOARD);
+            snapshots.add(strategyTipSnapshot);
+        } catch (Exception e) {
+            log.warn("공개 한줄 공략 RAG 스냅샷 로드 실패", e);
         }
 
         return snapshots;
@@ -781,6 +929,16 @@ public class AssistantRagIndexService {
 
         private List<AssistantRagChunk> getChunks() {
             return chunks;
+        }
+    }
+
+    private static final class SourceIndexResult {
+        private final int posts;
+        private final int chunks;
+
+        private SourceIndexResult(int posts, int chunks) {
+            this.posts = posts;
+            this.chunks = chunks;
         }
     }
 

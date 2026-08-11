@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
+import com.sc1hub.assistant.rag.AssistantRagSources;
 import com.sc1hub.assistant.search.AssistantQueryParseResult;
 import com.sc1hub.assistant.search.AssistantQueryParser;
 import com.sc1hub.board.dto.BoardDTO;
@@ -2857,14 +2858,15 @@ public class AssistantService {
     }
 
     private Set<String> resolveFactBoards() {
+        Set<String> normalized = new LinkedHashSet<>();
+        normalized.add(AssistantRagSources.STRATEGY_TIP_BOARD);
         if (assistantProperties == null) {
-            return Collections.emptySet();
+            return normalized;
         }
         List<String> boards = assistantProperties.getFactBoards();
         if (boards == null || boards.isEmpty()) {
-            return Collections.emptySet();
+            return normalized;
         }
-        Set<String> normalized = new LinkedHashSet<>();
         for (String board : boards) {
             if (!StringUtils.hasText(board)) {
                 continue;
@@ -2915,6 +2917,10 @@ public class AssistantService {
     }
 
     private static String buildPostUrl(String boardTitle, int postNum) {
+        if (AssistantRagSources.STRATEGY_TIP_BOARD.equals(
+                normalizeBoardTitle(boardTitle))) {
+            return AssistantRagSources.STRATEGY_TIP_URL;
+        }
         return "/boards/" + boardTitle + "/readPost?postNum=" + postNum;
     }
 

@@ -218,7 +218,7 @@ fetch('/api/assistant/rag/status').then(r => r.json()).then(console.log)
 
 - 인덱스는 기본적으로 `data/assistant/rag-index.json`에 저장되며 gitignore 처리되어 있습니다.
 - 대상은 “일반 게시물(notice=0)”이며 댓글은 제외됩니다.
-- 인덱싱 대상 보드는 `*board`로 끝나는 보드만 포함됩니다.
+- 인덱싱 대상은 `*board`로 끝나는 일반 게시판과 공개된 `one_line_strategy` 한줄 공략입니다. 승인 대기·반려 AI 초안은 포함하지 않습니다.
 - 게시글 수정 시 `reg_date`가 갱신되므로, `update`는 수정된 글도 자동으로 재인덱싱합니다.
 - `update`는 현재 보드 목록에 없는 보드의 기존 chunks를 자동으로 제거합니다.
 - `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 RAG `update` + `search_terms` 재인덱싱을 같이 수행합니다. (search_terms 기본 batchSize=200)

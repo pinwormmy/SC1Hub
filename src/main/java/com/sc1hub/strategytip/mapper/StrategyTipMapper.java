@@ -1,5 +1,6 @@
 package com.sc1hub.strategytip.mapper;
 
+import com.sc1hub.assistant.rag.AssistantRagBoardSnapshot;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.strategytip.dto.StrategyTipCategoryDTO;
 import com.sc1hub.strategytip.dto.StrategyTipDTO;
@@ -24,4 +25,8 @@ public interface StrategyTipMapper {
     void deleteTip(int tipNum);
 
     int incrementRecommendCount(int tipNum);
+
+    List<StrategyTipDTO> selectTipsForRag();
+
+    AssistantRagBoardSnapshot selectRagStats();
 }

@@ -7,6 +7,7 @@ import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
+import com.sc1hub.strategytip.mapper.StrategyTipMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class AssistantRagSearchService {
     private final GeminiEmbeddingClient embeddingClient;
     private final ObjectMapper objectMapper;
     private final BoardMapper boardMapper;
+    private final StrategyTipMapper strategyTipMapper;
     private final AssistantProperties assistantProperties;
 
     private volatile LoadedIndex loadedIndex;
@@ -58,12 +60,14 @@ public class AssistantRagSearchService {
                                     GeminiEmbeddingClient embeddingClient,
                                     ObjectMapper objectMapper,
                                     BoardMapper boardMapper,
+                                    StrategyTipMapper strategyTipMapper,
                                     AssistantProperties assistantProperties) {
         this.ragProperties = ragProperties;
         this.geminiProperties = geminiProperties;
         this.embeddingClient = embeddingClient;
         this.objectMapper = objectMapper;
         this.boardMapper = boardMapper;
+        this.strategyTipMapper = strategyTipMapper;
         this.assistantProperties = assistantProperties;
     }
 
@@ -293,6 +297,24 @@ public class AssistantRagSearchService {
             return SignatureCheck.unavailable();
         }
 
+        List<String> sample = new ArrayList<>();
+        int mismatchCount = 0;
+        AssistantRagBoardSnapshot expectedStrategyTips =
+                expectedByBoard.remove(AssistantRagSources.STRATEGY_TIP_BOARD);
+        if (expectedStrategyTips != null) {
+            try {
+                AssistantRagBoardSnapshot currentStrategyTips = strategyTipMapper.selectRagStats();
+                if (!snapshotEquals(expectedStrategyTips, currentStrategyTips)) {
+                    mismatchCount = appendMismatch(
+                            sample, mismatchCount, AssistantRagSources.STRATEGY_TIP_BOARD);
+                }
+            } catch (Exception e) {
+                log.warn("공개 한줄 공략 RAG 스냅샷 검증 실패", e);
+                mismatchCount = appendMismatch(
+                        sample, mismatchCount, AssistantRagSources.STRATEGY_TIP_BOARD);
+            }
+        }
+
         List<BoardListDTO> boards;
         try {
             boards = boardMapper.getBoardList();
@@ -302,8 +324,6 @@ public class AssistantRagSearchService {
         }
 
         if (boards == null || boards.isEmpty()) {
-            List<String> sample = new ArrayList<>();
-            int mismatchCount = 0;
             for (String boardTitle : expectedByBoard.keySet()) {
                 mismatchCount = appendMismatch(sample, mismatchCount, boardTitle);
             }
@@ -314,8 +334,6 @@ public class AssistantRagSearchService {
         }
 
         Set<String> remainingExpected = new HashSet<>(expectedByBoard.keySet());
-        List<String> sample = new ArrayList<>();
-        int mismatchCount = 0;
 
         for (BoardListDTO board : boards) {
             String boardTitle = normalizeBoardTitle(board == null ? null : board.getBoardTitle());

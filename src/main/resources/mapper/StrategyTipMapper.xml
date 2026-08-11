@@ -67,4 +67,20 @@
         set recommend_count = recommend_count + 1
         where tip_num = #{tipNum}
     </update>
+
+    <select id="selectTipsForRag" resultType="com.sc1hub.strategytip.dto.StrategyTipDTO">
+        select t.tip_num, t.category, c.name as category_name, t.content, t.writer,
+               t.reg_date, t.recommend_count
+        from one_line_strategy t
+        join one_line_strategy_category c on c.code = t.category
+        order by t.tip_num asc
+    </select>
+
+    <select id="selectRagStats" resultType="com.sc1hub.assistant.rag.AssistantRagBoardSnapshot">
+        select 'strategytipboard' as board_title,
+               ifnull(max(tip_num), 0) as max_post_num,
+               max(reg_date) as max_reg_date,
+               count(*) as post_count
+        from one_line_strategy
+    </select>
 </mapper>

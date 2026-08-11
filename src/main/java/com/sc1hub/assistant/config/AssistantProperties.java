@@ -5,7 +5,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 @Data
@@ -27,7 +27,8 @@ public class AssistantProperties {
     private int maxPostSnippetChars = 800;
     private int maxPromptChars = 12000;
     private List<String> excludedBoards = new ArrayList<>();
-    private List<String> factBoards = new ArrayList<>(Collections.singletonList("tipBoard"));
+    private List<String> factBoards = new ArrayList<>(
+            Arrays.asList("tipBoard", "strategyTipBoard"));
     private int boardListCacheSeconds = 60;
     private List<String> blockedWords = new ArrayList<>();
 
