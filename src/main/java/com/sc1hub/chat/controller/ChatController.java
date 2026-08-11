@@ -73,7 +73,6 @@ public class ChatController {
 
         ChatPollResponseDTO response = chatRoomService.poll(afterSeq);
         if (afterSeq <= 0) {
-            response.setMessages(chatRoomService.getRecentMessages(chatProperties.getInitialHistorySize()));
             response.setSelf(buildSelf(request, session));
         }
         return ResponseEntity.ok(response);

@@ -42,18 +42,7 @@
 <link rel="stylesheet" href="/css/sc1hub-layout.css?v=${applicationScope.assetVersion}">
 <link rel="stylesheet" href="/css/style.css?v=${applicationScope.assetVersion}">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="preload"
-      href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2"
-      as="font" type="font/woff2" crossorigin>
-<style>
-@font-face {
-    font-family: "NeoDungGeunMo Pro";
-    font-style: normal;
-    font-weight: normal;
-    font-display: optional;
-    src: url("https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2") format("woff2");
-}
-</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
 <script>
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';

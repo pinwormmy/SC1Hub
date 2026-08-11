@@ -92,30 +92,11 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(headSource.contains("window.stop()"));
         assertTrue(headSource.contains("fetchPriority = 'low'"));
         assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
-        assertTrue(headSource.contains("rel=\"preload\""));
-        assertTrue(headSource.contains("font-display: optional"));
-        assertFalse(headSource.contains("neodgm_pro/style.css"));
         assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
         assertTrue(headSource.contains("MutationObserver"));
         assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(footerSource.contains("jquery"));
-    }
-
-    @Test
-    void sharedChatYieldsDuringHistoryRenderingAndDefersPartnerAdsUntilInteraction() throws IOException {
-        Path scriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
-        String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
-
-        assertTrue(source.contains("RENDER_CHUNK_SIZE"));
-        assertTrue(source.contains("scheduler.yield"));
-        assertTrue(source.contains("await yieldToMainThread()"));
-        assertTrue(source.contains("await renderMessages(data.messages)"));
-        assertTrue(source.contains("activatePendingChatAds"));
-        assertTrue(source.contains("iframeEl.dataset.src = adSrc"));
-        assertTrue(source.contains("addEventListener('wheel', activatePendingChatAds"));
-        assertFalse(source.contains("addEventListener('focusin', activatePendingChatAds"));
-        assertFalse(source.contains("iframeEl.src = adSrc"));
     }
 }

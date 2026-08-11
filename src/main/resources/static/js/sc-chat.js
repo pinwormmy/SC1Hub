@@ -7,7 +7,6 @@
 
     const COLLAPSED_CLASS = 'is-collapsed';
     const MAX_QUESTION_LENGTH = 800;
-    const RENDER_CHUNK_SIZE = 6;
 
     let lastSeq = 0;
     const renderedIds = new Set();
@@ -22,15 +21,7 @@
     let recentRoles = [];
     let sinceLastAd = Number.POSITIVE_INFINITY;
     let adObserver = null;
-    let chatAdsActivated = false;
     let batchRendering = false;
-
-    function yieldToMainThread() {
-        if (window.scheduler && typeof window.scheduler.yield === 'function') {
-            return window.scheduler.yield();
-        }
-        return new Promise((resolve) => window.setTimeout(resolve, 0));
-    }
 
     function getMemberMeta() {
         const metaEl = document.getElementById('scMemberMeta');
@@ -114,26 +105,6 @@
         return adObserver;
     }
 
-    function observeChatAd(iframeEl) {
-        const observer = getAdObserver();
-        if (observer) {
-            observer.observe(iframeEl);
-            return;
-        }
-        if (iframeEl.dataset.src) {
-            iframeEl.src = iframeEl.dataset.src;
-            delete iframeEl.dataset.src;
-        }
-    }
-
-    function activatePendingChatAds() {
-        if (chatAdsActivated) {
-            return;
-        }
-        chatAdsActivated = true;
-        outputEl.querySelectorAll('.sc-chat__ad iframe[data-src]').forEach(observeChatAd);
-    }
-
     // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
     // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
     function insertAdLine(config) {
@@ -164,11 +135,12 @@
         lineEl.appendChild(noticeEl);
         logEl.appendChild(lineEl);
 
-        // 초기 페이지 표시 중에는 외부 광고 iframe을 만들지 않는다. 사용자가 채팅을
-        // 실제로 조작한 뒤, 보이는 광고만 IntersectionObserver로 지연 로드한다.
-        iframeEl.dataset.src = adSrc;
-        if (chatAdsActivated) {
-            observeChatAd(iframeEl);
+        const observer = getAdObserver();
+        if (observer) {
+            iframeEl.dataset.src = adSrc;
+            observer.observe(iframeEl);
+        } else {
+            iframeEl.src = adSrc;
         }
 
         if (shouldScroll) {
@@ -269,19 +241,14 @@
         maybeInsertAd(message);
     }
 
-    async function renderMessages(messages) {
+    function renderMessages(messages) {
         if (!Array.isArray(messages) || messages.length === 0) {
             return;
         }
         const shouldScroll = isNearBottom();
         batchRendering = true;
         try {
-            for (let index = 0; index < messages.length; index += RENDER_CHUNK_SIZE) {
-                messages.slice(index, index + RENDER_CHUNK_SIZE).forEach(renderMessage);
-                if (index + RENDER_CHUNK_SIZE < messages.length) {
-                    await yieldToMainThread();
-                }
-            }
+            messages.forEach(renderMessage);
         } finally {
             batchRendering = false;
         }
@@ -328,7 +295,7 @@
         return { ok: response.ok, status: response.status, data, nonJson: false };
     }
 
-    async function applyPollResponse(data) {
+    function applyPollResponse(data) {
         if (!data) {
             return;
         }
@@ -344,7 +311,7 @@
                 systemLine(self.mutedText);
             }
         }
-        await renderMessages(data.messages);
+        renderMessages(data.messages);
         (data.deletedIds || []).forEach(markDeleted);
         if (typeof data.lastSeq === 'number' && data.lastSeq > lastSeq) {
             lastSeq = data.lastSeq;
@@ -355,7 +322,7 @@
         try {
             const result = await fetchJson('/api/chat/messages?afterSeq=' + lastSeq);
             if (result.ok && result.data) {
-                await applyPollResponse(result.data);
+                applyPollResponse(result.data);
                 errorBackoffMillis = 0;
             } else if (result.status === 503) {
                 errorBackoffMillis = 30000;
@@ -596,17 +563,10 @@
     }
 
     function init() {
-        // 먼저 본문을 그린 뒤 채팅 히스토리를 가져오고, 렌더링 중에도 입력을 양보한다.
+        // 모든 페이지에서 채팅창을 기본 표시하고 폴링을 시작한다.
         openTerminal();
-        window.requestAnimationFrame(() => {
-            void yieldToMainThread().then(start);
-        });
+        start();
     }
-
-    // 입력 시작과 광고 로드를 겹치지 않는다. 과거 채팅을 직접 스크롤할 때만
-    // 보이는 광고를 활성화한다.
-    outputEl.addEventListener('wheel', activatePendingChatAds, { passive: true });
-    outputEl.addEventListener('touchmove', activatePendingChatAds, { passive: true });
 
     document.addEventListener('visibilitychange', () => {
         if (started && !document.hidden) {
