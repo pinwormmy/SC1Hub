@@ -15,11 +15,9 @@ public class StrategyTipAiProperties {
     private String thinkingLevel = "medium";
     private int maxOutputTokens = 6000;
     private int dailyDraftLimit = 3;
-    private int maxPendingDrafts = 3;
+    private int maxPendingDrafts = 30;
     private int maxDailyApiCalls = 2;
     private int staleRunMinutes = 10;
-    private int sourcePostsPerCategory = 3;
-    private int sourceExcerptChars = 360;
     private int duplicateContextLimit = 20;
     private String schedulerCron = "0 5 * * * *";
     private String schedulerZone = "Asia/Seoul";

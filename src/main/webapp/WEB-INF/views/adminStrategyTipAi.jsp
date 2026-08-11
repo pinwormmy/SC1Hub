@@ -40,7 +40,7 @@
                             <span class="ai-review-eyebrow">ADMIN / AI EDITORIAL QUEUE</span>
                             <h1 class="ai-review-title">AI 한줄 공략 검토</h1>
                             <p class="ai-review-intro">
-                                사이트 내부 공략 글만 근거로 AI가 초안을 만들고, 운영자가 확인한 최종 문장만 공개합니다.
+                                Gemini의 내장 지식으로 초안을 만들고, 운영자가 사실관계를 확인한 최종 문장만 공개합니다.
                             </p>
                         </div>
                         <div class="ai-review-header__actions">
@@ -93,7 +93,7 @@
                                 <dt>검토 대기</dt>
                                 <dd>
                                     <fmt:formatNumber value="${empty aiStatus.pendingCount ? 0 : aiStatus.pendingCount}" type="number" />
-                                    <span>/ <fmt:formatNumber value="${empty aiStatus.maxPendingDrafts ? 3 : aiStatus.maxPendingDrafts}" type="number" /></span>
+                                    <span>/ <fmt:formatNumber value="${empty aiStatus.maxPendingDrafts ? 30 : aiStatus.maxPendingDrafts}" type="number" /></span>
                                 </dd>
                             </div>
                             <div class="ai-review-metric">
@@ -121,8 +121,8 @@
                                 <dd><fmt:formatNumber value="${empty aiStatus.outputTokens ? 0 : aiStatus.outputTokens}" type="number" /></dd>
                             </div>
                             <div class="ai-review-metric">
-                                <dt>근거 범위</dt>
-                                <dd class="ai-review-metric__text">사이트 내부</dd>
+                                <dt>생성 기준</dt>
+                                <dd class="ai-review-metric__text">Gemini 체크포인트</dd>
                             </div>
                         </dl>
 
@@ -152,7 +152,7 @@
                         <span class="ai-review-policy__icon" aria-hidden="true">검</span>
                         <div>
                             <strong>승인 전 초안은 사이트에 공개되지 않습니다.</strong>
-                            <p>Google Search를 사용하지 않고 연결된 내부 원문만 근거로 삼으며, 하루 생성량과 대기 초안은 각각 최대 3개입니다.</p>
+                            <p>Google Search·URL Context·사이트 내부 글은 사용하지 않습니다. 하루 3개씩 만들고, 승인 대기는 최대 30개까지만 누적합니다.</p>
                         </div>
                     </aside>
 
@@ -161,7 +161,7 @@
                             <div>
                                 <span class="ai-review-kicker">REVIEW QUEUE</span>
                                 <h2 id="pending-drafts-title">검토 대기 초안</h2>
-                                <p>연결된 사이트 내부 원문과 초안 내용을 대조한 뒤 승인하세요.</p>
+                                <p>스타크래프트 지식과 문장 내용을 직접 확인한 뒤 승인하세요.</p>
                             </div>
                             <span class="ai-review-count" aria-label="검토 대기 초안 수">
                                 <fmt:formatNumber value="${empty aiStatus.pendingCount ? 0 : aiStatus.pendingCount}" type="number" />개 대기
@@ -170,6 +170,8 @@
 
                         <div class="ai-review-draft-list">
                             <c:forEach var="draft" items="${pendingDrafts}" varStatus="draftLoop">
+                                <c:set var="checkpointDraft"
+                                       value="${draft.sourcePostNum le 0 and empty draft.sourceExcerpt and empty draft.evidenceSummary and empty draft.externalSourceUrl and empty draft.externalEvidenceSummary}" />
                                 <article class="ai-review-draft" aria-labelledby="draft-title-${draftLoop.index}">
                                     <header class="ai-review-draft__header">
                                         <div>
@@ -198,6 +200,18 @@
                                     </div>
 
                                     <div class="ai-review-source-grid">
+                                        <c:if test="${checkpointDraft}">
+                                            <section class="ai-review-source" aria-labelledby="source-title-${draftLoop.index}">
+                                                <div class="ai-review-source__heading">
+                                                    <h4 id="source-title-${draftLoop.index}">Gemini 체크포인트 지식</h4>
+                                                </div>
+                                                <p class="ai-review-source__warning">
+                                                    연결된 출처가 없는 AI 초안입니다. 사실관계와 표현을 운영자가 직접 검증한 뒤 승인하세요.
+                                                </p>
+                                                <p class="ai-review-source__reference">Search · URL Context · 사이트 내부 글 미사용</p>
+                                            </section>
+                                        </c:if>
+                                        <c:if test="${not checkpointDraft}">
                                         <section class="ai-review-source" aria-labelledby="source-title-${draftLoop.index}">
                                             <div class="ai-review-source__heading">
                                                 <h4 id="source-title-${draftLoop.index}">사이트 내부 근거</h4>
@@ -215,7 +229,7 @@
                                                     <p class="ai-review-source__title"><c:out value="${draft.sourceTitle}" /></p>
                                                 </c:when>
                                                 <c:when test="${draft.sourcePostNum le 0}">
-                                                    <p class="ai-review-source__warning">내부 근거가 없는 과거 초안입니다. 승인하지 말고 반려하세요.</p>
+                                                    <p class="ai-review-source__warning">과거 생성 방식의 초안입니다. 연결된 근거를 확인하세요.</p>
                                                 </c:when>
                                                 <c:otherwise>
                                                     <p class="ai-review-source__warning">연결된 출처 제목이 없습니다. 승인 전에 원문을 확인하세요.</p>
@@ -232,6 +246,7 @@
                                                 <p class="ai-review-source__evidence">원문 근거 구절: <c:out value="${draft.evidenceSummary}" /></p>
                                             </c:if>
                                         </section>
+                                        </c:if>
 
                                         <c:if test="${not empty draft.externalSourceUrl}">
                                             <section class="ai-review-evidence" aria-labelledby="evidence-title-${draftLoop.index}">
@@ -266,7 +281,7 @@
                                                     <input id="draft-category-${draftLoop.index}"
                                                            class="ai-review-field__readonly" type="text"
                                                            value="<c:out value='${draft.categoryName}' />" readonly>
-                                                    <span class="ai-review-field__note">근거와 연결된 분류는 변경할 수 없습니다.</span>
+                                                    <span class="ai-review-field__note">생성된 분류는 변경할 수 없습니다.</span>
                                                 </div>
                                                 <div class="ai-review-field ai-review-field--content">
                                                     <label for="draft-content-${draftLoop.index}">공개 문장</label>
@@ -276,7 +291,12 @@
                                                               data-counter-id="draft-count-${draftLoop.index}"
                                                               aria-describedby="draft-help-${draftLoop.index} draft-count-${draftLoop.index}"><c:out value="${draft.content}" /></textarea>
                                                     <div class="ai-review-field__meta">
-                                                        <span id="draft-help-${draftLoop.index}">원문 근거 구절 전체를 그대로 남긴 채 다듬어 주세요.</span>
+                                                        <span id="draft-help-${draftLoop.index}">
+                                                            <c:choose>
+                                                                <c:when test="${checkpointDraft}">사실관계와 표현을 직접 검증한 뒤 다듬어 주세요.</c:when>
+                                                                <c:otherwise>연결된 근거 구절 전체를 그대로 남긴 채 다듬어 주세요.</c:otherwise>
+                                                            </c:choose>
+                                                        </span>
                                                         <span id="draft-count-${draftLoop.index}" class="ai-review-character-count" aria-live="polite">0 / 160</span>
                                                     </div>
                                                 </div>
@@ -326,7 +346,7 @@
                                         <th scope="col">처리 상태</th>
                                         <th scope="col">초안 내용</th>
                                         <th scope="col">검토 정보</th>
-                                        <th scope="col">내부 근거</th>
+                                        <th scope="col">생성 기준</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -399,7 +419,7 @@
                                                     </a>
                                                 </c:if>
                                             </td>
-                                            <td data-label="내부 근거">
+                                            <td data-label="생성 기준">
                                                 <c:choose>
                                                     <c:when test="${not empty draft.sourceBoard and draft.sourcePostNum gt 0}">
                                                         <c:url var="recentSourceUrl" value="/boards/${draft.sourceBoard}/readPost">
@@ -419,7 +439,14 @@
                                                         </p>
                                                     </c:when>
                                                     <c:otherwise>
-                                                        <span class="ai-review-history__meta">출처 정보 없음</span>
+                                                        <c:choose>
+                                                            <c:when test="${not empty draft.externalSourceUrl}">
+                                                                <span class="ai-review-history__meta">과거 외부 근거 방식</span>
+                                                            </c:when>
+                                                            <c:otherwise>
+                                                                <span class="ai-review-history__meta">Gemini 체크포인트 · 출처 없음</span>
+                                                            </c:otherwise>
+                                                        </c:choose>
                                                     </c:otherwise>
                                                 </c:choose>
                                                 <c:if test="${not empty draft.externalSourceUrl}">

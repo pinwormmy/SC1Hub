@@ -37,8 +37,6 @@ public class GeminiStrategyTipClient {
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
     private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 6000;
     private static final int MAX_GENERATED_CONTENT_CHARS = 96;
-    private static final int MIN_EVIDENCE_SUMMARY_CHARS = 10;
-    private static final int MAX_EVIDENCE_SUMMARY_CHARS = 72;
     private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
 
     private final RestTemplate restTemplate;
@@ -57,8 +55,7 @@ public class GeminiStrategyTipClient {
     public StrategyTipAiGeneratedBatch generate(String systemPrompt,
                                                  String userPrompt,
                                                  int requestedCount,
-                                                 List<String> categories,
-                                                 List<String> sourceIds) {
+                                                 List<String> categories) {
         if (!properties.isEnabled()) {
             throw new GeminiStrategyTipException("Strategy tip AI generation is disabled.");
         }
@@ -76,13 +73,12 @@ public class GeminiStrategyTipClient {
         }
 
         List<String> allowedCategories = requireDistinctValues(categories, "categories");
-        List<String> allowedSourceIds = requireDistinctValues(sourceIds, "sourceIds");
         if (allowedCategories.size() != requestedCount) {
             throw new GeminiStrategyTipException("Requested draft count must match the category count.");
         }
 
         Map<String, Object> payload = buildPayload(validSystemPrompt, validUserPrompt,
-                requestedCount, allowedCategories, allowedSourceIds, model);
+                requestedCount, allowedCategories, model);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
@@ -105,20 +101,19 @@ public class GeminiStrategyTipClient {
             throw new GeminiStrategyTipException("Gemini Interactions API request failed.", e);
         }
 
-        return parseResponse(rawResponse, requestedCount, allowedCategories, allowedSourceIds, model);
+        return parseResponse(rawResponse, requestedCount, allowedCategories, model);
     }
 
     private Map<String, Object> buildPayload(String systemPrompt,
                                              String userPrompt,
                                              int requestedCount,
                                              List<String> categories,
-                                             List<String> sourceIds,
                                              String model) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("system_instruction", systemPrompt);
         payload.put("input", buildConstrainedInput(
-                userPrompt, requestedCount, categories, sourceIds));
+                userPrompt, requestedCount, categories));
         payload.put("store", false);
 
         Map<String, Object> generationConfig = new LinkedHashMap<>();
@@ -131,71 +126,53 @@ public class GeminiStrategyTipClient {
         Map<String, Object> responseFormat = new LinkedHashMap<>();
         responseFormat.put("type", "text");
         responseFormat.put("mime_type", "application/json");
-        responseFormat.put("schema", buildResponseSchema(requestedCount, categories, sourceIds));
+        responseFormat.put("schema", buildResponseSchema(requestedCount, categories));
         payload.put("response_format", Collections.singletonList(responseFormat));
         return payload;
     }
 
     private String buildConstrainedInput(String userPrompt,
                                          int requestedCount,
-                                         List<String> categories,
-                                         List<String> sourceIds) {
+                                         List<String> categories) {
         Map<String, Object> constraints = new LinkedHashMap<>();
         constraints.put("exactDraftCount", requestedCount);
         constraints.put("allowedCategories", categories);
-        constraints.put("allowedInternalSourceIds", sourceIds);
         constraints.put("maximumContentChars", MAX_GENERATED_CONTENT_CHARS);
-        constraints.put("maximumEvidenceSummaryChars", MAX_EVIDENCE_SUMMARY_CHARS);
-        constraints.put("evidenceMustBeVerbatimFromSelectedExcerpt", true);
-        constraints.put("contentMustContainEvidenceSummaryVerbatim", true);
-        constraints.put("externalKnowledgeAllowed", false);
+        constraints.put("checkpointKnowledgeOnly", true);
+        constraints.put("sourceMaterialProvided", false);
         constraints.put("toolUseAllowed", false);
+        constraints.put("timeSensitiveClaimsAllowed", false);
+        constraints.put("preciseNumbersAllowed", false);
         try {
             return userPrompt
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
-                    + "\nDo not use Google Search, URL Context, tools, or model-memory facts. "
-                    + "Use only SOURCE_DATA_JSON. Return only the schema JSON. "
-                    + "This is a direct extraction task; use only the reasoning needed and "
-                    + "prioritize completing all requested JSON fields. "
-                    + "For evidenceSummary, copy one short, exact passage from the selected "
-                    + "source excerpt without paraphrasing it. Include the complete "
-                    + "evidenceSummary passage unchanged inside content.";
+                    + "\nUse only your built-in checkpoint knowledge. Do not use Google Search, "
+                    + "URL Context, tools, supplied sources, or time-sensitive facts. "
+                    + "Return only the schema JSON and complete every requested draft.";
         } catch (JsonProcessingException e) {
             throw new GeminiStrategyTipException("Could not build the Gemini request.", e);
         }
     }
 
     private Map<String, Object> buildResponseSchema(int requestedCount,
-                                                    List<String> categories,
-                                                    List<String> sourceIds) {
+                                                    List<String> categories) {
         Map<String, Object> category = new LinkedHashMap<>();
         category.put("type", "string");
         category.put("enum", categories);
 
-        Map<String, Object> sourceId = new LinkedHashMap<>();
-        sourceId.put("type", "string");
-        sourceId.put("enum", sourceIds);
-
         Map<String, Object> content = describedStringProperty(
-                "Korean one-line strategy directly supported by the selected internal source, "
-                        + "12 to " + MAX_GENERATED_CONTENT_CHARS + " characters; it must contain "
-                        + "the complete evidenceSummary passage unchanged.");
-        Map<String, Object> evidenceSummary = describedStringProperty(
-                "An exact passage copied verbatim from the selected internal source excerpt, "
-                        + MIN_EVIDENCE_SUMMARY_CHARS + " to "
-                        + MAX_EVIDENCE_SUMMARY_CHARS + " characters.");
+                "Evergreen Korean one-line StarCraft: Brood War strategy based only on "
+                        + "checkpoint knowledge, 12 to " + MAX_GENERATED_CONTENT_CHARS
+                        + " characters, without precise numbers or time-sensitive claims.");
 
         Map<String, Object> draftProperties = new LinkedHashMap<>();
         draftProperties.put("category", category);
         draftProperties.put("content", content);
-        draftProperties.put("sourceId", sourceId);
-        draftProperties.put("evidenceSummary", evidenceSummary);
 
         Map<String, Object> draft = new LinkedHashMap<>();
         draft.put("type", "object");
         draft.put("properties", draftProperties);
-        draft.put("required", Arrays.asList(
-                "category", "content", "sourceId", "evidenceSummary"));
+        draft.put("required", Arrays.asList("category", "content"));
         draft.put("additionalProperties", false);
 
         Map<String, Object> drafts = new LinkedHashMap<>();
@@ -222,7 +199,6 @@ public class GeminiStrategyTipClient {
     private StrategyTipAiGeneratedBatch parseResponse(String rawResponse,
                                                        int requestedCount,
                                                        List<String> allowedCategories,
-                                                       List<String> allowedSourceIds,
                                                        String fallbackModel) {
         if (!StringUtils.hasText(rawResponse)) {
             throw new GeminiStrategyTipException("Gemini returned an empty response.");
@@ -259,7 +235,7 @@ public class GeminiStrategyTipClient {
             }
 
             List<StrategyTipAiGeneratedBatch.Draft> drafts = parseDrafts(parts.outputText,
-                    requestedCount, allowedCategories, allowedSourceIds);
+                    requestedCount, allowedCategories);
             String model = root.path("model").asText(fallbackModel);
             return new StrategyTipAiGeneratedBatch(
                     drafts, model, usage.inputTokens, usage.outputTokens);
@@ -313,8 +289,7 @@ public class GeminiStrategyTipClient {
     private List<StrategyTipAiGeneratedBatch.Draft> parseDrafts(
             String outputText,
             int requestedCount,
-            List<String> allowedCategories,
-            List<String> allowedSourceIds) {
+            List<String> allowedCategories) {
         JsonNode output;
         try {
             output = objectMapper.readTree(outputText);
@@ -328,26 +303,21 @@ public class GeminiStrategyTipClient {
         }
 
         Set<String> categorySet = new LinkedHashSet<>(allowedCategories);
-        Set<String> sourceIdSet = new LinkedHashSet<>(allowedSourceIds);
         Set<String> seenCategories = new LinkedHashSet<>();
-        Set<String> seenSourceIds = new LinkedHashSet<>();
         List<StrategyTipAiGeneratedBatch.Draft> drafts = new ArrayList<>();
         for (JsonNode draftNode : draftNodes) {
             String category = requiredOutputText(draftNode, "category");
             String content = requiredOutputText(draftNode, "content");
-            String sourceId = requiredOutputText(draftNode, "sourceId");
-            String evidenceSummary = requiredOutputText(draftNode, "evidenceSummary");
 
-            if (!categorySet.contains(category) || !sourceIdSet.contains(sourceId)) {
+            if (!categorySet.contains(category)) {
                 throw new GeminiStrategyTipException(
-                        "Gemini returned a draft outside the allowed source scope.");
+                        "Gemini returned a draft outside the allowed category scope.");
             }
-            if (!seenCategories.add(category) || !seenSourceIds.add(sourceId)) {
+            if (!seenCategories.add(category)) {
                 throw new GeminiStrategyTipException(
-                        "Gemini returned duplicate draft categories or sources.");
+                        "Gemini returned duplicate draft categories.");
             }
-            drafts.add(new StrategyTipAiGeneratedBatch.Draft(
-                    category, content, sourceId, evidenceSummary));
+            drafts.add(new StrategyTipAiGeneratedBatch.Draft(category, content));
         }
         if (seenCategories.size() != categorySet.size()) {
             throw new GeminiStrategyTipException(

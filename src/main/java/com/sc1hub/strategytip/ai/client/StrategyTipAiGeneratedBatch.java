@@ -40,14 +40,10 @@ public final class StrategyTipAiGeneratedBatch {
 
         private final String category;
         private final String content;
-        private final String sourceId;
-        private final String evidenceSummary;
 
-        public Draft(String category, String content, String sourceId, String evidenceSummary) {
+        public Draft(String category, String content) {
             this.category = category;
             this.content = content;
-            this.sourceId = sourceId;
-            this.evidenceSummary = evidenceSummary;
         }
 
         public String getCategory() {
@@ -56,14 +52,6 @@ public final class StrategyTipAiGeneratedBatch {
 
         public String getContent() {
             return content;
-        }
-
-        public String getSourceId() {
-            return sourceId;
-        }
-
-        public String getEvidenceSummary() {
-            return evidenceSummary;
         }
 
     }

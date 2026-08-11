@@ -26,9 +26,8 @@ class StrategyTipAiConfigTest {
         assertEquals("medium", properties.getThinkingLevel());
         assertEquals(6000, properties.getMaxOutputTokens());
         assertEquals(3, properties.getDailyDraftLimit());
-        assertEquals(3, properties.getMaxPendingDrafts());
+        assertEquals(30, properties.getMaxPendingDrafts());
         assertEquals(2, properties.getMaxDailyApiCalls());
-        assertEquals(360, properties.getSourceExcerptChars());
     }
 
     @Test

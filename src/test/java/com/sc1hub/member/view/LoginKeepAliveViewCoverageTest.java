@@ -62,6 +62,9 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("오늘의 API 호출 상한을 모두 사용했습니다."));
         assertTrue(source.contains("생성 요청 중…"));
         assertTrue(source.contains("aria-busy"));
+        assertTrue(source.contains("Gemini 체크포인트"));
+        assertTrue(source.contains("승인 대기는 최대 30개"));
+        assertTrue(source.contains("Search · URL Context · 사이트 내부 글 미사용"));
     }
 
     @Test

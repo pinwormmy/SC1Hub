@@ -49,7 +49,7 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
-    void generate_sendsOneInternalOnlyBatchWithoutSearchAndParsesUsage() {
+    void generate_sendsOneCheckpointOnlyBatchWithoutToolsAndParsesUsage() {
         server.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("x-goog-api-key", "test-gemini-key"))
@@ -62,36 +62,38 @@ class GeminiStrategyTipClientTest {
                 .andExpect(jsonPath("$.generation_config.thinking_summaries").value("none"))
                 .andExpect(jsonPath("$.generation_config.max_output_tokens").value(6000))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "\"externalKnowledgeAllowed\":false")))
+                        "\"checkpointKnowledgeOnly\":true")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
                         "\"toolUseAllowed\":false")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "evidenceMustBeVerbatimFromSelectedExcerpt")))
+                        "\"sourceMaterialProvided\":false")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "contentMustContainEvidenceSummaryVerbatim")))
+                        "\"preciseNumbersAllowed\":false")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "prioritize completing all requested JSON fields")))
+                        "built-in checkpoint knowledge")))
                 .andExpect(jsonPath("$.response_format.length()").value(1))
                 .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.minItems")
                         .value(3))
                 .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.maxItems")
                         .value(3))
                 .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.items"
-                        + ".properties.externalEvidenceSummary").doesNotExist())
+                        + ".properties.sourceId").doesNotExist())
+                .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.items"
+                        + ".properties.evidenceSummary").doesNotExist())
                 .andRespond(withSuccess(completedResponse(threeDraftsJson(), 4100, 480, 220),
                         MediaType.APPLICATION_JSON));
 
         StrategyTipAiGeneratedBatch batch = client.generate(
                 "system rules", "source data", 3,
-                Arrays.asList("zvt", "pvz", "team_play"),
-                Arrays.asList("zvstboard:10", "pvszboard:20", "teamplayguideboard:30"));
+                Arrays.asList("zvt", "pvz", "team_play"));
 
         assertEquals("gemini-3.6-flash", batch.getModel());
         assertEquals(4100, batch.getInputTokens());
         assertEquals(700, batch.getOutputTokens());
         assertEquals(3, batch.getDrafts().size());
         assertEquals("team_play", batch.getDrafts().get(2).getCategory());
-        assertEquals("팀원과 입구를 나눠 막는다", batch.getDrafts().get(2).getEvidenceSummary());
+        assertEquals("팀원과 입구를 나눠 막아 초반을 버틴다",
+                batch.getDrafts().get(2).getContent());
         server.verify();
     }
 
@@ -162,9 +164,7 @@ class GeminiStrategyTipClientTest {
     @Test
     void generate_rejectsActualShapedIncompleteBatchAndPreservesBilledUsage() {
         String partialOutput = "{\"drafts\":["
-                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\","
-                + "\"sourceId\":\"zvstboard:10\","
-                + "\"evidenceSummary\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
+                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
                 + "{\"category\":\"pvz\",\"content\":\"질럿을 좁은 길목에 세운다\"";
         String response = "{\"status\":\"incomplete\","
                 + "\"incomplete_details\":{\"reason\":\"max_output_tokens\"},"
@@ -178,9 +178,7 @@ class GeminiStrategyTipClientTest {
         GeminiStrategyTipException exception = assertThrows(
                 GeminiStrategyTipException.class,
                 () -> client.generate("system rules", "source data", 3,
-                        Arrays.asList("zvt", "pvz", "team_play"),
-                        Arrays.asList("zvstboard:10", "pvszboard:20",
-                                "teamplayguideboard:30")));
+                        Arrays.asList("zvt", "pvz", "team_play")));
 
         assertTrue(exception.getMessage().contains("incomplete"));
         assertTrue(exception.getMessage().contains("max_output_tokens"));
@@ -242,25 +240,21 @@ class GeminiStrategyTipClientTest {
     @Test
     void generate_rejectsDraftOutsideAllowedScope() {
         String output = "{\"drafts\":[{\"category\":\"pvt\","
-                + "\"content\":\"질럿은 입구에서 길을 막아 시간을 번다\","
-                + "\"sourceId\":\"pvstboard:999\","
-                + "\"evidenceSummary\":\"질럿으로 입구를 막아 시간을 번다\"}]}";
+                + "\"content\":\"질럿은 입구에서 길을 막아 시간을 번다\"}]}";
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedResponse(output, 1, 1, 0),
                         MediaType.APPLICATION_JSON));
 
         GeminiStrategyTipException exception = assertThrows(
                 GeminiStrategyTipException.class, this::generateOne);
-        assertTrue(exception.getMessage().contains("allowed source scope"));
+        assertTrue(exception.getMessage().contains("allowed category scope"));
     }
 
     @Test
-    void generate_rejectsDuplicateCategoriesOrSources() {
+    void generate_rejectsDuplicateCategories() {
         String output = "{\"drafts\":["
-                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\","
-                + "\"sourceId\":\"zvstboard:10\",\"evidenceSummary\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
-                + "{\"category\":\"zvt\",\"content\":\"러커로 진입 경로를 좁혀 수비한다\","
-                + "\"sourceId\":\"zvstboard:10\",\"evidenceSummary\":\"러커로 진입 경로를 좁혀 수비한다\"}]}";
+                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
+                + "{\"category\":\"zvt\",\"content\":\"러커로 진입 경로를 좁혀 수비한다\"}]}";
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedResponse(output, 1, 1, 0),
                         MediaType.APPLICATION_JSON));
@@ -268,8 +262,7 @@ class GeminiStrategyTipClientTest {
         GeminiStrategyTipException exception = assertThrows(
                 GeminiStrategyTipException.class,
                 () -> client.generate("system", "source", 2,
-                        Arrays.asList("zvt", "pvz"),
-                        Arrays.asList("zvstboard:10", "pvszboard:20")));
+                        Arrays.asList("zvt", "pvz")));
         assertTrue(exception.getMessage().contains("duplicate"));
     }
 
@@ -301,25 +294,19 @@ class GeminiStrategyTipClientTest {
 
     private StrategyTipAiGeneratedBatch generateOne() {
         return client.generate("system rules", "source data", 1,
-                Collections.singletonList("zvt"),
-                Collections.singletonList("zvstboard:10"));
+                Collections.singletonList("zvt"));
     }
 
     private String oneDraftJson() {
         return "{\"drafts\":[{\"category\":\"zvt\","
-                + "\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\","
-                + "\"sourceId\":\"zvstboard:10\","
-                + "\"evidenceSummary\":\"뮤탈로 이동 동선을 먼저 확인한다\"}]}";
+                + "\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\"}]}";
     }
 
     private String threeDraftsJson() {
         return "{\"drafts\":["
-                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\","
-                + "\"sourceId\":\"zvstboard:10\",\"evidenceSummary\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
-                + "{\"category\":\"pvz\",\"content\":\"질럿을 좁은 길목에 세워 저글링을 막는다\","
-                + "\"sourceId\":\"pvszboard:20\",\"evidenceSummary\":\"질럿을 좁은 길목에 세운다\"},"
-                + "{\"category\":\"team_play\",\"content\":\"팀원과 입구를 나눠 막아 초반을 버틴다\","
-                + "\"sourceId\":\"teamplayguideboard:30\",\"evidenceSummary\":\"팀원과 입구를 나눠 막는다\"}]}";
+                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
+                + "{\"category\":\"pvz\",\"content\":\"질럿을 좁은 길목에 세워 저글링을 막는다\"},"
+                + "{\"category\":\"team_play\",\"content\":\"팀원과 입구를 나눠 막아 초반을 버틴다\"}]}";
     }
 
     private String completedResponse(String output, int inputTokens,
