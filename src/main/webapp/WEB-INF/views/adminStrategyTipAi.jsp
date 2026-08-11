@@ -30,8 +30,10 @@
                            value="${aiStatus.generatedToday ge aiStatus.dailyDraftLimit}" />
                     <c:set var="pendingLimitReached"
                            value="${aiStatus.pendingCount ge aiStatus.maxPendingDrafts}" />
+                    <c:set var="apiCallLimitReached"
+                           value="${aiStatus.apiCallCount ge aiStatus.maxDailyApiCalls}" />
                     <c:set var="generationBlocked"
-                           value="${not aiStatus.enabled or dailyLimitReached or pendingLimitReached}" />
+                           value="${not aiStatus.enabled or dailyLimitReached or pendingLimitReached or apiCallLimitReached}" />
 
                     <header class="ai-review-header">
                         <div class="ai-review-header__copy">
@@ -54,6 +56,7 @@
                                 <span class="ai-review-generate__help">
                                     <c:choose>
                                         <c:when test="${not aiStatus.enabled}">AI 생성 기능이 비활성화되어 있습니다.</c:when>
+                                        <c:when test="${apiCallLimitReached}">오늘의 API 호출 상한을 모두 사용했습니다.</c:when>
                                         <c:when test="${pendingLimitReached}">대기 초안이 최대치에 도달했습니다.</c:when>
                                         <c:when test="${dailyLimitReached}">오늘 생성 한도를 모두 사용했습니다.</c:when>
                                         <c:otherwise>수동 1회 호출로 오늘 남은 초안을 최대 3건까지 만듭니다.</c:otherwise>
@@ -69,10 +72,10 @@
                                 <span class="ai-review-kicker">SYSTEM STATUS</span>
                                 <h2 id="ai-status-title">오늘의 생성 현황</h2>
                             </div>
-                            <span class="ai-review-runtime ${aiStatus.enabled ? 'is-online' : 'is-offline'}">
+                            <span class="ai-review-runtime ${not generationBlocked ? 'is-online' : 'is-offline'}">
                                 <span class="ai-review-runtime__dot" aria-hidden="true"></span>
                                 <c:choose>
-                                    <c:when test="${aiStatus.enabled}">생성 가능</c:when>
+                                    <c:when test="${not generationBlocked}">생성 가능</c:when>
                                     <c:otherwise>생성 중지</c:otherwise>
                                 </c:choose>
                             </span>
@@ -104,7 +107,10 @@
                             </div>
                             <div class="ai-review-metric">
                                 <dt>API 호출</dt>
-                                <dd><fmt:formatNumber value="${empty aiStatus.apiCallCount ? 0 : aiStatus.apiCallCount}" type="number" /><span>회</span></dd>
+                                <dd>
+                                    <fmt:formatNumber value="${empty aiStatus.apiCallCount ? 0 : aiStatus.apiCallCount}" type="number" />
+                                    <span>/ <fmt:formatNumber value="${empty aiStatus.maxDailyApiCalls ? 2 : aiStatus.maxDailyApiCalls}" type="number" />회</span>
+                                </dd>
                             </div>
                             <div class="ai-review-metric">
                                 <dt>입력 토큰</dt>

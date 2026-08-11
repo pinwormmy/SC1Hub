@@ -13,6 +13,7 @@ public class StrategyTipAiStatusDTO {
     private int pendingCount;
     private int generatedToday;
     private int apiCallCount;
+    private int maxDailyApiCalls;
     private String lastStatus;
     private String lastError;
     private LocalDateTime lastAttemptAt;

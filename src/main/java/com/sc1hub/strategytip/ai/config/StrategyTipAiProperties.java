@@ -12,8 +12,8 @@ public class StrategyTipAiProperties {
     private String apiKey = "";
     private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/interactions";
     private String model = "gemini-3.6-flash";
-    private String thinkingLevel = "high";
-    private int maxOutputTokens = 3000;
+    private String thinkingLevel = "medium";
+    private int maxOutputTokens = 6000;
     private int dailyDraftLimit = 3;
     private int maxPendingDrafts = 3;
     private int maxDailyApiCalls = 2;

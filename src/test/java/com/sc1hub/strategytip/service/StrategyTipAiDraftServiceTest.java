@@ -7,6 +7,7 @@ import com.sc1hub.strategytip.ai.client.GeminiStrategyTipException;
 import com.sc1hub.strategytip.ai.client.StrategyTipAiGeneratedBatch;
 import com.sc1hub.strategytip.ai.config.StrategyTipAiProperties;
 import com.sc1hub.strategytip.dto.StrategyTipAiDraftDTO;
+import com.sc1hub.strategytip.dto.StrategyTipAiStatusDTO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -154,6 +155,17 @@ class StrategyTipAiDraftServiceTest {
         assertTrue(result.getMessage().contains("호출 상한"));
         verify(store).claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10));
         verifyNoInteractions(geminiClient);
+    }
+
+    @Test
+    void getStatus_exposesClampedDailyApiCallLimitForAdminUi() {
+        properties.setMaxDailyApiCalls(99);
+        when(store.countPending()).thenReturn(0);
+        when(store.countGeneratedOn(any(LocalDate.class))).thenReturn(0);
+
+        StrategyTipAiStatusDTO status = service.getStatus();
+
+        assertEquals(2, status.getMaxDailyApiCalls());
     }
 
     @Test
@@ -345,20 +357,24 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
-    void generateDailyDrafts_recordsTokenUsageButNeverSearchUsageOnFailure() {
+    void generateDailyDrafts_recordsIncompleteUsageWithoutSavingPartialDrafts() {
         arrangeReadyGeneration(0, 0, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList());
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
         GeminiStrategyTipException failure = new GeminiStrategyTipException(
-                "structured output failed", null, 321, 87, 4);
+                "Gemini interaction did not complete: incomplete (max_output_tokens)",
+                null, 3293, 2978, 0);
         when(geminiClient.generate(anyString(), anyString(), eq(3), anyList(), anyList()))
                 .thenThrow(failure);
 
         assertThrows(GeminiStrategyTipException.class, this::generate);
 
         verify(store).failDailyRun(GENERATION_DATE, 1,
-                "structured output failed", 321, 87, 0);
+                "Gemini interaction did not complete: incomplete (max_output_tokens)",
+                3293, 2978, 0);
+        verify(store, never()).saveGeneratedDrafts(
+                any(LocalDate.class), anyInt(), anyList(), anyInt(), anyInt(), anyInt());
     }
 
     @Test

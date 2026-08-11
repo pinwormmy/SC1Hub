@@ -3,6 +3,7 @@ package com.sc1hub.strategytip.ai.config;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ExecutorConfigurationSupport;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -22,8 +23,8 @@ class StrategyTipAiConfigTest {
         assertEquals("https://generativelanguage.googleapis.com/v1beta/interactions",
                 properties.getBaseUrl());
         assertEquals("gemini-3.6-flash", properties.getModel());
-        assertEquals("high", properties.getThinkingLevel());
-        assertEquals(3000, properties.getMaxOutputTokens());
+        assertEquals("medium", properties.getThinkingLevel());
+        assertEquals(6000, properties.getMaxOutputTokens());
         assertEquals(3, properties.getDailyDraftLimit());
         assertEquals(3, properties.getMaxPendingDrafts());
         assertEquals(2, properties.getMaxDailyApiCalls());
@@ -42,8 +43,10 @@ class StrategyTipAiConfigTest {
             assertEquals(1, executor.getMaxPoolSize());
             assertEquals(1, executor.getThreadPoolExecutor().getQueue().remainingCapacity());
             assertEquals(true, ReflectionTestUtils.getField(
-                    executor, "waitForTasksToCompleteOnShutdown"));
-            assertEquals(40_000L, ReflectionTestUtils.getField(executor, "awaitTerminationMillis"));
+                    executor, ExecutorConfigurationSupport.class,
+                    "waitForTasksToCompleteOnShutdown"));
+            assertEquals(40_000L, ReflectionTestUtils.getField(
+                    executor, ExecutorConfigurationSupport.class, "awaitTerminationMillis"));
         } finally {
             executor.shutdown();
         }

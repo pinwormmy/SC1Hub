@@ -58,6 +58,8 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("name=\"csrfToken\""));
         assertTrue(source.contains("오늘 남은 AI 초안 수동 생성"));
         assertTrue(source.contains("generationBlocked"));
+        assertTrue(source.contains("apiCallLimitReached"));
+        assertTrue(source.contains("오늘의 API 호출 상한을 모두 사용했습니다."));
         assertTrue(source.contains("생성 요청 중…"));
         assertTrue(source.contains("aria-busy"));
     }

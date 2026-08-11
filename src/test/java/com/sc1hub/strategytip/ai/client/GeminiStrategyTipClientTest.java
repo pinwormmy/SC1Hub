@@ -58,9 +58,9 @@ class GeminiStrategyTipClientTest {
                 .andExpect(jsonPath("$.system_instruction").value("system rules"))
                 .andExpect(jsonPath("$.tools").doesNotExist())
                 .andExpect(jsonPath("$.store").value(false))
-                .andExpect(jsonPath("$.generation_config.thinking_level").value("high"))
+                .andExpect(jsonPath("$.generation_config.thinking_level").value("medium"))
                 .andExpect(jsonPath("$.generation_config.thinking_summaries").value("none"))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(3000))
+                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(6000))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
                         "\"externalKnowledgeAllowed\":false")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
@@ -69,6 +69,8 @@ class GeminiStrategyTipClientTest {
                         "evidenceMustBeVerbatimFromSelectedExcerpt")))
                 .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
                         "contentMustContainEvidenceSummaryVerbatim")))
+                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
+                        "prioritize completing all requested JSON fields")))
                 .andExpect(jsonPath("$.response_format.length()").value(1))
                 .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.minItems")
                         .value(3))
@@ -98,8 +100,8 @@ class GeminiStrategyTipClientTest {
         properties.setMaxOutputTokens(99999);
         properties.setThinkingLevel("invalid");
         server.expect(requestTo(API_URL))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(3000))
-                .andExpect(jsonPath("$.generation_config.thinking_level").value("high"))
+                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(6000))
+                .andExpect(jsonPath("$.generation_config.thinking_level").value("medium"))
                 .andRespond(withSuccess(completedResponse(oneDraftJson(), 10, 10, 0),
                         MediaType.APPLICATION_JSON));
 
@@ -155,6 +157,38 @@ class GeminiStrategyTipClientTest {
         assertEquals(12, exception.getInputTokens());
         assertEquals(7, exception.getOutputTokens());
         assertEquals(0, exception.getSearchQueryCount());
+    }
+
+    @Test
+    void generate_rejectsActualShapedIncompleteBatchAndPreservesBilledUsage() {
+        String partialOutput = "{\"drafts\":["
+                + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\","
+                + "\"sourceId\":\"zvstboard:10\","
+                + "\"evidenceSummary\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
+                + "{\"category\":\"pvz\",\"content\":\"질럿을 좁은 길목에 세운다\"";
+        String response = "{\"status\":\"incomplete\","
+                + "\"incomplete_details\":{\"reason\":\"max_output_tokens\"},"
+                + "\"steps\":[{\"type\":\"model_output\",\"content\":["
+                + "{\"type\":\"text\",\"text\":" + quote(partialOutput) + "}]}],"
+                + "\"usage\":{\"total_input_tokens\":3293,"
+                + "\"total_output_tokens\":1,\"total_thought_tokens\":2977}}";
+        server.expect(requestTo(API_URL))
+                .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
+
+        GeminiStrategyTipException exception = assertThrows(
+                GeminiStrategyTipException.class,
+                () -> client.generate("system rules", "source data", 3,
+                        Arrays.asList("zvt", "pvz", "team_play"),
+                        Arrays.asList("zvstboard:10", "pvszboard:20",
+                                "teamplayguideboard:30")));
+
+        assertTrue(exception.getMessage().contains("incomplete"));
+        assertTrue(exception.getMessage().contains("max_output_tokens"));
+        assertTrue(exception.hasUsage());
+        assertEquals(3293, exception.getInputTokens());
+        assertEquals(2978, exception.getOutputTokens());
+        assertEquals(0, exception.getSearchQueryCount());
+        server.verify();
     }
 
     @Test

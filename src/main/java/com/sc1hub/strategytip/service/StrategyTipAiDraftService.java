@@ -119,8 +119,7 @@ public class StrategyTipAiDraftService {
 
         int targetCount = Math.min(dailyLimit - generatedToday, maxPending - pendingCount);
         LocalDateTime staleBefore = now.minusMinutes(Math.max(1, properties.getStaleRunMinutes()));
-        int maxDailyApiCalls = Math.max(1,
-                Math.min(properties.getMaxDailyApiCalls(), ABSOLUTE_DAILY_API_CALL_LIMIT));
+        int maxDailyApiCalls = resolveMaxDailyApiCalls();
         List<Integer> slots = findAvailableSlots(generationDate, targetCount, dailyLimit);
         List<String> comparisonContents = new ArrayList<>(
                 store.getRecentContents(properties.getDuplicateContextLimit()));
@@ -197,6 +196,7 @@ public class StrategyTipAiDraftService {
                 Math.min(properties.getMaxPendingDrafts(), ABSOLUTE_DAILY_DRAFT_LIMIT)));
         status.setPendingCount(store.countPending());
         status.setGeneratedToday(store.countGeneratedOn(today));
+        status.setMaxDailyApiCalls(resolveMaxDailyApiCalls());
         if (run != null) {
             status.setApiCallCount(run.getApiCallCount());
             status.setLastStatus(run.getLastStatus());
@@ -619,6 +619,11 @@ public class StrategyTipAiDraftService {
 
     private int resolveDailyLimit() {
         return Math.max(1, Math.min(properties.getDailyDraftLimit(), ABSOLUTE_DAILY_DRAFT_LIMIT));
+    }
+
+    private int resolveMaxDailyApiCalls() {
+        return Math.max(1,
+                Math.min(properties.getMaxDailyApiCalls(), ABSOLUTE_DAILY_API_CALL_LIMIT));
     }
 
     private ZoneId resolveZone() {

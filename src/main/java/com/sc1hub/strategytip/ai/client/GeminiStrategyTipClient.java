@@ -35,7 +35,7 @@ import java.util.Set;
 public class GeminiStrategyTipClient {
 
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
-    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 3000;
+    private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 6000;
     private static final int MAX_GENERATED_CONTENT_CHARS = 96;
     private static final int MIN_EVIDENCE_SUMMARY_CHARS = 10;
     private static final int MAX_EVIDENCE_SUMMARY_CHARS = 72;
@@ -155,6 +155,8 @@ public class GeminiStrategyTipClient {
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
                     + "\nDo not use Google Search, URL Context, tools, or model-memory facts. "
                     + "Use only SOURCE_DATA_JSON. Return only the schema JSON. "
+                    + "This is a direct extraction task; use only the reasoning needed and "
+                    + "prioritize completing all requested JSON fields. "
                     + "For evidenceSummary, copy one short, exact passage from the selected "
                     + "source excerpt without paraphrasing it. Include the complete "
                     + "evidenceSummary passage unchanged inside content.";
@@ -237,8 +239,11 @@ public class GeminiStrategyTipClient {
         try {
             String status = root.path("status").asText("");
             if (!"completed".equals(status)) {
+                String reason = diagnosticCode(
+                        root.path("incomplete_details").path("reason").asText(""));
                 throw new GeminiStrategyTipException("Gemini interaction did not complete: "
-                        + (StringUtils.hasText(status) ? status : "missing status"));
+                        + (StringUtils.hasText(status) ? status : "missing status")
+                        + (StringUtils.hasText(reason) ? " (" + reason + ")" : ""));
             }
 
             ResponseParts parts = collectResponseParts(root.path("steps"));
@@ -382,14 +387,22 @@ public class GeminiStrategyTipClient {
     private String resolveThinkingLevel() {
         String value = properties.getThinkingLevel();
         if (!StringUtils.hasText(value)) {
-            return "high";
+            return "medium";
         }
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         if (!Arrays.asList("minimal", "low", "medium", "high").contains(normalized)) {
-            log.warn("Invalid strategy tip thinkingLevel; using high.");
-            return "high";
+            log.warn("Invalid strategy tip thinkingLevel; using medium.");
+            return "medium";
         }
         return normalized;
+    }
+
+    private String diagnosticCode(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return normalized.matches("[a-z0-9_.-]{1,80}") ? normalized : "";
     }
 
     private String requireText(String value, String message) {
