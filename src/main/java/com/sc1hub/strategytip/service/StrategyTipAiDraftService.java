@@ -31,7 +31,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -44,7 +43,6 @@ public class StrategyTipAiDraftService {
     private static final int MAX_CONTENT_LENGTH = 160;
     private static final int MAX_GENERATED_CONTENT_LENGTH = 96;
     private static final int MIN_CONTENT_LENGTH = 12;
-    private static final int MIN_EVIDENCE_LENGTH = 10;
     private static final int MAX_PROMPT_DUPLICATE_EXAMPLES = 12;
     private static final int MAX_PROMPT_DUPLICATE_LENGTH = 96;
     private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
@@ -301,26 +299,12 @@ public class StrategyTipAiDraftService {
         }
         List<String> publishedContents = store.getRecentPublishedContents(
                 properties.getDuplicateContextLimit());
-        String validContent;
-        if (isCheckpointDraft(draft)) {
-            validContent = validateFinalContent(content, "", false, publishedContents);
-        } else if (draft.getSourcePostNum() > 0
-                && StringUtils.hasText(draft.getSourceExcerpt())) {
-            String evidence = normalizeWhitespace(draft.getEvidenceSummary());
-            if (evidence.length() < MIN_EVIDENCE_LENGTH
-                    || !containsExactEvidence(draft.getSourceExcerpt(), evidence)) {
-                throw new IllegalArgumentException(
-                        "저장된 근거 구절을 사이트 원문에서 확인할 수 없어 이 초안은 승인할 수 없습니다.");
-            }
-            validContent = validateFinalContent(content, draft.getSourceExcerpt(), true,
-                    publishedContents);
-            if (!containsGroundedEvidence(validContent, evidence)) {
-                throw new IllegalArgumentException(
-                        "편집한 한줄 공략에 저장된 원문 근거 구절 전체가 포함되어야 합니다.");
-            }
-        } else {
+        boolean legacyInternalDraft = draft.getSourcePostNum() > 0
+                && StringUtils.hasText(draft.getSourceExcerpt());
+        if (!isCheckpointDraft(draft) && !legacyInternalDraft) {
             throw new IllegalArgumentException("생성 방식이 확인되지 않는 과거 초안은 승인할 수 없습니다.");
         }
+        String validContent = validateFinalContent(content, publishedContents);
         return store.approve(draftId, validCategory, validContent, validReviewer, writer);
     }
 
@@ -506,17 +490,6 @@ public class StrategyTipAiDraftService {
         return drafts;
     }
 
-    private boolean containsExactEvidence(String sourceExcerpt, String evidence) {
-        return StringUtils.hasText(evidence)
-                && normalizeWhitespace(sourceExcerpt).contains(normalizeWhitespace(evidence));
-    }
-
-    private boolean containsGroundedEvidence(String content, String evidence) {
-        String normalizedContent = normalizeForSimilarity(content);
-        String normalizedEvidence = normalizeForSimilarity(evidence);
-        return !normalizedEvidence.isEmpty() && normalizedContent.contains(normalizedEvidence);
-    }
-
     private void validateGeneratedContent(String content, List<String> comparisonContents) {
         if (content.length() < MIN_CONTENT_LENGTH
                 || content.length() > MAX_GENERATED_CONTENT_LENGTH) {
@@ -538,21 +511,6 @@ public class StrategyTipAiDraftService {
                 throw new IllegalStateException("기존 한줄 공략과 지나치게 유사한 AI 초안입니다.");
             }
         }
-    }
-
-    private boolean numbersAreGrounded(String content, String sourceExcerpt) {
-        Set<String> sourceNumbers = new HashSet<>();
-        Matcher sourceMatcher = NUMBER_PATTERN.matcher(sourceExcerpt == null ? "" : sourceExcerpt);
-        while (sourceMatcher.find()) {
-            sourceNumbers.add(sourceMatcher.group());
-        }
-        Matcher matcher = NUMBER_PATTERN.matcher(content);
-        while (matcher.find()) {
-            if (!sourceNumbers.contains(matcher.group())) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private boolean isTooSimilar(String left, String right) {
@@ -602,9 +560,7 @@ public class StrategyTipAiDraftService {
         return normalized;
     }
 
-    private String validateFinalContent(String content, String sourceExcerpt,
-                                        boolean requireGroundedNumbers,
-                                        List<String> publishedContents) {
+    private String validateFinalContent(String content, List<String> publishedContents) {
         String normalized = requireText(content, "한줄 공략 내용을 입력해주세요.");
         if (normalized.length() < MIN_CONTENT_LENGTH || normalized.length() > MAX_CONTENT_LENGTH) {
             throw new IllegalArgumentException("한줄 공략은 12~160자여야 합니다.");
@@ -616,9 +572,6 @@ public class StrategyTipAiDraftService {
         }
         if (containsTimeSensitiveClaim(lowered)) {
             throw new IllegalArgumentException("검색 없이 검증할 수 없는 시의성 표현을 사용할 수 없습니다.");
-        }
-        if (requireGroundedNumbers && !numbersAreGrounded(normalized, sourceExcerpt)) {
-            throw new IllegalArgumentException("한줄 공략의 숫자가 선택한 근거 글에 없습니다.");
         }
         if (publishedContents != null) {
             for (String published : publishedContents) {

@@ -388,13 +388,13 @@ class StrategyTipAiDraftServiceTest {
     }
 
     @Test
-    void approve_legacyInternalDraftKeepsEvidenceValidation() {
+    void approve_legacyInternalDraftDoesNotRequireOriginalEvidenceText() {
         String excerpt = "상대가 5분에 진출하면 입구 시야부터 확인합니다.";
         String evidence = "상대가 5분에 진출하면 입구 시야부터 확인";
         StrategyTipAiDraftDTO draft = internalDraft(61L, "t_vs_z", excerpt, evidence);
         when(store.getPendingDraft(61L)).thenReturn(draft);
         when(store.getRecentPublishedContents(20)).thenReturn(Collections.emptyList());
-        String edited = "상대가 5분에 진출하면 입구 시야부터 확인하세요.";
+        String edited = "상대 병력 이동을 확인한 뒤 수비 병력 3기의 위치를 조정하세요.";
         when(store.approve(61L, "t_vs_z", edited, "admin", "SC1Hub"))
                 .thenReturn(601);
 
