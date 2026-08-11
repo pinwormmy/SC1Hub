@@ -99,4 +99,18 @@ class LoginKeepAliveViewCoverageTest {
         assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(footerSource.contains("jquery"));
     }
+
+    @Test
+    void sharedChatYieldsDuringHistoryRenderingAndDefersPartnerAdsUntilInteraction() throws IOException {
+        Path scriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
+        String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("RENDER_CHUNK_SIZE"));
+        assertTrue(source.contains("scheduler.yield"));
+        assertTrue(source.contains("await yieldToMainThread()"));
+        assertTrue(source.contains("await renderMessages(data.messages)"));
+        assertTrue(source.contains("activatePendingChatAds"));
+        assertTrue(source.contains("iframeEl.dataset.src = adSrc"));
+        assertFalse(source.contains("iframeEl.src = adSrc"));
+    }
 }
