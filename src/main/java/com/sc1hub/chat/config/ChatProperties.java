@@ -11,6 +11,7 @@ import java.util.List;
 public class ChatProperties {
     private boolean enabled = true;
     private int historySize = 50;
+    private int initialHistorySize = 12;
     private int bufferSize = 200;
     private int maxMessageLength = 300;
     private int aiMaxMessageLength = 1000;

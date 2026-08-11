@@ -111,6 +111,8 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("await renderMessages(data.messages)"));
         assertTrue(source.contains("activatePendingChatAds"));
         assertTrue(source.contains("iframeEl.dataset.src = adSrc"));
+        assertTrue(source.contains("addEventListener('wheel', activatePendingChatAds"));
+        assertFalse(source.contains("addEventListener('focusin', activatePendingChatAds"));
         assertFalse(source.contains("iframeEl.src = adSrc"));
     }
 }

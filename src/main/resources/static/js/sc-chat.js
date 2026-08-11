@@ -603,8 +603,10 @@
         });
     }
 
-    terminalEl.addEventListener('pointerdown', activatePendingChatAds, { passive: true });
-    terminalEl.addEventListener('focusin', activatePendingChatAds);
+    // 입력 시작과 광고 로드를 겹치지 않는다. 과거 채팅을 직접 스크롤할 때만
+    // 보이는 광고를 활성화한다.
+    outputEl.addEventListener('wheel', activatePendingChatAds, { passive: true });
+    outputEl.addEventListener('touchmove', activatePendingChatAds, { passive: true });
 
     document.addEventListener('visibilitychange', () => {
         if (started && !document.hidden) {
