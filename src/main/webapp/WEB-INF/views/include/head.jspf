@@ -46,22 +46,31 @@
 <script>
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';
+    const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
+    const ADSENSE_DELAY_MS = 4000;
+    let adsenseDelayId = null;
+    let adsenseIdleId = null;
+    let navigationPending = false;
 
-    const markInternalLink = (linkEl) => {
+    const resolveInternalUrl = (linkEl) => {
         if (!(linkEl instanceof HTMLAnchorElement)) {
-            return;
+            return null;
         }
         const rawHref = linkEl.getAttribute('href');
         if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) {
-            return;
+            return null;
         }
         try {
             const url = new URL(rawHref, window.location.href);
-            if (url.origin === window.location.origin) {
-                linkEl.setAttribute(VIGNETTE_ATTRIBUTE, 'false');
-            }
+            return url.origin === window.location.origin ? url : null;
         } catch (error) {
-            // 브라우저가 해석할 수 없는 링크는 기존 동작에 맡긴다.
+            return null;
+        }
+    };
+
+    const markInternalLink = (linkEl) => {
+        if (resolveInternalUrl(linkEl)) {
+            linkEl.setAttribute(VIGNETTE_ATTRIBUTE, 'false');
         }
     };
 
@@ -88,6 +97,77 @@
         observer.observe(document.documentElement, { childList: true, subtree: true });
     };
 
+    const cancelScheduledAdsense = () => {
+        if (adsenseDelayId !== null) {
+            window.clearTimeout(adsenseDelayId);
+            adsenseDelayId = null;
+        }
+        if (adsenseIdleId !== null && 'cancelIdleCallback' in window) {
+            window.cancelIdleCallback(adsenseIdleId);
+            adsenseIdleId = null;
+        }
+    };
+
+    const prepareInternalNavigation = (event) => {
+        if (event.defaultPrevented || event.button !== 0
+                || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+        }
+        const targetEl = event.target instanceof Element ? event.target : null;
+        const linkEl = targetEl ? targetEl.closest('a[href]') : null;
+        if (!linkEl || linkEl.hasAttribute('download')
+                || (linkEl.target && linkEl.target.toLowerCase() !== '_self')
+                || !resolveInternalUrl(linkEl)) {
+            return;
+        }
+        navigationPending = true;
+        cancelScheduledAdsense();
+        window.stop();
+    };
+
+    const loadAdsense = () => {
+        if (navigationPending
+                || Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
+            return;
+        }
+        const scriptEl = document.createElement('script');
+        scriptEl.async = true;
+        scriptEl.crossOrigin = 'anonymous';
+        scriptEl.fetchPriority = 'low';
+        scriptEl.src = ADSENSE_SRC;
+        document.head.appendChild(scriptEl);
+    };
+
+    const loadAdsenseWhenIdle = () => {
+        adsenseDelayId = null;
+        if (navigationPending) {
+            return;
+        }
+        if ('requestIdleCallback' in window) {
+            adsenseIdleId = window.requestIdleCallback(() => {
+                adsenseIdleId = null;
+                loadAdsense();
+            });
+            return;
+        }
+        loadAdsense();
+    };
+
+    const scheduleAdsense = () => {
+        if (!navigationPending && adsenseDelayId === null) {
+            adsenseDelayId = window.setTimeout(loadAdsenseWhenIdle, ADSENSE_DELAY_MS);
+        }
+    };
+
+    document.addEventListener('pointerdown', prepareInternalNavigation, { capture: true });
+    document.addEventListener('click', prepareInternalNavigation, { capture: true });
+
+    if (document.readyState === 'complete') {
+        scheduleAdsense();
+    } else {
+        window.addEventListener('load', scheduleAdsense, { once: true });
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', protectInternalNavigation, { once: true });
     } else {
@@ -95,5 +175,3 @@
     }
 })();
 </script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802"
-        crossorigin="anonymous"></script>

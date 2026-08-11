@@ -79,17 +79,20 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void sharedPageLoadsAdsWithNativeAsyncAndDoesNotLoadGlobalJquery() throws IOException {
+    void sharedPagePrioritizesInternalNavigationOverAdsAndDoesNotLoadGlobalJquery() throws IOException {
         String headSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
         String footerSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/footer.jspf")), StandardCharsets.UTF_8);
 
-        assertTrue(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
-        assertFalse(headSource.contains("requestIdleCallback"));
-        assertFalse(headSource.contains("window.addEventListener('load'"));
-        assertFalse(headSource.contains("scheduleAdsense"));
-        assertFalse(headSource.contains("document.head.appendChild(scriptEl)"));
+        assertTrue(headSource.contains("requestIdleCallback"));
+        assertTrue(headSource.contains("cancelIdleCallback"));
+        assertTrue(headSource.contains("window.addEventListener('load'"));
+        assertTrue(headSource.contains("document.addEventListener('pointerdown'"));
+        assertTrue(headSource.contains("window.stop()"));
+        assertTrue(headSource.contains("fetchPriority = 'low'"));
+        assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
+        assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
         assertTrue(headSource.contains("MutationObserver"));
