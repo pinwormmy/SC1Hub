@@ -25,16 +25,15 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-class GeminiStrategyTipClientTest {
+class OpenAiStrategyTipClientTest {
 
-    private static final String API_URL =
-            "https://generativelanguage.googleapis.com/v1beta/interactions";
+    private static final String API_URL = "https://api.openai.com/v1/responses";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private RestTemplate restTemplate;
     private MockRestServiceServer server;
     private StrategyTipAiProperties properties;
-    private GeminiStrategyTipClient client;
+    private OpenAiStrategyTipClient client;
 
     @BeforeEach
     void setUp() {
@@ -43,51 +42,60 @@ class GeminiStrategyTipClientTest {
         properties = new StrategyTipAiProperties();
         properties.setEnabled(true);
         properties.setAllowLiveCalls(true);
-        properties.setApiKey("test-gemini-key");
+        properties.setApiKey("test-openai-key");
         properties.setBaseUrl(API_URL);
-        client = new GeminiStrategyTipClient(restTemplate, properties, objectMapper);
+        client = new OpenAiStrategyTipClient(restTemplate, properties, objectMapper);
     }
 
     @Test
     void generate_sendsOneCheckpointOnlyBatchWithoutToolsAndParsesUsage() {
         server.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header("x-goog-api-key", "test-gemini-key"))
+                .andExpect(header("Authorization", "Bearer test-openai-key"))
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.model").value("gemini-3.6-flash"))
-                .andExpect(jsonPath("$.system_instruction").value("system rules"))
+                .andExpect(jsonPath("$.model").value("gpt-5.6-luna"))
+                .andExpect(jsonPath("$.input[0].role").value("system"))
+                .andExpect(jsonPath("$.input[0].content").value("system rules"))
+                .andExpect(jsonPath("$.input[1].role").value("user"))
                 .andExpect(jsonPath("$.tools").doesNotExist())
+                .andExpect(jsonPath("$.temperature").doesNotExist())
                 .andExpect(jsonPath("$.store").value(false))
-                .andExpect(jsonPath("$.generation_config.thinking_level").value("medium"))
-                .andExpect(jsonPath("$.generation_config.thinking_summaries").value("none"))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(6000))
-                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "\"checkpointKnowledgeOnly\":true")))
-                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "\"toolUseAllowed\":false")))
-                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "\"sourceMaterialProvided\":false")))
-                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "\"preciseNumbersAllowed\":false")))
-                .andExpect(jsonPath("$.input").value(org.hamcrest.Matchers.containsString(
-                        "built-in checkpoint knowledge")))
-                .andExpect(jsonPath("$.response_format.length()").value(1))
-                .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.minItems")
+                .andExpect(jsonPath("$.reasoning.effort").value("high"))
+                .andExpect(jsonPath("$.max_output_tokens").value(6000))
+                .andExpect(jsonPath("$.input[1].content").value(
+                        org.hamcrest.Matchers.containsString(
+                                "\"checkpointKnowledgeOnly\":true")))
+                .andExpect(jsonPath("$.input[1].content").value(
+                        org.hamcrest.Matchers.containsString("\"toolUseAllowed\":false")))
+                .andExpect(jsonPath("$.input[1].content").value(
+                        org.hamcrest.Matchers.containsString(
+                                "\"sourceMaterialProvided\":false")))
+                .andExpect(jsonPath("$.input[1].content").value(
+                        org.hamcrest.Matchers.containsString(
+                                "\"preciseNumbersAllowed\":false")))
+                .andExpect(jsonPath("$.input[1].content").value(
+                        org.hamcrest.Matchers.containsString(
+                                "built-in checkpoint knowledge")))
+                .andExpect(jsonPath("$.text.verbosity").value("low"))
+                .andExpect(jsonPath("$.text.format.type").value("json_schema"))
+                .andExpect(jsonPath("$.text.format.name").value("strategy_tip_batch"))
+                .andExpect(jsonPath("$.text.format.strict").value(true))
+                .andExpect(jsonPath("$.text.format.schema.properties.drafts.minItems")
                         .value(3))
-                .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.maxItems")
+                .andExpect(jsonPath("$.text.format.schema.properties.drafts.maxItems")
                         .value(3))
-                .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.items"
+                .andExpect(jsonPath("$.text.format.schema.properties.drafts.items"
                         + ".properties.sourceId").doesNotExist())
-                .andExpect(jsonPath("$.response_format[0].schema.properties.drafts.items"
+                .andExpect(jsonPath("$.text.format.schema.properties.drafts.items"
                         + ".properties.evidenceSummary").doesNotExist())
-                .andRespond(withSuccess(completedResponse(threeDraftsJson(), 4100, 480, 220),
+                .andRespond(withSuccess(completedResponse(threeDraftsJson(), 4100, 700),
                         MediaType.APPLICATION_JSON));
 
         StrategyTipAiGeneratedBatch batch = client.generate(
                 "system rules", "source data", 3,
                 Arrays.asList("zvt", "pvz", "team_play"));
 
-        assertEquals("gemini-3.6-flash", batch.getModel());
+        assertEquals("gpt-5.6-luna", batch.getModel());
         assertEquals(4100, batch.getInputTokens());
         assertEquals(700, batch.getOutputTokens());
         assertEquals(3, batch.getDrafts().size());
@@ -98,13 +106,13 @@ class GeminiStrategyTipClientTest {
     }
 
     @Test
-    void generate_clampsOutputTokenBudgetAndInvalidThinkingLevel() {
+    void generate_clampsOutputTokenBudgetAndInvalidReasoningEffort() {
         properties.setMaxOutputTokens(99999);
-        properties.setThinkingLevel("invalid");
+        properties.setReasoningEffort("invalid");
         server.expect(requestTo(API_URL))
-                .andExpect(jsonPath("$.generation_config.max_output_tokens").value(6000))
-                .andExpect(jsonPath("$.generation_config.thinking_level").value("medium"))
-                .andRespond(withSuccess(completedResponse(oneDraftJson(), 10, 10, 0),
+                .andExpect(jsonPath("$.max_output_tokens").value(6000))
+                .andExpect(jsonPath("$.reasoning.effort").value("high"))
+                .andRespond(withSuccess(completedResponse(oneDraftJson(), 10, 10),
                         MediaType.APPLICATION_JSON));
 
         generateOne();
@@ -114,51 +122,52 @@ class GeminiStrategyTipClientTest {
     @Test
     void generate_rejectsDisabledLiveCallsAndMissingKeyWithoutCallingApi() {
         properties.setEnabled(false);
-        assertThrows(GeminiStrategyTipException.class, this::generateOne);
+        assertThrows(StrategyTipAiClientException.class, this::generateOne);
 
         properties.setEnabled(true);
         properties.setAllowLiveCalls(false);
-        assertThrows(GeminiStrategyTipException.class, this::generateOne);
+        assertThrows(StrategyTipAiClientException.class, this::generateOne);
 
         properties.setAllowLiveCalls(true);
         properties.setApiKey(" ");
-        assertThrows(GeminiStrategyTipException.class, this::generateOne);
+        assertThrows(StrategyTipAiClientException.class, this::generateOne);
         server.verify();
     }
 
     @Test
     void generate_rejectsUntrustedBaseUrlBeforeSendingApiKey() {
         String[] untrustedUrls = {
-                "http://generativelanguage.googleapis.com/v1beta/interactions",
-                "https://generativelanguage.googleapis.com.evil.example/v1beta/interactions",
-                "https://user@generativelanguage.googleapis.com/v1beta/interactions",
-                "https://generativelanguage.googleapis.com:8443/v1beta/interactions"
+                "http://api.openai.com/v1/responses",
+                "https://api.openai.com.evil.example/v1/responses",
+                "https://user@api.openai.com/v1/responses",
+                "https://api.openai.com:8443/v1/responses",
+                "https://api.openai.com/v1/responses?key=leak",
+                "https://api.openai.com/v1/chat/completions"
         };
 
         for (String untrustedUrl : untrustedUrls) {
             properties.setBaseUrl(untrustedUrl);
-            GeminiStrategyTipException exception = assertThrows(
-                    GeminiStrategyTipException.class, this::generateOne);
-            assertTrue(exception.getMessage().contains("trusted Google HTTPS endpoint"));
+            StrategyTipAiClientException exception = assertThrows(
+                    StrategyTipAiClientException.class, this::generateOne);
+            assertTrue(exception.getMessage().contains("trusted OpenAI HTTPS endpoint"));
         }
         server.verify();
     }
 
     @Test
-    void generate_rejectsIncompleteInteractionWithUsage() {
+    void generate_rejectsIncompleteResponseWithUsage() {
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess("{\"status\":\"incomplete\",\"usage\":{"
-                                + "\"total_input_tokens\":12,\"total_output_tokens\":7}}",
+                                + "\"input_tokens\":12,\"output_tokens\":7}}",
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
 
         assertTrue(exception.getMessage().contains("incomplete"));
         assertTrue(exception.hasUsage());
         assertEquals(12, exception.getInputTokens());
         assertEquals(7, exception.getOutputTokens());
-        assertEquals(0, exception.getSearchQueryCount());
     }
 
     @Test
@@ -168,15 +177,14 @@ class GeminiStrategyTipClientTest {
                 + "{\"category\":\"pvz\",\"content\":\"질럿을 좁은 길목에 세운다\"";
         String response = "{\"status\":\"incomplete\","
                 + "\"incomplete_details\":{\"reason\":\"max_output_tokens\"},"
-                + "\"steps\":[{\"type\":\"model_output\",\"content\":["
-                + "{\"type\":\"text\",\"text\":" + quote(partialOutput) + "}]}],"
-                + "\"usage\":{\"total_input_tokens\":3293,"
-                + "\"total_output_tokens\":1,\"total_thought_tokens\":2977}}";
+                + "\"output\":[{\"type\":\"message\",\"content\":["
+                + "{\"type\":\"output_text\",\"text\":" + quote(partialOutput) + "}]}],"
+                + "\"usage\":{\"input_tokens\":3293,\"output_tokens\":2978}}";
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class,
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class,
                 () -> client.generate("system rules", "source data", 3,
                         Arrays.asList("zvt", "pvz", "team_play")));
 
@@ -185,55 +193,54 @@ class GeminiStrategyTipClientTest {
         assertTrue(exception.hasUsage());
         assertEquals(3293, exception.getInputTokens());
         assertEquals(2978, exception.getOutputTokens());
-        assertEquals(0, exception.getSearchQueryCount());
         server.verify();
     }
 
     @Test
     void generate_rejectsRefusalContent() {
-        String response = "{\"status\":\"completed\",\"steps\":[{\"type\":\"model_output\","
-                + "\"content\":[{\"type\":\"refusal\",\"text\":\"cannot help\"}]}]}";
+        String response = "{\"status\":\"completed\",\"output\":[{\"type\":\"message\","
+                + "\"content\":[{\"type\":\"refusal\",\"refusal\":\"cannot help\"}]}]}";
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
         assertTrue(exception.getMessage().contains("refused"));
     }
 
     @Test
-    void generate_rejectsUnexpectedSearchOrUrlToolUse() {
-        String response = "{\"status\":\"completed\",\"steps\":["
-                + "{\"type\":\"google_search_call\"},"
-                + "{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":"
+    void generate_rejectsUnexpectedToolUse() {
+        String response = "{\"status\":\"completed\",\"output\":["
+                + "{\"type\":\"web_search_call\"},"
+                + "{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":"
                 + quote(oneDraftJson()) + "}]}]}";
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
         assertTrue(exception.getMessage().contains("external tool use"));
     }
 
     @Test
     void generate_rejectsMalformedStructuredOutput() {
         server.expect(requestTo(API_URL))
-                .andRespond(withSuccess(completedResponse("not-json", 1, 1, 0),
+                .andRespond(withSuccess(completedResponse("not-json", 1, 1),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
         assertTrue(exception.getMessage().contains("invalid JSON"));
     }
 
     @Test
     void generate_rejectsUnexpectedDraftCount() {
         server.expect(requestTo(API_URL))
-                .andRespond(withSuccess(completedResponse("{\"drafts\":[]}", 1, 1, 0),
+                .andRespond(withSuccess(completedResponse("{\"drafts\":[]}", 1, 1),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
         assertTrue(exception.getMessage().contains("unexpected draft count"));
     }
 
@@ -242,11 +249,11 @@ class GeminiStrategyTipClientTest {
         String output = "{\"drafts\":[{\"category\":\"pvt\","
                 + "\"content\":\"질럿은 입구에서 길을 막아 시간을 번다\"}]}";
         server.expect(requestTo(API_URL))
-                .andRespond(withSuccess(completedResponse(output, 1, 1, 0),
+                .andRespond(withSuccess(completedResponse(output, 1, 1),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
         assertTrue(exception.getMessage().contains("allowed category scope"));
     }
 
@@ -256,11 +263,11 @@ class GeminiStrategyTipClientTest {
                 + "{\"category\":\"zvt\",\"content\":\"뮤탈로 이동 동선을 먼저 확인한다\"},"
                 + "{\"category\":\"zvt\",\"content\":\"러커로 진입 경로를 좁혀 수비한다\"}]}";
         server.expect(requestTo(API_URL))
-                .andRespond(withSuccess(completedResponse(output, 1, 1, 0),
+                .andRespond(withSuccess(completedResponse(output, 1, 1),
                         MediaType.APPLICATION_JSON));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class,
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class,
                 () -> client.generate("system", "source", 2,
                         Arrays.asList("zvt", "pvz")));
         assertTrue(exception.getMessage().contains("duplicate"));
@@ -271,20 +278,20 @@ class GeminiStrategyTipClientTest {
         server.expect(requestTo(API_URL))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"error\":{\"message\":\"bad request test-gemini-key\"}}"));
+                        .body("{\"error\":{\"message\":\"bad request test-openai-key\"}}"));
 
-        GeminiStrategyTipException exception = assertThrows(
-                GeminiStrategyTipException.class, this::generateOne);
+        StrategyTipAiClientException exception = assertThrows(
+                StrategyTipAiClientException.class, this::generateOne);
 
         assertTrue(exception.getMessage().contains("[redacted]"));
-        assertTrue(!exception.getMessage().contains("test-gemini-key"));
+        assertTrue(!exception.getMessage().contains("test-openai-key"));
     }
 
     @Test
     void generate_saturatesTokenUsage() {
         server.expect(requestTo(API_URL))
                 .andRespond(withSuccess(completedResponse(oneDraftJson(),
-                                Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE),
+                                Integer.MAX_VALUE, Integer.MAX_VALUE),
                         MediaType.APPLICATION_JSON));
 
         StrategyTipAiGeneratedBatch batch = generateOne();
@@ -309,14 +316,13 @@ class GeminiStrategyTipClientTest {
                 + "{\"category\":\"team_play\",\"content\":\"팀원과 입구를 나눠 막아 초반을 버틴다\"}]}";
     }
 
-    private String completedResponse(String output, int inputTokens,
-                                     int outputTokens, int thoughtTokens) {
-        return "{\"status\":\"completed\",\"model\":\"gemini-3.6-flash\","
-                + "\"steps\":[{\"type\":\"model_output\",\"content\":["
-                + "{\"type\":\"text\",\"text\":" + quote(output) + "}]}],"
-                + "\"usage\":{\"total_input_tokens\":" + inputTokens
-                + ",\"total_output_tokens\":" + outputTokens
-                + ",\"total_thought_tokens\":" + thoughtTokens + "}}";
+    private String completedResponse(String output, int inputTokens, int outputTokens) {
+        return "{\"status\":\"completed\",\"model\":\"gpt-5.6-luna\","
+                + "\"output\":[{\"type\":\"reasoning\"},"
+                + "{\"type\":\"message\",\"content\":["
+                + "{\"type\":\"output_text\",\"text\":" + quote(output) + "}]}],"
+                + "\"usage\":{\"input_tokens\":" + inputTokens
+                + ",\"output_tokens\":" + outputTokens + "}}";
     }
 
     private String quote(String value) {

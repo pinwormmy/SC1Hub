@@ -20,7 +20,7 @@ public class AssistantBotProperties {
     private boolean enabled = false;
     private String boardTitle = "funboard";
     private String personaName = "프징징봇";
-    private String model = "gemini-2.5-flash-lite";
+    private String model = "gemini-3.5-flash-lite";
     private int recentPostLimit = 12;
     private int recentCommentLimit = 24;
     private int recentHistoryLimit = 20;
@@ -201,7 +201,23 @@ public class AssistantBotProperties {
         normalized.setName(resolvedName);
         normalized.setBoardTitle(StringUtils.hasText(persona.getBoardTitle()) ? persona.getBoardTitle().trim() : boardTitle);
         normalized.setModel(StringUtils.hasText(persona.getModel()) ? persona.getModel().trim() : model);
+        normalized.setProvider(resolveProvider(persona.getProvider(), normalized.getModel()));
+        normalized.setReasoningEffort(StringUtils.hasText(persona.getReasoningEffort())
+                ? persona.getReasoningEffort().trim() : null);
+        normalized.setMaxOutputTokens(persona.getMaxOutputTokens() != null
+                && persona.getMaxOutputTokens() > 0 ? persona.getMaxOutputTokens() : null);
         return normalized;
+    }
+
+    private String resolveProvider(String configuredProvider, String resolvedModel) {
+        if (StringUtils.hasText(configuredProvider)) {
+            return configuredProvider.trim().toLowerCase(Locale.ROOT);
+        }
+        if (StringUtils.hasText(resolvedModel)
+                && resolvedModel.trim().toLowerCase(Locale.ROOT).startsWith("gpt-")) {
+            return "openai";
+        }
+        return "gemini";
     }
 
     @Data
@@ -210,5 +226,8 @@ public class AssistantBotProperties {
         private String name;
         private String boardTitle;
         private String model;
+        private String provider;
+        private String reasoningEffort;
+        private Integer maxOutputTokens;
     }
 }

@@ -20,12 +20,12 @@ class StrategyTipAiConfigTest {
         assertFalse(properties.isEnabled());
         assertFalse(properties.isAllowLiveCalls());
         assertEquals("", properties.getApiKey());
-        assertEquals("https://generativelanguage.googleapis.com/v1beta/interactions",
+        assertEquals("https://api.openai.com/v1/responses",
                 properties.getBaseUrl());
-        assertEquals("gemini-3.6-flash", properties.getModel());
-        assertEquals("medium", properties.getThinkingLevel());
+        assertEquals("gpt-5.6-luna", properties.getModel());
+        assertEquals("high", properties.getReasoningEffort());
         assertEquals(6000, properties.getMaxOutputTokens());
-        assertEquals(3, properties.getDailyDraftLimit());
+        assertEquals(1, properties.getDailyDraftLimit());
         assertEquals(30, properties.getMaxPendingDrafts());
         assertEquals(2, properties.getMaxDailyApiCalls());
     }

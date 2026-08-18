@@ -5,16 +5,21 @@ import com.sc1hub.assistant.config.GeminiProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -50,6 +55,12 @@ class GeminiClientTest {
         GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
 
         assertEquals("hello world", client.generateAnswer("prompt"));
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(anyString(), entityCaptor.capture(), eq(String.class));
+        Map<?, ?> payload = (Map<?, ?>) entityCaptor.getValue().getBody();
+        Map<?, ?> generationConfig = (Map<?, ?>) payload.get("generationConfig");
+        assertFalse(generationConfig.containsKey("temperature"));
     }
 
     @Test

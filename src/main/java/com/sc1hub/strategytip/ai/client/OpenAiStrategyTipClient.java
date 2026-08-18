@@ -32,18 +32,19 @@ import java.util.Set;
 
 @Component
 @Slf4j
-public class GeminiStrategyTipClient {
+public class OpenAiStrategyTipClient {
 
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
     private static final int ABSOLUTE_MAX_OUTPUT_TOKENS = 6000;
     private static final int MAX_GENERATED_CONTENT_CHARS = 96;
-    private static final String GEMINI_API_HOST = "generativelanguage.googleapis.com";
+    private static final String OPENAI_API_HOST = "api.openai.com";
+    private static final String RESPONSES_API_PATH = "/v1/responses";
 
     private final RestTemplate restTemplate;
     private final StrategyTipAiProperties properties;
     private final ObjectMapper objectMapper;
 
-    public GeminiStrategyTipClient(
+    public OpenAiStrategyTipClient(
             @Qualifier("strategyTipAiRestTemplate") RestTemplate restTemplate,
             StrategyTipAiProperties properties,
             ObjectMapper objectMapper) {
@@ -57,24 +58,26 @@ public class GeminiStrategyTipClient {
                                                  int requestedCount,
                                                  List<String> categories) {
         if (!properties.isEnabled()) {
-            throw new GeminiStrategyTipException("Strategy tip AI generation is disabled.");
+            throw new StrategyTipAiClientException("Strategy tip AI generation is disabled.");
         }
         if (!properties.isAllowLiveCalls()) {
-            throw new GeminiStrategyTipException("Live Gemini API calls are disabled.");
+            throw new StrategyTipAiClientException("Live OpenAI API calls are disabled.");
         }
-        String apiKey = requireText(properties.getApiKey(), "Gemini API key is not configured.");
+        String apiKey = requireText(properties.getApiKey(),
+                "OpenAI API key is not configured.");
         URI apiUri = validateApiUri(requireText(properties.getBaseUrl(),
-                "Gemini Interactions API URL is not configured."));
-        String model = requireText(properties.getModel(), "Gemini model is not configured.");
+                "OpenAI Responses API URL is not configured."));
+        String model = requireText(properties.getModel(), "OpenAI model is not configured.");
         String validSystemPrompt = requireText(systemPrompt, "System prompt is required.");
         String validUserPrompt = requireText(userPrompt, "User prompt is required.");
         if (requestedCount < 1) {
-            throw new GeminiStrategyTipException("Requested draft count must be positive.");
+            throw new StrategyTipAiClientException("Requested draft count must be positive.");
         }
 
         List<String> allowedCategories = requireDistinctValues(categories, "categories");
         if (allowedCategories.size() != requestedCount) {
-            throw new GeminiStrategyTipException("Requested draft count must match the category count.");
+            throw new StrategyTipAiClientException(
+                    "Requested draft count must match the category count.");
         }
 
         Map<String, Object> payload = buildPayload(validSystemPrompt, validUserPrompt,
@@ -82,7 +85,7 @@ public class GeminiStrategyTipClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-        headers.set("x-goog-api-key", apiKey);
+        headers.set("Authorization", "Bearer " + apiKey);
 
         String rawResponse;
         try {
@@ -91,14 +94,14 @@ public class GeminiStrategyTipClient {
             rawResponse = response.getBody();
         } catch (HttpStatusCodeException e) {
             String detail = safeErrorDetail(e, apiKey, validSystemPrompt, validUserPrompt);
-            log.warn("Gemini Interactions API request failed. status={}, model={}",
+            log.warn("OpenAI Responses API request failed. status={}, model={}",
                     e.getStatusCode(), model);
-            throw new GeminiStrategyTipException("Gemini Interactions API request failed: "
+            throw new StrategyTipAiClientException("OpenAI Responses API request failed: "
                     + e.getStatusCode() + (StringUtils.hasText(detail) ? " " + detail : ""), e);
         } catch (RestClientException e) {
-            log.warn("Gemini Interactions API request failed. type={}, model={}",
+            log.warn("OpenAI Responses API request failed. type={}, model={}",
                     e.getClass().getSimpleName(), model);
-            throw new GeminiStrategyTipException("Gemini Interactions API request failed.", e);
+            throw new StrategyTipAiClientException("OpenAI Responses API request failed.", e);
         }
 
         return parseResponse(rawResponse, requestedCount, allowedCategories, model);
@@ -111,24 +114,36 @@ public class GeminiStrategyTipClient {
                                              String model) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
-        payload.put("system_instruction", systemPrompt);
-        payload.put("input", buildConstrainedInput(
-                userPrompt, requestedCount, categories));
+        payload.put("input", Arrays.asList(
+                inputMessage("system", systemPrompt),
+                inputMessage("user", buildConstrainedInput(
+                        userPrompt, requestedCount, categories))));
         payload.put("store", false);
-
-        Map<String, Object> generationConfig = new LinkedHashMap<>();
-        generationConfig.put("thinking_level", resolveThinkingLevel());
-        generationConfig.put("thinking_summaries", "none");
-        generationConfig.put("max_output_tokens", Math.max(1,
+        payload.put("max_output_tokens", Math.max(1,
                 Math.min(properties.getMaxOutputTokens(), ABSOLUTE_MAX_OUTPUT_TOKENS)));
-        payload.put("generation_config", generationConfig);
 
-        Map<String, Object> responseFormat = new LinkedHashMap<>();
-        responseFormat.put("type", "text");
-        responseFormat.put("mime_type", "application/json");
-        responseFormat.put("schema", buildResponseSchema(requestedCount, categories));
-        payload.put("response_format", Collections.singletonList(responseFormat));
+        Map<String, Object> reasoning = new LinkedHashMap<>();
+        reasoning.put("effort", resolveReasoningEffort());
+        payload.put("reasoning", reasoning);
+
+        Map<String, Object> format = new LinkedHashMap<>();
+        format.put("type", "json_schema");
+        format.put("name", "strategy_tip_batch");
+        format.put("strict", true);
+        format.put("schema", buildResponseSchema(requestedCount, categories));
+
+        Map<String, Object> text = new LinkedHashMap<>();
+        text.put("verbosity", "low");
+        text.put("format", format);
+        payload.put("text", text);
         return payload;
+    }
+
+    private Map<String, Object> inputMessage(String role, String content) {
+        Map<String, Object> message = new LinkedHashMap<>();
+        message.put("role", role);
+        message.put("content", content);
+        return message;
     }
 
     private String buildConstrainedInput(String userPrompt,
@@ -146,11 +161,11 @@ public class GeminiStrategyTipClient {
         try {
             return userPrompt
                     + "\n\nOUTPUT_CONSTRAINTS_JSON=" + objectMapper.writeValueAsString(constraints)
-                    + "\nUse only your built-in checkpoint knowledge. Do not use Google Search, "
-                    + "URL Context, tools, supplied sources, or time-sensitive facts. "
+                    + "\nUse only your built-in checkpoint knowledge. Do not use web search, "
+                    + "URL context, tools, supplied sources, or time-sensitive facts. "
                     + "Return only the schema JSON and complete every requested draft.";
         } catch (JsonProcessingException e) {
-            throw new GeminiStrategyTipException("Could not build the Gemini request.", e);
+            throw new StrategyTipAiClientException("Could not build the OpenAI request.", e);
         }
     }
 
@@ -201,14 +216,14 @@ public class GeminiStrategyTipClient {
                                                        List<String> allowedCategories,
                                                        String fallbackModel) {
         if (!StringUtils.hasText(rawResponse)) {
-            throw new GeminiStrategyTipException("Gemini returned an empty response.");
+            throw new StrategyTipAiClientException("OpenAI returned an empty response.");
         }
 
         JsonNode root;
         try {
             root = objectMapper.readTree(rawResponse);
         } catch (JsonProcessingException e) {
-            throw new GeminiStrategyTipException("Gemini returned invalid response JSON.", e);
+            throw new StrategyTipAiClientException("OpenAI returned invalid response JSON.", e);
         }
 
         UsageSnapshot usage = extractUsage(root);
@@ -217,21 +232,23 @@ public class GeminiStrategyTipClient {
             if (!"completed".equals(status)) {
                 String reason = diagnosticCode(
                         root.path("incomplete_details").path("reason").asText(""));
-                throw new GeminiStrategyTipException("Gemini interaction did not complete: "
+                throw new StrategyTipAiClientException("OpenAI response did not complete: "
                         + (StringUtils.hasText(status) ? status : "missing status")
                         + (StringUtils.hasText(reason) ? " (" + reason + ")" : ""));
             }
 
-            ResponseParts parts = collectResponseParts(root.path("steps"));
+            ResponseParts parts = collectResponseParts(root.path("output"));
             if (parts.refusal) {
-                throw new GeminiStrategyTipException("Gemini refused the strategy tip request.");
+                throw new StrategyTipAiClientException(
+                        "OpenAI refused the strategy tip request.");
             }
             if (parts.unexpectedToolUse) {
-                throw new GeminiStrategyTipException(
-                        "Gemini unexpectedly attempted external tool use.");
+                throw new StrategyTipAiClientException(
+                        "OpenAI unexpectedly attempted external tool use.");
             }
             if (!StringUtils.hasText(parts.outputText)) {
-                throw new GeminiStrategyTipException("Gemini returned no structured text output.");
+                throw new StrategyTipAiClientException(
+                        "OpenAI returned no structured text output.");
             }
 
             List<StrategyTipAiGeneratedBatch.Draft> drafts = parseDrafts(parts.outputText,
@@ -239,51 +256,54 @@ public class GeminiStrategyTipClient {
             String model = root.path("model").asText(fallbackModel);
             return new StrategyTipAiGeneratedBatch(
                     drafts, model, usage.inputTokens, usage.outputTokens);
-        } catch (GeminiStrategyTipException e) {
+        } catch (StrategyTipAiClientException e) {
             if (e.hasUsage() || !usage.available) {
                 throw e;
             }
-            throw new GeminiStrategyTipException(e.getMessage(), e,
-                    usage.inputTokens, usage.outputTokens, 0);
+            throw new StrategyTipAiClientException(e.getMessage(), e,
+                    usage.inputTokens, usage.outputTokens);
         }
     }
 
-    private ResponseParts collectResponseParts(JsonNode steps) {
-        if (!steps.isArray()) {
-            throw new GeminiStrategyTipException("Gemini response is missing interaction steps.");
+    private ResponseParts collectResponseParts(JsonNode output) {
+        if (!output.isArray()) {
+            throw new StrategyTipAiClientException(
+                    "OpenAI response is missing output items.");
         }
 
         boolean refusal = false;
         boolean unexpectedToolUse = false;
-        String outputText = null;
-        for (JsonNode step : steps) {
-            String stepType = step.path("type").asText("");
-            if ("google_search_call".equals(stepType)
-                    || "url_context_call".equals(stepType)) {
+        StringBuilder outputText = new StringBuilder();
+        for (JsonNode item : output) {
+            String itemType = item.path("type").asText("");
+            if (isToolCall(itemType)) {
                 unexpectedToolUse = true;
                 continue;
             }
-            if (!"model_output".equals(stepType)) {
+            if (!"message".equals(itemType)) {
                 continue;
             }
-            JsonNode content = step.path("content");
+            JsonNode content = item.path("content");
             if (!content.isArray()) {
                 continue;
             }
-            StringBuilder stepText = new StringBuilder();
             for (JsonNode block : content) {
                 String blockType = block.path("type").asText("");
                 if ("refusal".equals(blockType)) {
                     refusal = true;
-                } else if ("text".equals(blockType)) {
-                    stepText.append(block.path("text").asText(""));
+                } else if ("output_text".equals(blockType)) {
+                    outputText.append(block.path("text").asText(""));
                 }
             }
-            if (StringUtils.hasText(stepText.toString())) {
-                outputText = stepText.toString();
-            }
         }
-        return new ResponseParts(outputText, refusal, unexpectedToolUse);
+        return new ResponseParts(outputText.toString(), refusal, unexpectedToolUse);
+    }
+
+    private boolean isToolCall(String itemType) {
+        if (!StringUtils.hasText(itemType)) {
+            return false;
+        }
+        return itemType.endsWith("_call") || itemType.endsWith("_call_output");
     }
 
     private List<StrategyTipAiGeneratedBatch.Draft> parseDrafts(
@@ -294,12 +314,14 @@ public class GeminiStrategyTipClient {
         try {
             output = objectMapper.readTree(outputText);
         } catch (JsonProcessingException e) {
-            throw new GeminiStrategyTipException("Gemini structured output is invalid JSON.", e);
+            throw new StrategyTipAiClientException(
+                    "OpenAI structured output is invalid JSON.", e);
         }
         JsonNode draftNodes = output.path("drafts");
         if (!output.isObject() || !draftNodes.isArray()
                 || draftNodes.size() != requestedCount) {
-            throw new GeminiStrategyTipException("Gemini returned an unexpected draft count.");
+            throw new StrategyTipAiClientException(
+                    "OpenAI returned an unexpected draft count.");
         }
 
         Set<String> categorySet = new LinkedHashSet<>(allowedCategories);
@@ -310,18 +332,18 @@ public class GeminiStrategyTipClient {
             String content = requiredOutputText(draftNode, "content");
 
             if (!categorySet.contains(category)) {
-                throw new GeminiStrategyTipException(
-                        "Gemini returned a draft outside the allowed category scope.");
+                throw new StrategyTipAiClientException(
+                        "OpenAI returned a draft outside the allowed category scope.");
             }
             if (!seenCategories.add(category)) {
-                throw new GeminiStrategyTipException(
-                        "Gemini returned duplicate draft categories.");
+                throw new StrategyTipAiClientException(
+                        "OpenAI returned duplicate draft categories.");
             }
             drafts.add(new StrategyTipAiGeneratedBatch.Draft(category, content));
         }
         if (seenCategories.size() != categorySet.size()) {
-            throw new GeminiStrategyTipException(
-                    "Gemini did not return every requested category.");
+            throw new StrategyTipAiClientException(
+                    "OpenAI did not return every requested category.");
         }
         return drafts;
     }
@@ -329,40 +351,41 @@ public class GeminiStrategyTipClient {
     private String requiredOutputText(JsonNode node, String fieldName) {
         JsonNode value = node.get(fieldName);
         if (value == null || !value.isTextual() || !StringUtils.hasText(value.asText())) {
-            throw new GeminiStrategyTipException(
-                    "Gemini structured output is missing " + fieldName + ".");
+            throw new StrategyTipAiClientException(
+                    "OpenAI structured output is missing " + fieldName + ".");
         }
         return value.asText().trim();
     }
 
     private List<String> requireDistinctValues(List<String> values, String fieldName) {
         if (values == null || values.isEmpty()) {
-            throw new GeminiStrategyTipException(fieldName + " must not be empty.");
+            throw new StrategyTipAiClientException(fieldName + " must not be empty.");
         }
         Set<String> distinct = new LinkedHashSet<>();
         for (String value : values) {
             if (!StringUtils.hasText(value)) {
-                throw new GeminiStrategyTipException(
+                throw new StrategyTipAiClientException(
                         fieldName + " must not contain blank values.");
             }
             distinct.add(value.trim());
         }
         if (distinct.size() != values.size()) {
-            throw new GeminiStrategyTipException(
+            throw new StrategyTipAiClientException(
                     fieldName + " must not contain duplicate values.");
         }
         return new ArrayList<>(distinct);
     }
 
-    private String resolveThinkingLevel() {
-        String value = properties.getThinkingLevel();
+    private String resolveReasoningEffort() {
+        String value = properties.getReasoningEffort();
         if (!StringUtils.hasText(value)) {
-            return "medium";
+            return "high";
         }
         String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (!Arrays.asList("minimal", "low", "medium", "high").contains(normalized)) {
-            log.warn("Invalid strategy tip thinkingLevel; using medium.");
-            return "medium";
+        if (!Arrays.asList("none", "low", "medium", "high", "xhigh", "max")
+                .contains(normalized)) {
+            log.warn("Invalid strategy tip reasoningEffort; using high.");
+            return "high";
         }
         return normalized;
     }
@@ -377,7 +400,7 @@ public class GeminiStrategyTipClient {
 
     private String requireText(String value, String message) {
         if (!StringUtils.hasText(value)) {
-            throw new GeminiStrategyTipException(message);
+            throw new StrategyTipAiClientException(message);
         }
         return value.trim();
     }
@@ -387,25 +410,26 @@ public class GeminiStrategyTipClient {
         try {
             uri = new URI(baseUrl);
         } catch (URISyntaxException e) {
-            throw new GeminiStrategyTipException("Gemini Interactions API URL is invalid.", e);
+            throw new StrategyTipAiClientException("OpenAI Responses API URL is invalid.", e);
         }
         int port = uri.getPort();
         if (!"https".equalsIgnoreCase(uri.getScheme())
-                || !GEMINI_API_HOST.equalsIgnoreCase(uri.getHost())
+                || !OPENAI_API_HOST.equalsIgnoreCase(uri.getHost())
+                || !RESPONSES_API_PATH.equals(uri.getPath())
                 || uri.getUserInfo() != null
+                || uri.getQuery() != null
+                || uri.getFragment() != null
                 || (port != -1 && port != 443)) {
-            throw new GeminiStrategyTipException(
-                    "Gemini Interactions API URL must use the trusted Google HTTPS endpoint.");
+            throw new StrategyTipAiClientException(
+                    "OpenAI Responses API URL must use the trusted OpenAI HTTPS endpoint.");
         }
         return uri;
     }
 
     private UsageSnapshot extractUsage(JsonNode root) {
         JsonNode usage = root.path("usage");
-        int inputTokens = nonNegativeInt(usage.path("total_input_tokens"));
-        int outputTokens = saturatingAdd(
-                nonNegativeInt(usage.path("total_output_tokens")),
-                nonNegativeInt(usage.path("total_thought_tokens")));
+        int inputTokens = nonNegativeInt(usage.path("input_tokens"));
+        int outputTokens = nonNegativeInt(usage.path("output_tokens"));
         return new UsageSnapshot(usage.isObject(), inputTokens, outputTokens);
     }
 
@@ -419,11 +443,6 @@ public class GeminiStrategyTipClient {
         }
         return value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
                 ? Integer.MAX_VALUE : value.intValue();
-    }
-
-    private int saturatingAdd(int left, int right) {
-        long total = (long) Math.max(0, left) + Math.max(0, right);
-        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
     }
 
     private String safeErrorDetail(HttpStatusCodeException exception,

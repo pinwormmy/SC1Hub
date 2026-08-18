@@ -1,8 +1,8 @@
 package com.sc1hub.strategytip.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sc1hub.strategytip.ai.client.GeminiStrategyTipClient;
-import com.sc1hub.strategytip.ai.client.GeminiStrategyTipException;
+import com.sc1hub.strategytip.ai.client.OpenAiStrategyTipClient;
+import com.sc1hub.strategytip.ai.client.StrategyTipAiClientException;
 import com.sc1hub.strategytip.ai.client.StrategyTipAiGeneratedBatch;
 import com.sc1hub.strategytip.ai.config.StrategyTipAiProperties;
 import com.sc1hub.strategytip.dto.StrategyTipAiDraftDTO;
@@ -60,7 +60,7 @@ class StrategyTipAiDraftServiceTest {
     private StrategyTipAiDraftStore store;
 
     @Mock
-    private GeminiStrategyTipClient geminiClient;
+    private OpenAiStrategyTipClient aiClient;
 
     private StrategyTipAiProperties properties;
     private StrategyTipAiDraftService service;
@@ -71,8 +71,8 @@ class StrategyTipAiDraftServiceTest {
         properties = new StrategyTipAiProperties();
         properties.setEnabled(true);
         properties.setAllowLiveCalls(true);
-        properties.setApiKey("test-gemini-key");
-        properties.setModel("gemini-3.6-flash");
+        properties.setApiKey("test-openai-key");
+        properties.setModel("gpt-5.6-luna");
         properties.setDailyDraftLimit(3);
         properties.setMaxPendingDrafts(30);
         properties.setMaxDailyApiCalls(2);
@@ -80,7 +80,7 @@ class StrategyTipAiDraftServiceTest {
         properties.setDuplicateContextLimit(20);
         properties.setWriter("SC1Hub");
         service = new StrategyTipAiDraftService(
-                store, geminiClient, properties, new ObjectMapper());
+                store, aiClient, properties, new ObjectMapper());
     }
 
     @AfterEach
@@ -94,17 +94,17 @@ class StrategyTipAiDraftServiceTest {
     void generateDailyDrafts_skipsBeforeStoreWhenFeatureIsNotReady() {
         properties.setEnabled(false);
         assertEquals("SKIPPED", generate().getOutcome());
-        verifyNoInteractions(store, geminiClient);
+        verifyNoInteractions(store, aiClient);
 
         properties.setEnabled(true);
         properties.setAllowLiveCalls(false);
         assertEquals("SKIPPED", generate().getOutcome());
-        verifyNoInteractions(store, geminiClient);
+        verifyNoInteractions(store, aiClient);
 
         properties.setAllowLiveCalls(true);
         properties.setApiKey(" ");
         assertEquals("SKIPPED", generate().getOutcome());
-        verifyNoInteractions(store, geminiClient);
+        verifyNoInteractions(store, aiClient);
     }
 
     @Test
@@ -115,19 +115,19 @@ class StrategyTipAiDraftServiceTest {
 
         assertEquals("SKIPPED", result.getOutcome());
         assertTrue(result.getMessage().contains("API 주소"));
-        verifyNoInteractions(store, geminiClient);
+        verifyNoInteractions(store, aiClient);
     }
 
     @Test
     void generateDailyDrafts_stopsAtDailyOrThirtyPendingLimit() {
         when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(3);
         assertTrue(generate().getMessage().contains("이미 채웠"));
-        verifyNoInteractions(geminiClient);
+        verifyNoInteractions(aiClient);
 
         when(store.countGeneratedOn(GENERATION_DATE)).thenReturn(0);
         when(store.countPending()).thenReturn(30);
         assertTrue(generate().getMessage().contains("30건"));
-        verifyNoInteractions(geminiClient);
+        verifyNoInteractions(aiClient);
     }
 
     @Test
@@ -136,13 +136,13 @@ class StrategyTipAiDraftServiceTest {
                 Collections.emptyList(), Collections.emptyList());
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList()))
+        when(aiClient.generate(anyString(), anyString(), eq(1), anyList()))
                 .thenReturn(batch(1000, 200, draft(0)));
 
         StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals(1, result.getCreatedCount());
-        verify(geminiClient).generate(anyString(), anyString(), eq(1),
+        verify(aiClient).generate(anyString(), anyString(), eq(1),
                 eq(Collections.singletonList("t_vs_z")));
     }
 
@@ -169,7 +169,7 @@ class StrategyTipAiDraftServiceTest {
 
         assertEquals("SKIPPED", result.getOutcome());
         assertTrue(result.getMessage().contains("호출 상한"));
-        verifyNoInteractions(geminiClient);
+        verifyNoInteractions(aiClient);
     }
 
     @Test
@@ -178,14 +178,14 @@ class StrategyTipAiDraftServiceTest {
                 Collections.emptyList(), Collections.emptyList());
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
-        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList()))
+        when(aiClient.generate(anyString(), anyString(), eq(3), anyList()))
                 .thenReturn(validBatch(4100, 700));
 
         StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals("CREATED", result.getOutcome());
         assertEquals(3, result.getCreatedCount());
-        verify(geminiClient).generate(
+        verify(aiClient).generate(
                 contains("학습 체크포인트"), contains("GENERATION_REQUEST_JSON"),
                 eq(3), eq(CATEGORIES));
         verify(store, never()).getSourcePosts(anyString(), anyInt());
@@ -221,7 +221,7 @@ class StrategyTipAiDraftServiceTest {
         when(store.claimDailyApiCall(
                 GENERATION_DATE, Integer.MAX_VALUE, NOW.minusMinutes(10)))
                 .thenReturn(3);
-        when(geminiClient.generate(anyString(), anyString(), eq(3), eq(manualCategories)))
+        when(aiClient.generate(anyString(), anyString(), eq(3), eq(manualCategories)))
                 .thenReturn(batch(1800, 360, manualDrafts));
 
         StrategyTipAiDraftService.GenerationResult result =
@@ -247,13 +247,13 @@ class StrategyTipAiDraftServiceTest {
                 Collections.singletonList(1), Collections.singletonList("t_vs_z"));
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(2);
-        when(geminiClient.generate(anyString(), anyString(), eq(2), anyList()))
+        when(aiClient.generate(anyString(), anyString(), eq(2), anyList()))
                 .thenReturn(batch(2500, 420, draft(1), draft(2)));
 
         StrategyTipAiDraftService.GenerationResult result = generate();
 
         assertEquals(2, result.getCreatedCount());
-        verify(geminiClient).generate(anyString(), anyString(), eq(2),
+        verify(aiClient).generate(anyString(), anyString(), eq(2),
                 eq(Arrays.asList("t_vs_p", "t_vs_t")));
         ArgumentCaptor<List<StrategyTipAiDraftDTO>> draftsCaptor = draftListCaptor();
         verify(store).saveGeneratedDrafts(
@@ -298,7 +298,7 @@ class StrategyTipAiDraftServiceTest {
                 "t_vs_z", "정찰을 마치면 무조건 입구 수비 동선을 정리하세요."));
         assertInvalidBatchFailsAfterReset(batch(100, 20, absolute), "단정");
 
-        org.mockito.Mockito.reset(store, geminiClient);
+        org.mockito.Mockito.reset(store, aiClient);
         arrangeReadyGeneration(0, 0, Collections.singletonList(CONTENTS.get(0)),
                 Collections.emptyList(), Collections.emptyList());
         assertInvalidBatchFailsCurrentSetup(validBatch(100, 20), "유사");
@@ -310,16 +310,16 @@ class StrategyTipAiDraftServiceTest {
                 Collections.emptyList(), Collections.emptyList());
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
-        GeminiStrategyTipException failure = new GeminiStrategyTipException(
-                "Gemini interaction did not complete: incomplete (max_output_tokens)",
-                null, 3293, 2978, 0);
-        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList()))
+        StrategyTipAiClientException failure = new StrategyTipAiClientException(
+                "OpenAI response did not complete: incomplete (max_output_tokens)",
+                null, 3293, 2978);
+        when(aiClient.generate(anyString(), anyString(), eq(3), anyList()))
                 .thenThrow(failure);
 
-        assertThrows(GeminiStrategyTipException.class, this::generate);
+        assertThrows(StrategyTipAiClientException.class, this::generate);
 
         verify(store).failDailyRun(GENERATION_DATE, 1,
-                "Gemini interaction did not complete: incomplete (max_output_tokens)",
+                "OpenAI response did not complete: incomplete (max_output_tokens)",
                 3293, 2978, 0);
         verify(store, never()).saveGeneratedDrafts(
                 any(LocalDate.class), anyInt(), anyList(), anyInt(), anyInt(), anyInt());
@@ -333,7 +333,7 @@ class StrategyTipAiDraftServiceTest {
                 .thenReturn(1);
         CountDownLatch enteredClient = new CountDownLatch(1);
         CountDownLatch releaseClient = new CountDownLatch(1);
-        when(geminiClient.generate(anyString(), anyString(), eq(1), anyList()))
+        when(aiClient.generate(anyString(), anyString(), eq(1), anyList()))
                 .thenAnswer(invocation -> {
                     enteredClient.countDown();
                     assertTrue(releaseClient.await(5, TimeUnit.SECONDS));
@@ -349,7 +349,7 @@ class StrategyTipAiDraftServiceTest {
         assertEquals("SKIPPED", concurrent.getOutcome());
         assertTrue(concurrent.getMessage().contains("이미 실행 중"));
         assertEquals("CREATED", first.get(5, TimeUnit.SECONDS).getOutcome());
-        verify(geminiClient, times(1)).generate(
+        verify(aiClient, times(1)).generate(
                 anyString(), anyString(), eq(1), anyList());
     }
 
@@ -445,7 +445,7 @@ class StrategyTipAiDraftServiceTest {
     private StrategyTipAiGeneratedBatch batch(int inputTokens, int outputTokens,
                                                List<StrategyTipAiGeneratedBatch.Draft> drafts) {
         return new StrategyTipAiGeneratedBatch(
-                drafts, "gemini-3.6-flash", inputTokens, outputTokens);
+                drafts, "gpt-5.6-luna", inputTokens, outputTokens);
     }
 
     private List<StrategyTipAiGeneratedBatch.Draft> validDrafts() {
@@ -470,7 +470,7 @@ class StrategyTipAiDraftServiceTest {
 
     private void assertInvalidBatchFailsAfterReset(StrategyTipAiGeneratedBatch invalidBatch,
                                                    String expectedMessagePart) {
-        org.mockito.Mockito.reset(store, geminiClient);
+        org.mockito.Mockito.reset(store, aiClient);
         arrangeReadyGeneration(0, 0, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList());
         assertInvalidBatchFailsCurrentSetup(invalidBatch, expectedMessagePart);
@@ -480,7 +480,7 @@ class StrategyTipAiDraftServiceTest {
                                                      String expectedMessagePart) {
         when(store.claimDailyApiCall(GENERATION_DATE, 2, NOW.minusMinutes(10)))
                 .thenReturn(1);
-        when(geminiClient.generate(anyString(), anyString(), eq(3), anyList()))
+        when(aiClient.generate(anyString(), anyString(), eq(3), anyList()))
                 .thenReturn(invalidBatch);
 
         IllegalStateException exception = assertThrows(

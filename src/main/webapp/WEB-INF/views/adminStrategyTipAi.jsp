@@ -34,7 +34,7 @@
                             <a class="ai-review-button ai-review-button--ghost" href="/adminPage">관리자 홈</a>
                             <form class="ai-review-generate" action="/adminPage/strategy-tips/ai/generate"
                                   method="post"
-                                  onsubmit="if (!window.confirm('Gemini API 요금이 청구될 수 있습니다. 초안 3건을 생성할까요?')) return false; this.setAttribute('aria-busy', 'true'); this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = '생성 중…'; return true;">
+                                  onsubmit="if (!window.confirm('OpenAI API 요금이 청구될 수 있습니다. 초안 3건을 생성할까요?')) return false; this.setAttribute('aria-busy', 'true'); this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = '생성 중…'; return true;">
                                 <input type="hidden" name="csrfToken" value="<c:out value='${csrfToken}' />">
                                 <button class="ai-review-button ai-review-button--primary" type="submit"
                                         <c:if test="${not aiStatus.enabled}">disabled aria-disabled="true"</c:if>>

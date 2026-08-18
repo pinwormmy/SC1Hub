@@ -167,6 +167,10 @@ public class ChatRoomService {
     }
 
     public List<ChatMessageDTO> getRecentMessages(int limit) {
+        return getRecentMessagesExcludingNickname(null, limit);
+    }
+
+    public List<ChatMessageDTO> getRecentMessagesExcludingNickname(String excludedNickname, int limit) {
         if (limit <= 0) {
             return Collections.emptyList();
         }
@@ -176,7 +180,9 @@ public class ChatRoomService {
             Iterator<ChatMessageDTO> iterator = buffer.descendingIterator();
             while (iterator.hasNext() && recent.size() < limit) {
                 ChatMessageDTO message = iterator.next();
-                if (message != null && !message.isDeleted()) {
+                if (message != null && !message.isDeleted()
+                        && (!StringUtils.hasText(excludedNickname)
+                        || !excludedNickname.trim().equals(message.getNickname()))) {
                     recent.add(message);
                 }
             }

@@ -13,12 +13,21 @@ import java.time.Duration;
         AssistantProperties.class,
         AssistantRagProperties.class,
         GeminiProperties.class,
+        OpenAiProperties.class,
         AssistantBotProperties.class
 })
 public class AssistantConfig {
 
     @Bean
     public RestTemplate geminiRestTemplate(RestTemplateBuilder builder) {
+        return builder
+                .setConnectTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(30))
+                .build();
+    }
+
+    @Bean(name = "assistantOpenAiRestTemplate")
+    public RestTemplate assistantOpenAiRestTemplate(RestTemplateBuilder builder) {
         return builder
                 .setConnectTimeout(Duration.ofSeconds(5))
                 .setReadTimeout(Duration.ofSeconds(30))

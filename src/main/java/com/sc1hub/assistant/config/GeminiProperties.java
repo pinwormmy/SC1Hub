@@ -7,11 +7,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "sc1hub.gemini")
 public class GeminiProperties {
     private String apiKey;
-    private String model = "gemini-1.5-flash";
-    private String embeddingModel = "text-embedding-004";
+    private String model = "gemini-3.7-flash";
+    private String embeddingModel = "gemini-embedding-001";
     private String baseUrl = "https://generativelanguage.googleapis.com";
     private String apiVersion = "v1beta";
-    private double temperature = 0.2;
     private int maxOutputTokens = 512;
     private boolean allowLiveCalls = true;
 }

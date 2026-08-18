@@ -10,11 +10,11 @@ public class StrategyTipAiProperties {
     private boolean enabled = false;
     private boolean allowLiveCalls = false;
     private String apiKey = "";
-    private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/interactions";
-    private String model = "gemini-3.6-flash";
-    private String thinkingLevel = "medium";
+    private String baseUrl = "https://api.openai.com/v1/responses";
+    private String model = "gpt-5.6-luna";
+    private String reasoningEffort = "high";
     private int maxOutputTokens = 6000;
-    private int dailyDraftLimit = 3;
+    private int dailyDraftLimit = 1;
     private int maxPendingDrafts = 30;
     private int maxDailyApiCalls = 2;
     private int staleRunMinutes = 10;

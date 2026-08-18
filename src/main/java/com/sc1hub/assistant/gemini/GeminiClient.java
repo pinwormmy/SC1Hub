@@ -111,7 +111,6 @@ public class GeminiClient {
         payload.put("contents", Collections.singletonList(userContent));
 
         Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", geminiProperties.getTemperature());
         int resolvedMaxOutputTokens = resolveMaxOutputTokens(maxOutputTokens);
         if (resolvedMaxOutputTokens > 0) {
             generationConfig.put("maxOutputTokens", resolvedMaxOutputTokens);

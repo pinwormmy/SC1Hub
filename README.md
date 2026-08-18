@@ -73,8 +73,8 @@ POST_LIMIT=20 ./sync-local-sample-data.sh
 
 ```properties
 sc1hub.gemini.apiKey=YOUR_GEMINI_API_KEY
-sc1hub.gemini.model=gemini-1.5-flash
-sc1hub.gemini.embeddingModel=text-embedding-004
+sc1hub.gemini.model=gemini-3.7-flash
+sc1hub.gemini.embeddingModel=gemini-embedding-001
 
 # optional
 sc1hub.assistant.enabled=true
@@ -88,8 +88,16 @@ sc1hub.assistant.adminGrade=3
 
 # AI bot (optional)
 sc1hub.assistant.bot.enabled=true
+sc1hub.assistant.bot.model=gemini-3.5-flash-lite
+sc1hub.assistant.bot.personas[5].name=고수봇
+sc1hub.assistant.bot.personas[5].provider=openai
+sc1hub.assistant.bot.personas[5].model=gpt-5.6-luna
+sc1hub.assistant.bot.personas[5].reasoningEffort=high
+sc1hub.assistant.bot.personas[5].maxOutputTokens=3000
 sc1hub.assistant.bot.publishGuestPassword=CHANGE_ME
 sc1hub.assistant.bot.autoPublishEnabled=false
+sc1hub.openai.apiKey=${OPENAI_API_KEY:}
+sc1hub.openai.allowLiveCalls=false
 
 # RAG (벡터 검색, 로컬 파일 인덱스)
 sc1hub.assistant.rag.enabled=false
@@ -127,6 +135,7 @@ sc1hub.assistant.bot.autoPublishChatRetryCooldownMinutes=60
 - 운영시간 제한이나 최소 대기시간 없이, 일일 횟수 제한만 적용됩니다.
 - `autoPublishCatchUpEnabled=true`이면 서버가 랜덤 슬롯을 놓친 경우 같은 날 남은 슬롯이나 복구 타이밍에 다시 시도합니다.
 - 채팅은 성공한 발행만 `autoPublishChatDailyLimit`에 산입하고, 실패한 생성은 재시도 횟수와 쿨다운 범위에서 같은 날 다시 시도합니다.
+- 고수봇은 자신의 채팅을 제외한 최신 채팅 3건을 GPT-5.6 Luna(`reasoningEffort=high`)로 한 번에 판별·작성합니다. 스타1 관련 대화가 있으면 가장 최근 관련 내용에 훈수를 두고, 없으면 독립적인 스타1 한 줄 공략을 게시합니다.
 - `publishGuestPassword`는 운영 전용 강한 값으로 별도 관리해야 합니다.
 
 배포 후 관리자 로그인 상태에서 현재 설정/슬롯 확인:
@@ -161,11 +170,11 @@ fetch('/api/admin/assistant-publisher/auto-publish/run', {
 
 ### AI 한줄 공략 검수
 
-AI 한줄 공략은 공개 글을 직접 작성하지 않습니다. Gemini 3.6 Flash의 학습 체크포인트에 내장된 스타크래프트: 브루드 워 지식으로 비공개 초안을 만들고, 관리자가 `/adminPage/strategy-tips/ai`에서 사실관계와 표현을 직접 확인해 편집·승인한 경우에만 공개됩니다. Google Search·URL Context·사이트 내부 게시글은 생성 근거로 사용하지 않습니다.
+AI 한줄 공략은 공개 글을 직접 작성하지 않습니다. GPT-5.6 Luna의 학습 체크포인트에 내장된 스타크래프트: 브루드 워 지식으로 비공개 초안을 만들고, 관리자가 `/adminPage/strategy-tips/ai`에서 사실관계와 표현을 직접 확인해 편집·승인한 경우에만 공개됩니다. 웹 검색·URL Context·사이트 내부 게시글은 생성 근거로 사용하지 않습니다.
 
-- 자동 생성은 서울 날짜 기준 하루 최대 3건이며, 검수 대기가 30건이면 멈춥니다.
+- 자동 생성은 서울 날짜 기준 하루 최대 1건이며, 검수 대기가 30건이면 멈춥니다.
 - 관리자 화면의 `초안 3건 생성` 버튼은 자동 생성의 일일 생성·호출·대기열 상한과 별개로 매번 3건을 요청합니다. 호출 전 API 요금 경고를 표시하며 CSRF·관리자 권한·동시 실행 방지는 그대로 적용됩니다.
-- 자동 생성은 당일 남은 최대 3건, 수동 생성은 3건을 Gemini Interactions API 한 번의 구조화 요청으로 생성합니다.
+- 자동 생성은 당일 남은 1건, 수동 생성은 3건을 OpenAI Responses API 한 번의 구조화 요청으로 생성합니다.
 - 모델에는 출처나 검색 도구를 주지 않고 요청 카테고리와 중복 회피용 기존 문장만 전달합니다. 서버는 카테고리·본문 12~96자·중복·단정·시의성 표현을 검증하며, 자동 생성문에는 검증 출처가 필요한 숫자를 허용하지 않습니다.
 - 관리자가 사실관계를 확인해 편집한 최종 문장에는 숫자를 사용할 수 있지만, 승인 책임은 운영자에게 있습니다.
 - 검수 대기 초안이 30건이면 자동 생성을 멈추지만, 관리자는 필요할 때 수동 생성할 수 있습니다.
@@ -175,12 +184,12 @@ AI 한줄 공략은 공개 글을 직접 작성하지 않습니다. Gemini 3.6 F
 운영에서는 공용 `application.properties`를 수정하지 말고 외부 `application-online.properties`에 비밀키와 활성화 설정을 둡니다.
 
 ```properties
-sc1hub.gemini.apiKey=<운영 전용 비밀키>
-sc1hub.gemini.allowLiveCalls=true
+OPENAI_API_KEY=<운영 전용 OpenAI 비밀키>
+sc1hub.openai.allowLiveCalls=true
 sc1hub.strategy-tip.ai.enabled=true
 ```
 
-공유 기본값은 GA 모델 `gemini-3.6-flash`의 기본값과 같은 `medium` 사고 수준, 호출당 최대 6,000 출력·사고 토큰, 하루 3건, 대기 30건, 배치 재시도 포함 하루 최대 2회이며 매시 5분에 당일 누락분을 확인합니다. 6,000은 세 건의 구조화 JSON이 사고 토큰 때문에 잘리지 않도록 둔 안전 상한이며 예약량이 아니라 실제 사용량만 과금됩니다. 검색·원문 본문을 입력하지 않고 세 분류의 공통 지시문과 중복 문맥을 한 번만 보내 비용을 억제합니다. Google의 2026년 8월 공개 단가($1.50/백만 입력 토큰, $7.50/백만 출력·사고 토큰)와 하루 1회 정상 성공을 기준으로 예상 월 비용은 대략 수십 센트에서 1달러 미만이며, 실제 사용량은 관리자 화면의 입력·출력+사고 토큰과 AI Studio 청구 내역으로 확인합니다. DB의 호출 상한과 `(generation_date, slot_no)` 유니크 키가 재시도 과금과 중복 저장을 제한합니다.
+공유 기본값은 `gpt-5.6-luna`의 `high` 추론 강도, 호출당 최대 6,000 출력·추론 토큰, 자동 생성 하루 1건, 대기 30건, 재시도 포함 하루 최대 2회이며 매시 5분에 당일 누락분을 확인합니다. 6,000은 구조화 JSON이 추론 토큰 때문에 잘리지 않도록 둔 안전 상한이며 예약량이 아니라 실제 사용량만 과금됩니다. 검색·원문 본문을 입력하지 않고 요청 분류와 중복 문맥만 보내 비용을 억제합니다. 실제 사용량은 관리자 화면의 입력·출력 토큰과 OpenAI 사용량 화면에서 확인합니다. DB의 호출 상한과 `(generation_date, slot_no)` 유니크 키가 재시도 과금과 중복 저장을 제한합니다.
 
 ### RAG 적용 흐름
 
