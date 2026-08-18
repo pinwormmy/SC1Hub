@@ -25,34 +25,97 @@
     overflow: hidden; /* 화면보다 넓은 고정폭 iframe이 레이아웃을 밀지 않도록 클리핑 */
     margin: 20px 0;
 }
+.coupang-dynamic-ad-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: ${coupangDynamicPcHeight}px;
+}
+@media (max-width: 768px) {
+    .coupang-dynamic-ad-frame {
+        min-height: ${coupangDynamicMobileHeight}px;
+    }
+}
 </style>
-<div class="coupang-dynamic-ad">
-    <%-- 쿠팡 위젯 스크립트는 document.write 방식이라 반드시 이 위치에 동기(인라인)로 삽입해야 한다 --%>
-    <script src="https://ads-partners.coupang.com/g.js"></script>
-    <script>
-        (function() {
-            var pcBanner = {
-                "id": ${coupangDynamicPcId},
-                "template": "carousel",
-                "trackingCode": "${coupangDynamicTrackingCode}",
-                "width": "${coupangDynamicPcWidth}",
-                "height": "${coupangDynamicPcHeight}",
-                "tsource": ""
-            };
-            var mobileBanner = <c:choose><c:when test="${not empty coupangDynamicMobileId}">{
-                "id": ${coupangDynamicMobileId},
-                "template": "carousel",
-                "trackingCode": "${coupangDynamicTrackingCode}",
-                "width": "${coupangDynamicMobileWidth}",
-                "height": "${coupangDynamicMobileHeight}",
-                "tsource": ""
-            }</c:when><c:otherwise>null</c:otherwise></c:choose>;
-            var useMobile = mobileBanner && window.matchMedia('(max-width: 768px)').matches;
-            new PartnersCoupang.G(useMobile ? mobileBanner : pcBanner);
-        })();
-    </script>
+<div class="coupang-dynamic-ad"
+     data-pc-id="${coupangDynamicPcId}"
+     data-pc-width="${coupangDynamicPcWidth}"
+     data-pc-height="${coupangDynamicPcHeight}"
+     data-mobile-id="${coupangDynamicMobileId}"
+     data-mobile-width="${coupangDynamicMobileWidth}"
+     data-mobile-height="${coupangDynamicMobileHeight}"
+     data-tracking-code="${coupangDynamicTrackingCode}">
+    <div class="coupang-dynamic-ad-frame"></div>
     <div class="coupang-banner-text">
         <p>사이트 내 쿠팡 배너는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
     </div>
 </div>
+<script>
+    <%-- 외부 g.js의 document.write가 페이지 파싱을 막지 않도록, 페이지 로드 후 직접 iframe을 생성한다. --%>
+    (function() {
+        var containerEl = document.currentScript.previousElementSibling;
+        var frameHostEl = containerEl.querySelector('.coupang-dynamic-ad-frame');
+        var pageLoaded = document.readyState === 'complete';
+        var nearViewport = false;
+        var rendered = false;
+        var observer = null;
+
+        function renderAd() {
+            if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
+                return;
+            }
+            rendered = true;
+            if (observer) {
+                observer.disconnect();
+            }
+
+            var useMobile = containerEl.dataset.mobileId
+                    && window.matchMedia('(max-width: 768px)').matches;
+            var id = useMobile ? containerEl.dataset.mobileId : containerEl.dataset.pcId;
+            var width = useMobile ? containerEl.dataset.mobileWidth : containerEl.dataset.pcWidth;
+            var height = useMobile ? containerEl.dataset.mobileHeight : containerEl.dataset.pcHeight;
+            var iframeEl = document.createElement('iframe');
+            var adSrc = 'https://ads-partners.coupang.com/widgets.html'
+                    + '?id=' + encodeURIComponent(id)
+                    + '&template=carousel'
+                    + '&trackingCode=' + encodeURIComponent(containerEl.dataset.trackingCode)
+                    + '&subId=&width=' + encodeURIComponent(width)
+                    + '&height=' + encodeURIComponent(height)
+                    + '&tsource=';
+
+            iframeEl.width = width;
+            iframeEl.height = height;
+            iframeEl.setAttribute('frameborder', '0');
+            iframeEl.setAttribute('scrolling', 'no');
+            iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
+            iframeEl.setAttribute('loading', 'lazy');
+            iframeEl.title = '쿠팡 파트너스 상품 광고';
+            iframeEl.src = adSrc;
+            frameHostEl.appendChild(iframeEl);
+        }
+
+        function markPageLoaded() {
+            pageLoaded = true;
+            renderAd();
+        }
+
+        if (!pageLoaded) {
+            window.addEventListener('load', markPageLoaded, { once: true });
+        }
+
+        if ('IntersectionObserver' in window) {
+            observer = new IntersectionObserver(function(entries) {
+                if (entries.some(function(entry) { return entry.isIntersecting; })) {
+                    nearViewport = true;
+                    renderAd();
+                }
+            }, { rootMargin: '300px 0px' });
+            observer.observe(containerEl);
+        } else {
+            nearViewport = true;
+            renderAd();
+        }
+    })();
+</script>
 </c:if>

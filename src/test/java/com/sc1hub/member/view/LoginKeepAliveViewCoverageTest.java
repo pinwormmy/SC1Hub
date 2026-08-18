@@ -116,4 +116,20 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(removePreviousAd > insertAdStart);
         assertTrue(appendNewAd > removePreviousAd);
     }
+
+    @Test
+    void postCoupangAdLoadsDirectIframeOnlyAfterPageLoadAndNearViewport() throws IOException {
+        String source = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("include/coupangDynamicAd.jspf")),
+                StandardCharsets.UTF_8);
+
+        assertFalse(source.contains("ads-partners.coupang.com/g.js"));
+        assertTrue(source.contains("https://ads-partners.coupang.com/widgets.html"));
+        assertTrue(source.contains("window.addEventListener('load'"));
+        assertTrue(source.contains("IntersectionObserver"));
+        assertTrue(source.contains("!pageLoaded || !nearViewport"));
+        assertTrue(source.contains("iframeEl.setAttribute('loading', 'lazy')"));
+        assertTrue(source.contains("iframeEl.title = '쿠팡 파트너스 상품 광고'"));
+        assertTrue(source.contains("window.matchMedia('(max-width: 768px)')"));
+    }
 }
