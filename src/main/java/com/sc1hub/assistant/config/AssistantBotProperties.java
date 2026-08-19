@@ -206,6 +206,12 @@ public class AssistantBotProperties {
                 ? persona.getReasoningEffort().trim() : null);
         normalized.setMaxOutputTokens(persona.getMaxOutputTokens() != null
                 && persona.getMaxOutputTokens() > 0 ? persona.getMaxOutputTokens() : null);
+        normalized.setAutoPublishChatDailyLimit(persona.getAutoPublishChatDailyLimit() != null
+                && persona.getAutoPublishChatDailyLimit() >= 0
+                ? persona.getAutoPublishChatDailyLimit() : null);
+        normalized.setAutoPublishChatMaxAttemptsPerDay(persona.getAutoPublishChatMaxAttemptsPerDay() != null
+                && persona.getAutoPublishChatMaxAttemptsPerDay() > 0
+                ? persona.getAutoPublishChatMaxAttemptsPerDay() : null);
         return normalized;
     }
 
@@ -229,5 +235,7 @@ public class AssistantBotProperties {
         private String provider;
         private String reasoningEffort;
         private Integer maxOutputTokens;
+        private Integer autoPublishChatDailyLimit;
+        private Integer autoPublishChatMaxAttemptsPerDay;
     }
 }

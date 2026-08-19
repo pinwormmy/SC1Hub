@@ -285,6 +285,61 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void getAutoPublishStatus_usesPersonaChatDailyLimitOverrideOnlyForGosuBot() {
+        AssistantBotProperties.PersonaProperties gosu = gosuPersona();
+        gosu.setAutoPublishChatDailyLimit(3);
+        gosu.setAutoPublishChatMaxAttemptsPerDay(5);
+        botProperties.setPersonas(Arrays.asList(persona("프징징봇"), gosu));
+
+        AssistantBotAutoPublishStatusDTO status = assistantBotService.getAutoPublishStatus();
+
+        assertEquals(1, status.getPersonas().get(0).getChatSlots().size());
+        assertEquals(3, status.getPersonas().get(1).getChatSlots().size());
+        assertEquals(Integer.valueOf(3), botProperties.resolvePersona("고수봇").getAutoPublishChatDailyLimit());
+        assertEquals(Integer.valueOf(5), botProperties.resolvePersona("고수봇").getAutoPublishChatMaxAttemptsPerDay());
+        assertNull(botProperties.resolvePersona("프징징봇").getAutoPublishChatDailyLimit());
+        assertNull(botProperties.resolvePersona("프징징봇").getAutoPublishChatMaxAttemptsPerDay());
+    }
+
+    @Test
+    void resolveChatRetryWaitingDetail_usesPersonaMaxAttemptsOverride() {
+        AssistantBotProperties.PersonaProperties gosu = gosuPersona();
+        gosu.setAutoPublishChatMaxAttemptsPerDay(5);
+
+        String beforeGosuLimit = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveChatRetryWaitingDetail",
+                gosu,
+                2,
+                4,
+                0,
+                3
+        );
+        String atGosuLimit = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveChatRetryWaitingDetail",
+                gosu,
+                2,
+                5,
+                0,
+                3
+        );
+        String atDefaultLimit = ReflectionTestUtils.invokeMethod(
+                assistantBotService,
+                "resolveChatRetryWaitingDetail",
+                persona("프징징봇"),
+                0,
+                3,
+                0,
+                1
+        );
+
+        assertNull(beforeGosuLimit);
+        assertEquals("chat_retry_limit_reached", atGosuLimit);
+        assertEquals("chat_retry_limit_reached", atDefaultLimit);
+    }
+
+    @Test
     void autoPublishOnce_forChatPersonaPostsToChatInsteadOfBoard() throws Exception {
         LocalDate date = LocalDate.of(2026, 3, 9);
         List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(

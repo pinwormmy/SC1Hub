@@ -94,6 +94,8 @@ sc1hub.assistant.bot.personas[5].provider=openai
 sc1hub.assistant.bot.personas[5].model=gpt-5.6-luna
 sc1hub.assistant.bot.personas[5].reasoningEffort=high
 sc1hub.assistant.bot.personas[5].maxOutputTokens=3000
+sc1hub.assistant.bot.personas[5].autoPublishChatDailyLimit=3
+sc1hub.assistant.bot.personas[5].autoPublishChatMaxAttemptsPerDay=5
 sc1hub.assistant.bot.publishGuestPassword=CHANGE_ME
 sc1hub.assistant.bot.autoPublishEnabled=false
 sc1hub.openai.apiKey=${OPENAI_API_KEY:}
@@ -134,8 +136,8 @@ sc1hub.assistant.bot.autoPublishChatRetryCooldownMinutes=60
 - 권장값 기준으로 매분 발행 가능 여부를 체크하고, 하루 전체 24시간 안에서 게시글 5회와 댓글 10회의 무작위 슬롯이 각각 잡힙니다.
 - 운영시간 제한이나 최소 대기시간 없이, 일일 횟수 제한만 적용됩니다.
 - `autoPublishCatchUpEnabled=true`이면 서버가 랜덤 슬롯을 놓친 경우 같은 날 남은 슬롯이나 복구 타이밍에 다시 시도합니다.
-- 채팅은 성공한 발행만 `autoPublishChatDailyLimit`에 산입하고, 실패한 생성은 재시도 횟수와 쿨다운 범위에서 같은 날 다시 시도합니다.
-- 고수봇은 자신의 채팅을 제외한 최신 채팅 3건을 GPT-5.6 Luna(`reasoningEffort=high`)로 한 번에 판별·작성합니다. 스타1 관련 대화가 있으면 가장 최근 관련 내용에 훈수를 두고, 없으면 독립적인 스타1 한 줄 공략을 게시합니다.
+- 채팅은 성공한 발행만 `autoPublishChatDailyLimit`에 산입하고, 실패한 생성은 재시도 횟수와 쿨다운 범위에서 같은 날 다시 시도합니다. 페르소나에 같은 이름의 설정이 있으면 공통값보다 우선합니다.
+- 고수봇은 자신의 채팅을 제외한 최신 채팅 3건을 GPT-5.6 Luna(`reasoningEffort=high`)로 한 번에 판별·작성하며, 하루 3회 성공 발행과 최대 5회 시도를 사용합니다. 스타1 관련 대화가 있으면 가장 최근 관련 내용에 훈수를 두고, 없으면 독립적인 스타1 한 줄 공략을 게시합니다. 다른 봇은 공통값인 하루 1회와 최대 3회 시도를 유지합니다.
 - `publishGuestPassword`는 운영 전용 강한 값으로 별도 관리해야 합니다.
 
 배포 후 관리자 로그인 상태에서 현재 설정/슬롯 확인:

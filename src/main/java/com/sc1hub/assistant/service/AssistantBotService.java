@@ -457,7 +457,7 @@ public class AssistantBotService {
 
         if (isChatPersona(persona)) {
             personaStatus.setPublishChannel(MODE_CHAT);
-            int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+            int chatDailyLimit = resolveChatDailyLimit(persona);
             int publishedChatToday = assistantBotMapper.countPublishedSinceByMode(
                     persona.getName(), boardTitle, MODE_CHAT, since);
             int attemptedChatToday = assistantBotMapper.countGeneratedSinceByMode(
@@ -475,7 +475,7 @@ public class AssistantBotService {
 
             boolean chatDue = isPublishMinute(
                     chatSlots, toMinuteOfDay(now.toLocalTime()), publishedChatToday, attemptedChatThisMinute);
-            String retryWaitingDetail = resolveChatRetryWaitingDetail(
+            String retryWaitingDetail = resolveChatRetryWaitingDetail(persona,
                     publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
             if (StringUtils.hasText(retryWaitingDetail)) {
                 chatDue = false;
@@ -741,7 +741,7 @@ public class AssistantBotService {
         LocalDateTime since = today.atStartOfDay();
         LocalDateTime minuteStart = now.withSecond(0).withNano(0);
 
-        int chatDailyLimit = Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+        int chatDailyLimit = resolveChatDailyLimit(persona);
         int publishedChatToday = assistantBotMapper.countPublishedSinceByMode(
                 persona.getName(), boardTitle, MODE_CHAT, since);
         int attemptedChatToday = assistantBotMapper.countGeneratedSinceByMode(
@@ -756,7 +756,7 @@ public class AssistantBotService {
                             attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit));
         }
 
-        String retryWaitingDetail = resolveChatRetryWaitingDetail(
+        String retryWaitingDetail = resolveChatRetryWaitingDetail(persona,
                 publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
         if (StringUtils.hasText(retryWaitingDetail)) {
             return AutoPublishResult.skipped(persona.getName(), retryWaitingDetail);
@@ -906,7 +906,7 @@ public class AssistantBotService {
                                           int attemptedChatToday,
                                           int attemptedChatInRetryWindow,
                                           int chatDailyLimit) {
-        String retryWaitingDetail = resolveChatRetryWaitingDetail(
+        String retryWaitingDetail = resolveChatRetryWaitingDetail(persona,
                 publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
         if (StringUtils.hasText(retryWaitingDetail)) {
             return retryWaitingDetail;
@@ -929,14 +929,15 @@ public class AssistantBotService {
                 persona.getName(), boardTitle, MODE_CHAT, now.minusMinutes(retryCooldownMinutes));
     }
 
-    private String resolveChatRetryWaitingDetail(int publishedChatToday,
+    private String resolveChatRetryWaitingDetail(PersonaProperties persona,
+                                                 int publishedChatToday,
                                                  int attemptedChatToday,
                                                  int attemptedChatInRetryWindow,
                                                  int chatDailyLimit) {
         if (publishedChatToday >= chatDailyLimit) {
             return "daily_limits_reached";
         }
-        int maxAttemptsPerDay = Math.max(1, botProperties.getAutoPublishChatMaxAttemptsPerDay());
+        int maxAttemptsPerDay = resolveChatMaxAttemptsPerDay(persona);
         if (attemptedChatToday >= maxAttemptsPerDay) {
             return CHAT_RETRY_LIMIT_REACHED;
         }
@@ -944,6 +945,21 @@ public class AssistantBotService {
             return CHAT_RETRY_COOLDOWN;
         }
         return null;
+    }
+
+    private int resolveChatDailyLimit(PersonaProperties persona) {
+        if (persona != null && persona.getAutoPublishChatDailyLimit() != null) {
+            return Math.max(0, persona.getAutoPublishChatDailyLimit());
+        }
+        return Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+    }
+
+    private int resolveChatMaxAttemptsPerDay(PersonaProperties persona) {
+        if (persona != null && persona.getAutoPublishChatMaxAttemptsPerDay() != null
+                && persona.getAutoPublishChatMaxAttemptsPerDay() > 0) {
+            return persona.getAutoPublishChatMaxAttemptsPerDay();
+        }
+        return Math.max(1, botProperties.getAutoPublishChatMaxAttemptsPerDay());
     }
 
     private Integer resolveNextUpcomingChatSlot(PersonaProperties persona, LocalDate date, LocalTime now, int chatDailyLimit) {
