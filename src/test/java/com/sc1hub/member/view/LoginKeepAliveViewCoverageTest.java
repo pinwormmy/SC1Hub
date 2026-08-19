@@ -118,6 +118,30 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
+    void sharedChatLoadsPartnerAdOnlyAfterChatExpansion() throws IOException {
+        Path chatScriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
+        Path terminalScriptPath = Paths.get("src/main/resources/static/js/sc-terminal.js");
+        String chatSource = new String(Files.readAllBytes(chatScriptPath), StandardCharsets.UTF_8);
+        String terminalSource = new String(Files.readAllBytes(terminalScriptPath), StandardCharsets.UTF_8);
+        int insertAdStart = chatSource.indexOf("function insertAdLine(config)");
+        int insertAdEnd = chatSource.indexOf("function maybeInsertAd(message)", insertAdStart);
+        String insertAdSource = chatSource.substring(insertAdStart, insertAdEnd);
+        int storeDeferredSource = insertAdSource.indexOf("iframeEl.dataset.src = adSrc");
+        int observeDeferredAd = insertAdSource.indexOf("observePendingChatAd();", storeDeferredSource);
+
+        assertTrue(terminalSource.contains("new CustomEvent('sc:chat-expanded'"));
+        assertTrue(terminalSource.contains("detail: { expanded }"));
+        assertTrue(insertAdStart >= 0);
+        assertTrue(insertAdEnd > insertAdStart);
+        assertTrue(storeDeferredSource >= 0);
+        assertTrue(observeDeferredAd > storeDeferredSource);
+        assertFalse(insertAdSource.contains("iframeEl.src = adSrc"));
+        assertTrue(chatSource.contains("window.addEventListener('sc:chat-expanded'"));
+        assertTrue(chatSource.contains("if (!chatExpanded || !currentAdIframeEl || !currentAdIframeEl.dataset.src)"));
+        assertTrue(chatSource.contains("setChatExpanded(Boolean(event.detail && event.detail.expanded))"));
+    }
+
+    @Test
     void postCoupangAdLoadsDirectIframeOnlyAfterPageLoadAndNearViewport() throws IOException {
         String source = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/coupangDynamicAd.jspf")),

@@ -23,6 +23,7 @@
     let adObserver = null;
     let currentAdLineEl = null;
     let currentAdIframeEl = null;
+    let chatExpanded = document.body.classList.contains('sc-chat-fullscreen');
     let batchRendering = false;
 
     function getMemberMeta() {
@@ -123,6 +124,28 @@
         currentAdIframeEl = null;
     }
 
+    function observePendingChatAd() {
+        if (!chatExpanded || !currentAdIframeEl || !currentAdIframeEl.dataset.src) {
+            return;
+        }
+        const observer = getAdObserver();
+        if (observer) {
+            observer.observe(currentAdIframeEl);
+            return;
+        }
+        currentAdIframeEl.src = currentAdIframeEl.dataset.src;
+        delete currentAdIframeEl.dataset.src;
+    }
+
+    function setChatExpanded(expanded) {
+        chatExpanded = expanded;
+        if (chatExpanded) {
+            observePendingChatAd();
+        } else if (currentAdIframeEl && currentAdIframeEl.dataset.src && adObserver) {
+            adObserver.unobserve(currentAdIframeEl);
+        }
+    }
+
     // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
     // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
     function insertAdLine(config) {
@@ -158,13 +181,9 @@
         currentAdLineEl = lineEl;
         currentAdIframeEl = iframeEl;
 
-        const observer = getAdObserver();
-        if (observer) {
-            iframeEl.dataset.src = adSrc;
-            observer.observe(iframeEl);
-        } else {
-            iframeEl.src = adSrc;
-        }
+        // 확장 전에는 외부 광고 요청을 만들지 않고 URL만 보관한다.
+        iframeEl.dataset.src = adSrc;
+        observePendingChatAd();
 
         if (shouldScroll) {
             scrollToBottom();
@@ -595,6 +614,10 @@
         if (started && !document.hidden) {
             scheduleNextPoll();
         }
+    });
+
+    window.addEventListener('sc:chat-expanded', (event) => {
+        setChatExpanded(Boolean(event.detail && event.detail.expanded));
     });
 
     window.scChat = { send, ask, system: systemLine, runAdminCommand };

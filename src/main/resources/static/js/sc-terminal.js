@@ -285,6 +285,9 @@
             const expanded = document.body.classList.toggle(FULLSCREEN_CLASS);
             expandButtonEl.textContent = expanded ? '채팅창 축소' : '채팅창 확장';
             expandButtonEl.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            window.dispatchEvent(new CustomEvent('sc:chat-expanded', {
+                detail: { expanded },
+            }));
             outputEl.scrollTop = outputEl.scrollHeight;
         });
     }
