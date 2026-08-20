@@ -29,8 +29,7 @@ class LoginKeepAliveViewCoverageTest {
                 "modifyMyInfo.jsp",
                 "adminPage.jsp",
                 "adminOps.jsp",
-                "adminAliasDictionary.jsp",
-                "adminStrategyTipAi.jsp"
+                "adminAliasDictionary.jsp"
         );
 
         for (String viewPath : viewPaths) {
@@ -50,23 +49,13 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void strategyTipAiAdminView_hasCsrfProtectedManualGenerationForm() throws IOException {
+    void adminPage_doesNotLinkRemovedStrategyTipAiFeature() throws IOException {
         String source = new String(
-                Files.readAllBytes(VIEW_ROOT.resolve("adminStrategyTipAi.jsp")),
+                Files.readAllBytes(VIEW_ROOT.resolve("adminPage.jsp")),
                 StandardCharsets.UTF_8);
 
-        assertTrue(source.contains("action=\"/adminPage/strategy-tips/ai/generate\""));
-        assertTrue(source.contains("name=\"csrfToken\""));
-        assertTrue(source.contains("초안 3건 생성"));
-        assertTrue(source.contains("API 요금이 청구될 수 있습니다"));
-        assertTrue(source.contains("not aiStatus.enabled"));
-        assertTrue(source.contains("생성 중…"));
-        assertTrue(source.contains("aria-busy"));
-        assertFalse(source.contains("generationBlocked"));
-        assertFalse(source.contains("apiCallLimitReached"));
-        assertFalse(source.contains("사이트 내부 근거"));
-        assertFalse(source.contains("원문 근거 구절"));
-        assertFalse(source.contains("Google Search"));
+        assertFalse(source.contains("/adminPage/strategy-tips/ai"));
+        assertFalse(source.contains("AI 한줄 공략 검수"));
     }
 
     @Test

@@ -35,7 +35,6 @@ REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
-REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL="$REMOTE_SCRIPT_DIR/20260810_create_one_line_strategy_ai_draft.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
@@ -65,7 +64,6 @@ echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
-scp "$ROOT_DIR/src/main/resources/sql/20260810_create_one_line_strategy_ai_draft.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
@@ -82,7 +80,6 @@ ssh "$REMOTE" \
    REMOTE_WAR_BACKUP_PATH='$REMOTE_WAR_BACKUP_PATH'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
-   REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL='$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -130,21 +127,6 @@ ssh "$REMOTE" \
      echo 'Applying one-line strategy schema...'
      MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_SQL\"
    fi
-   echo 'Applying one-line strategy AI draft schema...'
-   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_AI_DRAFT_SQL\"
-
-   REQUIRED_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('one_line_strategy', 'one_line_strategy_category', 'one_line_strategy_ai_daily_run', 'one_line_strategy_ai_draft');\" \"\$DB_NAME\")
-   REQUIRED_RUN_COLUMNS=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_daily_run' AND column_name IN ('generation_date', 'api_call_count', 'last_status', 'last_attempt_at', 'completed_at', 'last_error', 'input_tokens', 'output_tokens', 'search_query_count');\" \"\$DB_NAME\")
-   REQUIRED_DRAFT_COLUMNS=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND column_name IN ('draft_id', 'generation_date', 'slot_no', 'category', 'content', 'evidence_summary', 'source_board', 'source_post_num', 'source_title', 'source_excerpt', 'external_source_url', 'external_source_title', 'external_evidence_summary', 'model', 'status', 'created_at', 'reviewed_at', 'reviewed_by', 'published_tip_num');\" \"\$DB_NAME\")
-   REQUIRED_SLOT_UNIQUE=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM (SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND non_unique = 0 GROUP BY index_name HAVING GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') = 'generation_date,slot_no') required_unique;\" \"\$DB_NAME\")
-   REQUIRED_CATEGORY_FK=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_category' AND column_name = 'category' AND referenced_table_name = 'one_line_strategy_category' AND referenced_column_name = 'code';\" \"\$DB_NAME\")
-   REQUIRED_PUBLISHED_FK=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_published_tip' AND column_name = 'published_tip_num' AND referenced_table_name = 'one_line_strategy' AND referenced_column_name = 'tip_num';\" \"\$DB_NAME\")
-   REQUIRED_PUBLISHED_DELETE_RULE=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND table_name = 'one_line_strategy_ai_draft' AND constraint_name = 'fk_ols_ai_draft_published_tip' AND delete_rule = 'SET NULL';\" \"\$DB_NAME\")
-   if [ \"\$REQUIRED_TABLES\" != \"4\" ] || [ \"\$REQUIRED_RUN_COLUMNS\" != \"9\" ] || [ \"\$REQUIRED_DRAFT_COLUMNS\" != \"19\" ] || [ \"\$REQUIRED_SLOT_UNIQUE\" -lt \"1\" ] || [ \"\$REQUIRED_CATEGORY_FK\" != \"1\" ] || [ \"\$REQUIRED_PUBLISHED_FK\" != \"1\" ] || [ \"\$REQUIRED_PUBLISHED_DELETE_RULE\" != \"1\" ]; then
-     echo 'Required one-line strategy AI schema validation failed; Tomcat was not stopped.' >&2
-     exit 1
-   fi
-   echo 'Required one-line strategy AI schema validated.'
    if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
      echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
      exit 1
