@@ -62,7 +62,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(canonicalInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        "/css/**", "/js/**", "/images/**", "/ckeditor/**",
+                        "/css/**", "/js/**", "/images/**",
                         "/favicon.ico", "/robots.txt", "/ads.txt", "/sitemap.xml",
                         "/img/**", "/uploadedImg/**", "/ckImgSubmit");
         registry.addInterceptor(boardLvInterceptor)
@@ -74,7 +74,8 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
                         "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",
                         "/**/movePost", "/migrate/**",
-                        "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**", "/api/admin/chat/**")
+                        "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**", "/api/admin/chat/**",
+                        "/api/admin/content/**")
                 .excludePathPatterns("/boards/supportBoard/**", "/boards/videoLinkBoard/**", "/boards/promotionBoard/**",
                         "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",
                         "/boards/funBoard/**", "/boards/funboard/**", "/boards/userGuideBoard/**", "/boards/userguideboard/**");

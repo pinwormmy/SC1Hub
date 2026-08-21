@@ -59,12 +59,13 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void loginKeepAliveTracksCkeditorActivityForLongPostEditing() throws IOException {
+    void loginKeepAliveTracksNativeEditorActivityForLongPostEditing() throws IOException {
         Path scriptPath = Paths.get("src/main/resources/static/js/site-header.js");
         String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
 
-        assertTrue(source.contains("CKEDITOR"));
-        assertTrue(source.contains("instanceReady"));
+        assertTrue(source.contains("'keydown'"));
+        assertTrue(source.contains("recordActivity"));
+        assertFalse(source.contains("CKEDITOR"));
     }
 
     @Test

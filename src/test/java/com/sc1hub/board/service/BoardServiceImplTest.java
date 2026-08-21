@@ -39,6 +39,9 @@ class BoardServiceImplTest {
     @Mock
     private UploadedImageDimensionInjector uploadedImageDimensionInjector;
 
+    @Mock
+    private PostContentSanitizer postContentSanitizer;
+
     @InjectMocks
     private BoardServiceImpl boardService;
 
@@ -229,6 +232,7 @@ class BoardServiceImplTest {
         post.setContent("<p><img src=\"/ckImgSubmit?uid=u1&fileName=a.jpg\"></p>");
 
         String normalizedContent = "<p><img src=\"/ckImgSubmit?uid=u1&fileName=a.jpg\" width=\"800\" height=\"600\"></p>";
+        when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
         when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms");
 
@@ -246,6 +250,7 @@ class BoardServiceImplTest {
         post.setContent("<p><img src=\"/ckImgSubmit?uid=u1&fileName=b.jpg\"></p>");
 
         String normalizedContent = "<p><img src=\"/ckImgSubmit?uid=u1&fileName=b.jpg\" width=\"1024\" height=\"768\"></p>";
+        when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
         when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms2");
 

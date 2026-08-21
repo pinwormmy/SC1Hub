@@ -44,7 +44,7 @@
         where post_num=#{postNum}
     </select>
 
-    <insert id="submitPost">
+    <insert id="submitPost" useGeneratedKeys="true" keyProperty="board.postNum" keyColumn="post_num">
         insert into ${boardTitle}(title, writer, reg_date, views, content, comment_count, notice, search_terms<if test="boardTitle == 'funboard'">, guest_password</if>)
         values(#{board.title}, #{board.writer}, now(), 0, #{board.content}, 0, #{board.notice}, #{board.searchTerms}<if test="boardTitle == 'funboard'">, #{board.guestPassword}</if>)
     </insert>

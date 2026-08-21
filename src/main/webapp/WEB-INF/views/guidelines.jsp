@@ -26,11 +26,6 @@
                     <!-- License Information -->
                     <div class="license-section">
                         <h2>라이센스 정보</h2>
-                        <!-- CKEditor License -->
-                        <div class="license-info ckeditor-license">
-                            <p>This website is using CKEditor which is copyrighted by CKSource Holding sp. z o.o., licensed under the Mozilla Public License.</p>
-                            <p>For more license information, please refer <a href="https://ckeditor.com/legal/ckeditor-oss-license/" target="_blank">here</a>.</p>
-                        </div>
                         <!-- Bootstrap License -->
                         <div class="license-info bootstrap-license">
                             <p>

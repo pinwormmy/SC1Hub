@@ -8,7 +8,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import javax.imageio.ImageIO;
 import java.net.URLEncoder;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -107,14 +110,16 @@ class UploadControllerTest {
                 "upload",
                 "뮤탈과 바이오닉 심슨버전.jpg",
                 "image/jpeg",
-                new byte[] { 9, 8, 7 }
+                jpegBytes()
         );
 
         Map<String, Object> body = controller.imageUpload(request, upload).getBody();
 
         assertNotNull(body);
         assertTrue(body.get("fileName").toString().matches("[A-Za-z0-9_-]+\\.jpg"));
-        assertTrue(body.get("url").toString().contains("/ckImgSubmit?uid="));
+        assertTrue(body.get("url").toString().contains("/uploadedImg/"));
+        assertEquals(24, body.get("width"));
+        assertEquals(16, body.get("height"));
         try (Stream<Path> stream = Files.list(tempDir)) {
             assertEquals(1L, stream.count());
         }
@@ -145,5 +150,12 @@ class UploadControllerTest {
 
     private static String encode(String value) throws Exception {
         return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
+    }
+
+    private static byte[] jpegBytes() throws Exception {
+        BufferedImage image = new BufferedImage(24, 16, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", output);
+        return output.toByteArray();
     }
 }

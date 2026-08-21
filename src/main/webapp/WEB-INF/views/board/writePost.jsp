@@ -4,7 +4,7 @@
 <head>
 <title>글쓰기 - ${koreanTitle}</title>
 <%@include file="../include/head.jspf" %>
-<script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
+<link rel="stylesheet" href="/css/post-editor.css?v=${applicationScope.assetVersion}">
 </head>
 <body>
 <%@include file="../include/header.jspf" %>
@@ -21,5 +21,6 @@
     </div>
 </div>
 <%@include file="../include/footer.jspf" %>
+<script src="/js/post-editor.js?v=${applicationScope.assetVersion}"></script>
 </body>
 </html>

@@ -52,22 +52,6 @@
     ['keydown', 'pointerdown', 'scroll', 'touchstart'].forEach((eventName) => {
         window.addEventListener(eventName, recordActivity, { passive: true });
     });
-    if (window.CKEDITOR) {
-        const attachEditorActivity = (editor) => {
-            if (editor.sc1hubKeepAliveAttached) {
-                return;
-            }
-            editor.sc1hubKeepAliveAttached = true;
-            ['change', 'focus', 'key'].forEach((eventName) => {
-                editor.on(eventName, recordActivity);
-            });
-        };
-
-        Object.keys(window.CKEDITOR.instances).forEach((instanceName) => {
-            attachEditorActivity(window.CKEDITOR.instances[instanceName]);
-        });
-        window.CKEDITOR.on('instanceReady', (event) => attachEditorActivity(event.editor));
-    }
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             recordActivity();

@@ -4,6 +4,7 @@ import com.sc1hub.member.dto.MemberDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.servlet.http.HttpServletResponse;
 
@@ -24,6 +25,34 @@ class AuthorizationInterceptorTest {
         assertFalse(proceed);
         assertEquals(HttpServletResponse.SC_FORBIDDEN, response.getStatus());
         assertNull(request.getSession(false));
+    }
+
+    @Test
+    void adminInterceptor_allowsContentApiBearerTokenWithoutSession() throws Exception {
+        AdminInterceptor interceptor = new AdminInterceptor();
+        ReflectionTestUtils.setField(interceptor, "contentApiToken", "test-content-token");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/content/images");
+        request.addHeader("Authorization", "Bearer test-content-token");
+
+        boolean proceed = interceptor.preHandle(request, new MockHttpServletResponse(), new Object());
+
+        assertTrue(proceed);
+        assertNull(request.getSession(false));
+    }
+
+    @Test
+    void adminInterceptor_doesNotAllowContentTokenForOtherAdminApis() throws Exception {
+        AdminInterceptor interceptor = new AdminInterceptor();
+        ReflectionTestUtils.setField(interceptor, "contentApiToken", "test-content-token");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/chat/sanctions");
+        request.addHeader("Authorization", "Bearer test-content-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        boolean proceed = interceptor.preHandle(request, response, new Object());
+
+        assertFalse(proceed);
+        assertEquals(HttpServletResponse.SC_FORBIDDEN, response.getStatus());
+        assertEquals("application/json;charset=UTF-8", response.getContentType());
     }
 
     @Test

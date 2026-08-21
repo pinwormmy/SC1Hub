@@ -39,14 +39,17 @@ public class BoardServiceImpl implements BoardService {
     private final BoardMapper boardMapper;
     private final AssistantSearchTermsService searchTermsService;
     private final UploadedImageDimensionInjector uploadedImageDimensionInjector;
+    private final PostContentSanitizer postContentSanitizer;
 
     public BoardServiceImpl(
             BoardMapper boardMapper,
             AssistantSearchTermsService searchTermsService,
-            UploadedImageDimensionInjector uploadedImageDimensionInjector) {
+            UploadedImageDimensionInjector uploadedImageDimensionInjector,
+            PostContentSanitizer postContentSanitizer) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
         this.uploadedImageDimensionInjector = uploadedImageDimensionInjector;
+        this.postContentSanitizer = postContentSanitizer;
     }
 
     @Override
@@ -268,7 +271,8 @@ public class BoardServiceImpl implements BoardService {
             return;
         }
 
-        String content = uploadedImageDimensionInjector.injectMissingDimensions(post.getContent());
+        String content = postContentSanitizer.sanitize(post.getContent());
+        content = uploadedImageDimensionInjector.injectMissingDimensions(content);
         post.setContent(content);
         post.setSearchTerms(searchTermsService.buildSearchTerms(post.getTitle(), content));
     }

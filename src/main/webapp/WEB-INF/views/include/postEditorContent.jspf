@@ -1,0 +1,121 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<c:set var="isModifyPost" value="${not empty post and post.postNum > 0}" />
+<c:choose>
+    <c:when test="${isModifyPost}">
+        <c:set var="editorFormAction" value="/boards/${boardTitle}/submitModifyPost" />
+        <c:set var="editorCancelUrl" value="/boards/${boardTitle}/readPost?postNum=${post.postNum}" />
+        <c:set var="editorDraftKey" value="sc1hub:post-editor:${boardTitle}:modify:${post.postNum}" />
+    </c:when>
+    <c:otherwise>
+        <c:set var="editorFormAction" value="/boards/${boardTitle}/submitPost" />
+        <c:set var="editorCancelUrl" value="/boards/${boardTitle}" />
+        <c:set var="editorDraftKey" value="sc1hub:post-editor:${boardTitle}:new" />
+    </c:otherwise>
+</c:choose>
+
+<form class="sc-post-editor" action="${editorFormAction}" method="post"
+      data-post-editor-form data-draft-key="${editorDraftKey}" data-upload-url="/imageUpload">
+    <c:choose>
+        <c:when test="${isModifyPost}">
+            <input type="hidden" name="writer" value="<c:out value='${post.writer}'/>" />
+            <input type="hidden" name="postNum" value="${post.postNum}" />
+        </c:when>
+        <c:when test="${empty member and guestWritable}">
+            <div class="sc-post-editor__identity">
+                <label>
+                    <span>작성자</span>
+                    <input type="text" name="writer" maxlength="40" autocomplete="nickname" required />
+                </label>
+                <label>
+                    <span>비밀번호</span>
+                    <input type="password" name="guestPassword" maxlength="100" autocomplete="new-password" required />
+                </label>
+            </div>
+        </c:when>
+        <c:otherwise>
+            <input type="hidden" name="writer" value="<c:out value='${member.nickName}'/>" />
+        </c:otherwise>
+    </c:choose>
+
+    <header class="sc-post-editor__header">
+        <div>
+            <span class="sc-post-editor__eyebrow"><c:out value="${koreanTitle}"/></span>
+            <h1>${isModifyPost ? '게시글 수정' : '새 게시글'}</h1>
+        </div>
+        <span class="sc-post-editor__status" data-editor-status aria-live="polite">저장 준비됨</span>
+    </header>
+
+    <div class="sc-post-editor__draft" data-editor-draft-notice hidden>
+        <span>이전에 제출하거나 저장한 임시본이 있습니다.</span>
+        <div>
+            <button type="button" data-editor-restore>복원</button>
+            <button type="button" class="cancel-btn" data-editor-discard>삭제</button>
+        </div>
+    </div>
+
+    <div class="sc-post-editor__meta">
+        <label class="sc-post-editor__title-field">
+            <span>제목</span>
+            <input type="text" name="title" maxlength="200"
+                   value="<c:out value='${post.title}'/>" placeholder="전략의 핵심이 드러나는 제목" required />
+        </label>
+        <c:if test="${member.grade == 3}">
+            <label class="sc-post-editor__notice-field">
+                <input type="hidden" name="notice" value="0" data-notice-fallback />
+                <input type="checkbox" name="notice" value="1" data-notice-checkbox
+                       <c:if test="${post.notice == 1}">checked</c:if> />
+                <span>공지로 등록</span>
+            </label>
+        </c:if>
+    </div>
+
+    <section class="sc-post-editor__workspace" data-post-editor>
+        <div class="sc-post-editor__modebar" role="tablist" aria-label="편집 화면">
+            <button type="button" role="tab" aria-selected="true" data-editor-mode="visual">편집</button>
+            <button type="button" role="tab" aria-selected="false" data-editor-mode="source">HTML</button>
+            <button type="button" role="tab" aria-selected="false" data-editor-mode="preview">미리보기</button>
+        </div>
+
+        <div class="sc-post-editor__toolbar" role="toolbar" aria-label="본문 서식" data-editor-toolbar>
+            <select data-editor-block aria-label="문단 종류">
+                <option value="p">본문</option>
+                <option value="h2">큰 제목</option>
+                <option value="h3">작은 제목</option>
+                <option value="blockquote">인용</option>
+            </select>
+            <span class="sc-post-editor__tool-separator" aria-hidden="true"></span>
+            <button type="button" data-editor-command="bold" aria-label="굵게"><strong>B</strong></button>
+            <button type="button" data-editor-command="italic" aria-label="기울임"><em>I</em></button>
+            <button type="button" data-editor-command="underline" aria-label="밑줄"><u>U</u></button>
+            <button type="button" data-editor-command="strikeThrough" aria-label="취소선"><s>S</s></button>
+            <span class="sc-post-editor__tool-separator" aria-hidden="true"></span>
+            <button type="button" data-editor-command="insertUnorderedList">목록</button>
+            <button type="button" data-editor-command="insertOrderedList">번호</button>
+            <button type="button" data-editor-command="removeFormat">서식 지우기</button>
+            <span class="sc-post-editor__tool-separator" aria-hidden="true"></span>
+            <button type="button" data-editor-link>링크</button>
+            <button type="button" data-editor-image>이미지</button>
+            <button type="button" data-editor-video>유튜브</button>
+            <button type="button" data-editor-command="insertHorizontalRule">구분선</button>
+            <input type="file" accept="image/jpeg,image/png" data-editor-image-input hidden />
+        </div>
+
+        <div class="sc-post-editor__surface-wrap" data-editor-panel="visual">
+            <div class="sc-post-editor__surface" contenteditable="true" role="textbox" aria-multiline="true"
+                 data-editor-surface data-placeholder="본문을 입력하세요. 이미지는 끌어놓거나 붙여넣을 수 있습니다."></div>
+            <p class="sc-post-editor__hint">이미지는 자동으로 700px·400KB 이하에 맞춰집니다.</p>
+        </div>
+        <div class="sc-post-editor__source-wrap" data-editor-panel="source" hidden>
+            <textarea data-editor-source spellcheck="false" aria-label="본문 HTML"></textarea>
+        </div>
+        <div class="sc-post-editor__preview post-content" data-editor-panel="preview" hidden></div>
+
+        <textarea name="content" data-editor-output hidden></textarea>
+        <textarea data-editor-initial hidden><c:out value="${post.content}"/></textarea>
+    </section>
+
+    <footer class="sc-post-editor__actions">
+        <a class="btn cancel-btn" href="${editorCancelUrl}" accesskey="c">취소(C)</a>
+        <button type="submit" class="btn btn-theme" accesskey="s">${isModifyPost ? '수정 완료(S)' : '게시하기(S)'}</button>
+    </footer>
+</form>

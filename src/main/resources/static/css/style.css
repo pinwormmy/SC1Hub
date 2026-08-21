@@ -434,10 +434,6 @@ textarea:focus-visible {
 .btn {
     font-size: 1rem;
 }
-textarea.cke_source {
-    font-family: var(--sc-font-family);
-    color: black;
-}
 
 .sc-terminal {
     position: static;

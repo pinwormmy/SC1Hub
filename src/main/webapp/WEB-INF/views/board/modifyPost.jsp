@@ -4,7 +4,7 @@
 <head>
 <title>글수정 - ${koreanTitle}</title>
 <%@include file="../include/head.jspf" %>
-<script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
+<link rel="stylesheet" href="/css/post-editor.css?v=${applicationScope.assetVersion}">
 </head>
 <body>
 <%@include file="../include/header.jspf" %>
@@ -22,15 +22,7 @@
 </div>
 <%@include file="../include/footer.jspf" %>
 
-<script>
-let noticeChecked = document.getElementById("noticeChecked");
-let noticeUnchecked = document.getElementById("noticeUnchecked");
-
-function checkboxForNotice() {
-    if(noticeChecked.checked) { noticeUnchecked.disabled = true; }
-    else { noticeUnchecked.disabled = false; }
-}
-</script>
+<script src="/js/post-editor.js?v=${applicationScope.assetVersion}"></script>
 
 </body>
 </html>

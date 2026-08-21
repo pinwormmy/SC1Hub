@@ -1,5 +1,7 @@
 package com.sc1hub.file.controller;
 
+import com.sc1hub.file.dto.PostImageResponse;
+import com.sc1hub.file.service.PostImageService;
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
 import com.sc1hub.file.util.UploadedImagePathResolver;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +23,6 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -33,10 +34,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-// 에디터 첨부자료 통째로 들고와서 괜히 무거워짐. 나중에 필요없는 파일 다 삭제하기
-// 컨트롤러에 연산 이렇게 두는거 정리해야하지않을까?
 @Slf4j
 @Controller
 public class UploadController {
@@ -46,58 +44,38 @@ public class UploadController {
 
     private String imageUploadPath;
 
+    private final PostImageService postImageService;
+
     private volatile Path resolvedUploadPath;
     private volatile Path resolvedImageUploadPath;
 
     @Autowired
     public UploadController(
             @Value("${path.upload.ck}") String uploadPath,
-            @Value("${path.upload.img:}") String imageUploadPath) {
+            @Value("${path.upload.img:}") String imageUploadPath,
+            PostImageService postImageService) {
         this.uploadPath = uploadPath;
         this.imageUploadPath = imageUploadPath;
+        this.postImageService = postImageService;
     }
 
     UploadController() {
-        this("", "");
+        this("", "", null);
     }
 
     @PostMapping(value = "/imageUpload", produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public ResponseEntity<Map<String, Object>> imageUpload(HttpServletRequest request,
             @RequestParam("upload") MultipartFile upload) {
-        if (upload == null || upload.isEmpty()) {
-            return errorResponse("업로드할 파일이 없습니다.");
-        }
-        UUID uid = UUID.randomUUID();
-        Path basePath;
         try {
-            basePath = getPrimaryUploadBasePath();
-        } catch (RuntimeException e) {
-            log.error("Failed to resolve upload path.", e);
-            return errorResponse("업로드 경로를 확인할 수 없습니다.");
-        }
-        if (basePath == null) {
-            log.error("Upload path is not configured.");
-            return errorResponse("업로드 경로가 설정되어 있지 않습니다.");
-        }
-        String fileName = upload.getOriginalFilename();
-        String storedFileName = UploadedImageFileNameUtil.toStoredFileName(fileName);
-        try {
-            Files.createDirectories(basePath);
-            Path targetPath = UploadedImagePathResolver.resolveUploadTarget(basePath, uid.toString(), storedFileName);
-            if (targetPath == null) {
-                log.error("Failed to resolve upload path. basePath={}, fileName={}", basePath, storedFileName);
-                return errorResponse("업로드 경로 생성에 실패했습니다.");
-            }
-            log.info("img upload path: {}", targetPath);
-            try (OutputStream out = Files.newOutputStream(targetPath)) {
-                out.write(upload.getBytes());
-                out.flush();
-            }
-            String encodedFileName = URLEncoder.encode(storedFileName, StandardCharsets.UTF_8.name());
-            String fileUrl = request.getContextPath() + "/ckImgSubmit?uid=" + uid + "&fileName=" + encodedFileName;
-            return ResponseEntity.ok(buildSuccessResponse(storedFileName, fileUrl));
-        } catch (IOException e) {
+            PostImageService service = postImageService == null
+                    ? new PostImageService(uploadPath, imageUploadPath)
+                    : postImageService;
+            PostImageResponse image = service.store(upload, request.getContextPath());
+            return ResponseEntity.ok(buildSuccessResponse(image));
+        } catch (IllegalArgumentException e) {
+            return errorResponse(e.getMessage());
+        } catch (IOException | IllegalStateException e) {
             log.error("Image upload failed.", e);
             return errorResponse("이미지 업로드에 실패했습니다.");
         }
@@ -330,11 +308,15 @@ public class UploadController {
         return ResponseEntity.ok(buildErrorResponse(message));
     }
 
-    private Map<String, Object> buildSuccessResponse(String fileName, String url) {
+    private Map<String, Object> buildSuccessResponse(PostImageResponse image) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("uploaded", 1);
-        body.put("fileName", fileName);
-        body.put("url", url);
+        body.put("fileName", image.getFileName());
+        body.put("url", image.getUrl());
+        body.put("mimeType", image.getMimeType());
+        body.put("width", image.getWidth());
+        body.put("height", image.getHeight());
+        body.put("bytes", image.getBytes());
         return body;
     }
 
