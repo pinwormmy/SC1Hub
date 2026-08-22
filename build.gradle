@@ -21,7 +21,6 @@ dependencies {
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.2.0'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.jsoup:jsoup:1.23.1'
-	implementation 'org.apache.tomcat.embed:tomcat-embed-jasper'
 	implementation 'javax.servlet:jstl'
 
 	compileOnly 'org.projectlombok:lombok'
@@ -30,6 +29,7 @@ dependencies {
 
 	runtimeOnly 'mysql:mysql-connector-java'
 	providedCompile 'org.springframework.boot:spring-boot-starter-tomcat'
+	providedRuntime 'org.apache.tomcat.embed:tomcat-embed-jasper'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
@@ -41,6 +41,33 @@ tasks.named('test') {
 
 tasks.named('processResources') {
 	exclude 'application-local.properties', 'application-online.properties'
+}
+
+tasks.register('verifyProductionWarFootprint') {
+	group = 'verification'
+	description = 'Rejects development-only and container-provided dependencies from WEB-INF/lib.'
+	dependsOn tasks.named('bootWar')
+
+	doLast {
+		def warFile = tasks.named('bootWar').get().archiveFile.get().asFile
+		def zip = new java.util.zip.ZipFile(warFile)
+		try {
+			def forbiddenEntry = zip.entries().find {
+				it.name ==~ /WEB-INF\/lib(-provided)?\/spring-boot-devtools-.*\.jar/ ||
+					it.name ==~ /WEB-INF\/lib\/tomcat-embed-.*\.jar/ ||
+					it.name ==~ /WEB-INF\/lib\/ecj-.*\.jar/
+			}
+			if (forbiddenEntry != null) {
+				throw new GradleException("Production WAR contains forbidden runtime dependency: ${forbiddenEntry.name}")
+			}
+		} finally {
+			zip.close()
+		}
+	}
+}
+
+tasks.named('check') {
+	dependsOn tasks.named('verifyProductionWarFootprint')
 }
 
 
