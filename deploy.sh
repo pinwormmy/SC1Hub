@@ -185,14 +185,11 @@ ssh "$REMOTE" \
    }
    trap restore_config_on_failure EXIT
 
-   if grep -Eq '^spring.datasource.driver-class-name=com\.mysql\.(cj\.)?jdbc\.Driver$' "\$REMOTE_ONLINE_PROPS"; then
-     "\$REMOTE_DATASOURCE_MIGRATION_SCRIPT" \
-       "\$REMOTE_ONLINE_PROPS" "\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP"
+   PRE_MIGRATION_DRIVER=\$(grep '^spring.datasource.driver-class-name=' \"\$REMOTE_ONLINE_PROPS\" | cut -d= -f2- | tr -d '\r')
+   \"\$REMOTE_DATASOURCE_MIGRATION_SCRIPT\" \
+     \"\$REMOTE_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP\"
+   if [ \"\$PRE_MIGRATION_DRIVER\" != 'org.mariadb.jdbc.Driver' ]; then
      CONFIG_MIGRATED=1
-   elif ! grep -q '^spring.datasource.driver-class-name=org.mariadb.jdbc.Driver$' "\$REMOTE_ONLINE_PROPS" \
-       || ! grep -q '^spring.datasource.url=jdbc:mariadb://' "\$REMOTE_ONLINE_PROPS"; then
-     echo 'Online datasource configuration is not compatible with MariaDB Connector/J.' >&2
-     exit 1
    fi
 
    wait_for_local_health() {

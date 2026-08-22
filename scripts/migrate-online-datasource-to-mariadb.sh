@@ -14,36 +14,38 @@ if [[ ! -s "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
-DRIVER_COUNT="$(grep -c '^spring.datasource.driver-class-name=' "$CONFIG_PATH" || true)"
-URL_COUNT="$(grep -c '^spring.datasource.url=' "$CONFIG_PATH" || true)"
+CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+NORMALIZED_PATH="$(mktemp "$CONFIG_DIR/.application-online.properties.normalized.XXXXXX")"
+TEMP_PATH="$(mktemp "$CONFIG_DIR/.application-online.properties.migrate.XXXXXX")"
+cleanup() {
+    rm -f "$NORMALIZED_PATH" "$TEMP_PATH"
+}
+trap cleanup EXIT
+tr -d '\r' < "$CONFIG_PATH" > "$NORMALIZED_PATH"
+
+DRIVER_COUNT="$(grep -c '^spring.datasource.driver-class-name=' "$NORMALIZED_PATH" || true)"
+URL_COUNT="$(grep -c '^spring.datasource.url=' "$NORMALIZED_PATH" || true)"
 if [[ "$DRIVER_COUNT" != "1" || "$URL_COUNT" != "1" ]]; then
     echo "Expected exactly one datasource driver and URL setting." >&2
     exit 1
 fi
 
-if grep -q '^spring.datasource.driver-class-name=org.mariadb.jdbc.Driver$' "$CONFIG_PATH" \
-        && grep -q '^spring.datasource.url=jdbc:mariadb://' "$CONFIG_PATH"; then
+if grep -q '^spring.datasource.driver-class-name=org.mariadb.jdbc.Driver$' "$NORMALIZED_PATH" \
+        && grep -q '^spring.datasource.url=jdbc:mariadb://' "$NORMALIZED_PATH"; then
     echo "Datasource config already uses MariaDB Connector/J."
     exit 0
 fi
 
-if ! grep -Eq '^spring.datasource.driver-class-name=com\.mysql\.(cj\.)?jdbc\.Driver$' "$CONFIG_PATH" \
-        || ! grep -q '^spring.datasource.url=jdbc:mysql://' "$CONFIG_PATH"; then
+if ! grep -Eq '^spring.datasource.driver-class-name=com\.mysql\.(cj\.)?jdbc\.Driver$' "$NORMALIZED_PATH" \
+        || ! grep -q '^spring.datasource.url=jdbc:mysql://' "$NORMALIZED_PATH"; then
     echo "Datasource config is not a recognized MySQL-to-MariaDB migration source." >&2
     exit 1
 fi
 
-if grep -Eq '^spring.datasource.url=.*([?&])useSSL=true([&#]|$)' "$CONFIG_PATH"; then
+if grep -Eq '^spring.datasource.url=.*([?&])useSSL=true([&#]|$)' "$NORMALIZED_PATH"; then
     echo "Automatic migration is disabled for useSSL=true; choose a MariaDB sslMode explicitly." >&2
     exit 1
 fi
-
-CONFIG_DIR="$(dirname "$CONFIG_PATH")"
-TEMP_PATH="$(mktemp "$CONFIG_DIR/.application-online.properties.migrate.XXXXXX")"
-cleanup() {
-    rm -f "$TEMP_PATH"
-}
-trap cleanup EXIT
 
 if [[ -e "$BACKUP_PATH" ]]; then
     if ! cmp -s "$CONFIG_PATH" "$BACKUP_PATH"; then
@@ -60,7 +62,7 @@ sed -E \
     -e 's#^spring\.datasource\.url=jdbc:mysql:#spring.datasource.url=jdbc:mariadb:#' \
     -e '/^spring\.datasource\.url=/ s/serverTimezone=[^&]*/connectionTimeZone=LOCAL/g' \
     -e '/^spring\.datasource\.url=/ s/useSSL=false/sslMode=disable/g' \
-    "$CONFIG_PATH" > "$TEMP_PATH"
+    "$NORMALIZED_PATH" > "$TEMP_PATH"
 
 if ! grep -q '^spring.datasource.driver-class-name=org.mariadb.jdbc.Driver$' "$TEMP_PATH" \
         || ! grep -q '^spring.datasource.url=jdbc:mariadb://' "$TEMP_PATH" \
@@ -72,4 +74,5 @@ fi
 chmod --reference="$CONFIG_PATH" "$TEMP_PATH" 2>/dev/null || chmod 600 "$TEMP_PATH"
 mv "$TEMP_PATH" "$CONFIG_PATH"
 trap - EXIT
+rm -f "$NORMALIZED_PATH"
 echo "Datasource config migrated; the pre-Jakarta backup was retained."
