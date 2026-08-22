@@ -23,8 +23,12 @@ import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static com.sc1hub.assistant.service.AssistantResponseParser.extractFirstJsonArray;
+import static com.sc1hub.assistant.service.AssistantResponseParser.extractFirstJsonObject;
+import static com.sc1hub.assistant.service.AssistantResponseParser.normalizeSourceId;
+import static com.sc1hub.assistant.service.AssistantResponseParser.textOrNull;
 
 @Service
 @Slf4j
@@ -32,7 +36,6 @@ public class AssistantService {
 
     private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
-    private static final Pattern SOURCE_ID_PATTERN = Pattern.compile("^([a-z0-9_]+):(\\d+)$");
     private static final Set<String> STOPWORDS = new HashSet<>(Arrays.asList(
             "추천", "질문", "방법", "어떻게", "알려줘", "알려주세요", "알려", "해줘", "해주세요", "좀",
             "빌드", "빌드오더", "운영", "공략", "강의",
@@ -62,6 +65,7 @@ public class AssistantService {
     private final AssistantRagProperties ragProperties;
     private final AssistantQueryParser queryParser;
     private final ObjectMapper objectMapper;
+    private final AssistantResponseParser responseParser;
     private volatile List<BoardListDTO> cachedBoards = Collections.emptyList();
     private volatile long cachedBoardsAtMillis = 0L;
 
@@ -89,6 +93,7 @@ public class AssistantService {
         this.ragProperties = ragProperties;
         this.queryParser = queryParser;
         this.objectMapper = objectMapper;
+        this.responseParser = new AssistantResponseParser(objectMapper);
     }
 
     public AssistantChatResponseDTO chat(String message, MemberDTO member) {
@@ -197,7 +202,7 @@ public class AssistantService {
     private AssistantAnswerResult generateAnswerResult(String prompt, Set<String> allowedSourceIds) {
         int answerMaxOutputTokens = resolveAnswerMaxOutputTokens();
         String rawAnswer = geminiClient.generateAnswer(prompt, answerMaxOutputTokens);
-        AssistantAnswerResult result = parseAnswerResult(rawAnswer, allowedSourceIds);
+        AssistantAnswerResult result = responseParser.parseAnswerResult(rawAnswer, allowedSourceIds);
         if (StringUtils.hasText(result.getAnswer())) {
             return result;
         }
@@ -210,278 +215,12 @@ public class AssistantService {
         log.warn("AI 검색 답변이 빈 값으로 반환되어 더 큰 출력 예산으로 1회 재시도합니다. firstMaxOutputTokens={}, retryMaxOutputTokens={}",
                 answerMaxOutputTokens, retryMaxOutputTokens);
         String retryRawAnswer = geminiClient.generateAnswer(prompt, retryMaxOutputTokens);
-        return parseAnswerResult(retryRawAnswer, allowedSourceIds);
+        return responseParser.parseAnswerResult(retryRawAnswer, allowedSourceIds);
     }
 
     private int resolveAnswerMaxOutputTokens() {
         int configured = Math.max(0, assistantProperties.getAnswerMaxOutputTokens());
         return Math.max(configured, MIN_ANSWER_MAX_OUTPUT_TOKENS);
-    }
-
-    private AssistantAnswerResult parseAnswerResult(String raw, Set<String> allowedSourceIds) {
-        AssistantAnswerResult result = new AssistantAnswerResult();
-        String trimmed = raw == null ? "" : raw.trim();
-        if (!StringUtils.hasText(trimmed)) {
-            result.setAnswer("");
-            return result;
-        }
-
-        if (objectMapper == null) {
-            result.setAnswer(trimmed);
-            return result;
-        }
-
-        String cleaned = stripCodeFences(trimmed);
-        String json = extractFirstJsonObject(cleaned);
-        if (!StringUtils.hasText(json)) {
-            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
-            if (loose != null) {
-                return loose;
-            }
-            result.setAnswer(trimmed);
-            return result;
-        }
-
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            String answer = textOrNull(node.get("answer"));
-            if (!StringUtils.hasText(answer)) {
-                answer = textOrNull(node.get("text"));
-            }
-            if (!StringUtils.hasText(answer)) {
-                answer = trimmed;
-            }
-            result.setAnswer(answer.trim());
-
-            LinkedHashSet<String> used = new LinkedHashSet<>();
-            addSourceIdsFromNode(used, node.get("citations"), allowedSourceIds);
-            addSourceIdsFromNode(used, node.get("used_post_ids"), allowedSourceIds);
-            addSourceIdsFromNode(used, node.get("usedPostIds"), allowedSourceIds);
-            result.setUsedPostIds(new ArrayList<>(used));
-            return result;
-        } catch (Exception e) {
-            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
-            if (loose != null) {
-                return loose;
-            }
-            result.setAnswer(trimmed);
-            return result;
-        }
-    }
-
-    private AssistantAnswerResult parseLooseAnswerResult(String raw, Set<String> allowedSourceIds) {
-        if (!StringUtils.hasText(raw)) {
-            return null;
-        }
-        String answer = extractLooseJsonStringField(raw, "answer");
-        if (!StringUtils.hasText(answer)) {
-            answer = extractLooseJsonStringField(raw, "text");
-        }
-        if (!StringUtils.hasText(answer)) {
-            return null;
-        }
-        AssistantAnswerResult result = new AssistantAnswerResult();
-        result.setAnswer(answer.trim());
-        LinkedHashSet<String> used = new LinkedHashSet<>();
-        addSourceIdsFromLooseArray(used, raw, "citations", allowedSourceIds);
-        addSourceIdsFromLooseArray(used, raw, "used_post_ids", allowedSourceIds);
-        addSourceIdsFromLooseArray(used, raw, "usedPostIds", allowedSourceIds);
-        result.setUsedPostIds(new ArrayList<>(used));
-        return result;
-    }
-
-    private static String stripCodeFences(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        String cleaned = raw;
-        cleaned = cleaned.replace("```json", "");
-        cleaned = cleaned.replace("```JSON", "");
-        cleaned = cleaned.replace("```", "");
-        return cleaned.trim();
-    }
-
-    private static String extractLooseJsonStringField(String raw, String fieldName) {
-        if (!StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
-            return "";
-        }
-        String needle = "\"" + fieldName + "\"";
-        int keyIndex = raw.indexOf(needle);
-        if (keyIndex < 0) {
-            return "";
-        }
-        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
-        if (colonIndex < 0) {
-            return "";
-        }
-        int quoteIndex = raw.indexOf('"', colonIndex + 1);
-        if (quoteIndex < 0) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        boolean escape = false;
-        for (int i = quoteIndex + 1; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (escape) {
-                appendJsonEscape(sb, ch);
-                escape = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escape = true;
-                continue;
-            }
-            if (ch == '"') {
-                break;
-            }
-            sb.append(ch);
-        }
-        return sb.toString();
-    }
-
-    private static void appendJsonEscape(StringBuilder sb, char ch) {
-        switch (ch) {
-            case 'n':
-                sb.append('\n');
-                break;
-            case 'r':
-                sb.append('\r');
-                break;
-            case 't':
-                sb.append('\t');
-                break;
-            case '"':
-                sb.append('"');
-                break;
-            case '\\':
-                sb.append('\\');
-                break;
-            default:
-                sb.append(ch);
-                break;
-        }
-    }
-
-    private void addSourceIdsFromLooseArray(Set<String> target, String raw, String fieldName, Set<String> allowedSourceIds) {
-        if (target == null || !StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
-            return;
-        }
-        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
-            return;
-        }
-        String needle = "\"" + fieldName + "\"";
-        int keyIndex = raw.indexOf(needle);
-        if (keyIndex < 0) {
-            return;
-        }
-        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
-        if (colonIndex < 0) {
-            return;
-        }
-        int arrayStart = raw.indexOf('[', colonIndex + 1);
-        if (arrayStart < 0) {
-            return;
-        }
-
-        boolean inString = false;
-        boolean escape = false;
-        StringBuilder current = new StringBuilder();
-        for (int i = arrayStart + 1; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (inString) {
-                if (escape) {
-                    appendJsonEscape(current, ch);
-                    escape = false;
-                    continue;
-                }
-                if (ch == '\\') {
-                    escape = true;
-                    continue;
-                }
-                if (ch == '"') {
-                    inString = false;
-                    addValidatedSourceId(target, current.toString(), allowedSourceIds);
-                    current.setLength(0);
-                    continue;
-                }
-                current.append(ch);
-                continue;
-            }
-
-            if (ch == '"') {
-                inString = true;
-                current.setLength(0);
-                continue;
-            }
-            if (ch == ']') {
-                break;
-            }
-        }
-    }
-
-    private void addSourceIdsFromNode(Set<String> target, JsonNode node, Set<String> allowedSourceIds) {
-        if (target == null || node == null || node.isNull() || node.isMissingNode()) {
-            return;
-        }
-        if (node.isArray()) {
-            for (JsonNode item : node) {
-                if (item == null) {
-                    continue;
-                }
-                if (item.isObject()) {
-                    addValidatedSourceId(target, textOrNull(item.get("sourceId")), allowedSourceIds);
-                    addValidatedSourceId(target, textOrNull(item.get("id")), allowedSourceIds);
-                } else {
-                    addValidatedSourceId(target, textOrNull(item), allowedSourceIds);
-                }
-            }
-            return;
-        }
-        if (node.isObject()) {
-            addValidatedSourceId(target, textOrNull(node.get("sourceId")), allowedSourceIds);
-            addValidatedSourceId(target, textOrNull(node.get("id")), allowedSourceIds);
-            return;
-        }
-        addValidatedSourceId(target, textOrNull(node), allowedSourceIds);
-    }
-
-    private void addValidatedSourceId(Set<String> target, String raw, Set<String> allowedSourceIds) {
-        if (target == null || !StringUtils.hasText(raw)) {
-            return;
-        }
-        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
-            return;
-        }
-        String normalized = normalizeSourceId(raw);
-        if (!StringUtils.hasText(normalized)) {
-            return;
-        }
-        if (!allowedSourceIds.contains(normalized)) {
-            return;
-        }
-        target.add(normalized);
-    }
-
-    private static String normalizeSourceId(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        String trimmed = raw.trim().toLowerCase(Locale.ROOT);
-        Matcher matcher = SOURCE_ID_PATTERN.matcher(trimmed);
-        if (!matcher.matches()) {
-            return "";
-        }
-        String boardTitle = matcher.group(1);
-        int postNum;
-        try {
-            postNum = Integer.parseInt(matcher.group(2));
-        } catch (NumberFormatException e) {
-            return "";
-        }
-        if (!StringUtils.hasText(boardTitle) || postNum <= 0) {
-            return "";
-        }
-        return boardTitle + ":" + postNum;
     }
 
     private void applyLlmMatchupClassificationIfNeeded(String message, AssistantQueryParseResult parseResult) {
@@ -892,72 +631,6 @@ public class AssistantService {
             return "general";
         }
         return "";
-    }
-
-    private static String extractFirstJsonObject(String raw) {
-        return extractFirstBalancedJson(raw, '{', '}');
-    }
-
-    private static String extractFirstJsonArray(String raw) {
-        return extractFirstBalancedJson(raw, '[', ']');
-    }
-
-    private static String extractFirstBalancedJson(String raw, char open, char close) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        int start = raw.indexOf(open);
-        if (start < 0) {
-            return "";
-        }
-        boolean inString = false;
-        boolean escape = false;
-        int depth = 0;
-        for (int i = start; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (escape) {
-                escape = false;
-                continue;
-            }
-            if (ch == '\\') {
-                if (inString) {
-                    escape = true;
-                }
-                continue;
-            }
-            if (ch == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) {
-                continue;
-            }
-            if (ch == open) {
-                depth += 1;
-                continue;
-            }
-            if (ch == close) {
-                depth -= 1;
-                if (depth == 0) {
-                    return raw.substring(start, i + 1).trim();
-                }
-                if (depth < 0) {
-                    return "";
-                }
-            }
-        }
-        return "";
-    }
-
-    private static String textOrNull(JsonNode node) {
-        if (node == null || node.isNull() || node.isMissingNode()) {
-            return null;
-        }
-        String value = node.asText(null);
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        return value.trim();
     }
 
     private RagRetrieval tryRetrieveWithRag(String ragQuery,
