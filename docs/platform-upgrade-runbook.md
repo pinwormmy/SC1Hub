@@ -1,29 +1,30 @@
 # SC1Hub Platform Upgrade Runbook
 
-This runbook covers the no-plan-change platform refresh for the Cafe24 general
-hosting environment. The Cafe24 runtime must remain Tomcat 8.5 / JDK 8; the
-release changes only the application WAR and build dependencies.
+This runbook records the supported baseline for the Cafe24 general hosting
+environment. The Cafe24 runtime must remain Tomcat 8.5 / JDK 8 and releases
+must not require a hosting-plan change.
 
 ## Target
 
 - Java 8 bytecode and runtime
 - Existing external Tomcat 8.5.x
-- Spring Boot 2.7.18 application WAR
-- MyBatis Spring Boot Starter 2.3.2
-- Gradle 7.6.4
+- Spring Boot 2.7.2 application WAR
+- MyBatis Spring Boot Starter 2.2.0
+- Gradle 7.5
 - Existing MariaDB and hosting plan, unchanged
 
-Spring Boot 3, Jakarta Servlet, Tomcat 10, and JDK 17 are explicitly out of
-scope because the current 64 MB hosting limit does not provide enough runtime
-headroom.
+Spring Boot 2.7.18 exceeded the host's 64 MB metaspace limit during a controlled
+deployment and was rolled back. Spring Boot 3, Jakarta Servlet, Tomcat 10, and
+JDK 17 are also out of scope because the current plan does not provide enough
+runtime headroom.
 
 ## Release gates
 
 Do not deploy until all of the following are true:
 
 1. `./gradlew clean build` passes on an actual Java 8 JDK.
-2. The WAR verifier confirms Java EE dependencies and rejects embedded Tomcat
-   jars or Jakarta Servlet API jars from `WEB-INF/lib`.
+2. The WAR is checked for Java EE dependencies and contains no Jakarta Servlet
+   API jars.
 3. The current production WAR and configuration have verified backups and
    recorded SHA-256 checksums.
 4. The checkout is clean, on `main`, and the release commit is contained in
