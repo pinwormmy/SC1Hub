@@ -186,7 +186,7 @@ ssh "$REMOTE" \
    trap restore_config_on_failure EXIT
 
    PRE_MIGRATION_DRIVER=\$(grep '^spring.datasource.driver-class-name=' \"\$REMOTE_ONLINE_PROPS\" | cut -d= -f2- | tr -d '\r')
-   \"\$REMOTE_DATASOURCE_MIGRATION_SCRIPT\" \
+   /home/bin/bash2 \"\$REMOTE_DATASOURCE_MIGRATION_SCRIPT\" \
      \"\$REMOTE_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP\"
    if [ \"\$PRE_MIGRATION_DRIVER\" != 'org.mariadb.jdbc.Driver' ]; then
      CONFIG_MIGRATED=1
