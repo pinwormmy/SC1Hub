@@ -1,6 +1,6 @@
 package com.sc1hub.common.util;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 // 차후 접속자 로그 기능에 활용..깃허브 리셋위해 다시
 

@@ -36,8 +36,11 @@ REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
+REMOTE_DATASOURCE_MIGRATION_SCRIPT="$REMOTE_SCRIPT_DIR/migrate-online-datasource-to-mariadb.sh"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
+REMOTE_ONLINE_PROPS_LEGACY_BACKUP="$REMOTE_ONLINE_PROPS.pre-jakarta"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
+ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
 
 echo "Building bootWar..."
 ./gradlew clean bootWar </dev/null
@@ -63,6 +66,7 @@ scp "$WAR_FILE" "$REMOTE:$REMOTE_UPLOAD_PATH"
 echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
+scp "$ROOT_DIR/scripts/migrate-online-datasource-to-mariadb.sh" "$REMOTE:$REMOTE_DATASOURCE_MIGRATION_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 
@@ -81,6 +85,9 @@ ssh "$REMOTE" \
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
+   REMOTE_DATASOURCE_MIGRATION_SCRIPT='$REMOTE_DATASOURCE_MIGRATION_SCRIPT'
+   REMOTE_ONLINE_PROPS_LEGACY_BACKUP='$REMOTE_ONLINE_PROPS_LEGACY_BACKUP'
+   ROLLBACK_REQUIRES_LEGACY_RUNTIME='$ROLLBACK_REQUIRES_LEGACY_RUNTIME'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
    chmod 700 \"\$REMOTE_CONFIG_DIR\"
@@ -100,6 +107,13 @@ ssh "$REMOTE" \
        echo 'export SPRING_CONFIG_ADDITIONAL_LOCATION=\"\${SPRING_CONFIG_ADDITIONAL_LOCATION:-file:/home/hosting_users/sc1hub/config/}\"'
      } >> \"\$SETENV_SH\"
    fi
+   if ! grep -q 'SC1Hub JVM timezone' \"\$SETENV_SH\"; then
+     {
+       echo ''
+       echo '# SC1Hub JVM timezone'
+       echo 'export CATALINA_OPTS=\"\${CATALINA_OPTS:-} -Duser.timezone=Asia/Seoul\"'
+     } >> \"\$SETENV_SH\"
+   fi
    LEGACY_ONLINE_PROPS=\"\$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
    if [ ! -f \"\$REMOTE_ONLINE_PROPS\" ] && [ -f \"\$LEGACY_ONLINE_PROPS\" ]; then
      cp \"\$LEGACY_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS\"
@@ -111,11 +125,18 @@ ssh "$REMOTE" \
    fi
    chmod 600 \"\$REMOTE_ONLINE_PROPS\"
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
+   chmod +x "\$REMOTE_DATASOURCE_MIGRATION_SCRIPT"
+   RUNTIME_DETAILS=\$("\$REMOTE_TOMCAT_DIR/bin/version.sh" 2>&1 || true)
+   if ! printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'Server version: Apache Tomcat/10\.0\.' \
+      || ! printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'JVM Version: +17\.'; then
+     echo 'Cafe24 must be running Tomcat 10.0.x and Java 17 before this WAR is installed.' >&2
+     exit 1
+   fi
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
-   DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\\1#')
+   DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:(mysql|mariadb)://[^/]+/([^?]+).*#\\2#')
    if [ -z \"\$DB_USER\" ] || [ -z \"\$DB_PASS\" ] || ! printf '%s' \"\$DB_NAME\" | grep -Eq '^[A-Za-z0-9_]+$'; then
      echo 'Online database configuration is missing or invalid.' >&2
      exit 1
@@ -129,6 +150,36 @@ ssh "$REMOTE" \
    fi
    if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
      echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
+     exit 1
+   fi
+
+   CONFIG_MIGRATED=0
+   DEPLOY_SUCCEEDED=0
+   restore_legacy_config() {
+     if [ "\$CONFIG_MIGRATED" = "1" ] && [ -s "\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP" ]; then
+       cp -p "\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP" "\$REMOTE_ONLINE_PROPS"
+       chmod 600 "\$REMOTE_ONLINE_PROPS"
+       CONFIG_MIGRATED=0
+       echo 'Restored the pre-Jakarta datasource configuration.' >&2
+     fi
+   }
+   restore_config_on_failure() {
+     STATUS=\$?
+     trap - EXIT
+     if [ "\$DEPLOY_SUCCEEDED" != "1" ]; then
+       restore_legacy_config
+     fi
+     exit "\$STATUS"
+   }
+   trap restore_config_on_failure EXIT
+
+   if grep -Eq '^spring.datasource.driver-class-name=com\.mysql\.(cj\.)?jdbc\.Driver$' "\$REMOTE_ONLINE_PROPS"; then
+     "\$REMOTE_DATASOURCE_MIGRATION_SCRIPT" \
+       "\$REMOTE_ONLINE_PROPS" "\$REMOTE_ONLINE_PROPS_LEGACY_BACKUP"
+     CONFIG_MIGRATED=1
+   elif ! grep -q '^spring.datasource.driver-class-name=org.mariadb.jdbc.Driver$' "\$REMOTE_ONLINE_PROPS" \
+       || ! grep -q '^spring.datasource.url=jdbc:mariadb://' "\$REMOTE_ONLINE_PROPS"; then
+     echo 'Online datasource configuration is not compatible with MariaDB Connector/J.' >&2
      exit 1
    fi
 
@@ -162,6 +213,11 @@ ssh "$REMOTE" \
        rm -f \"\$REMOTE_WAR_PATH\"
      fi
      rm -rf \"\$REMOTE_EXPLODED_DIR\"
+     restore_legacy_config
+     if [ "\$ROLLBACK_REQUIRES_LEGACY_RUNTIME" = "true" ]; then
+       echo 'Legacy WAR and config restored. Change Cafe24 back to Tomcat 8.5 / JDK 8 before starting it.' >&2
+       return 1
+     fi
      if ! $REMOTE_START_CMD; then
        echo 'Rollback WAR was restored, but Tomcat restart failed.' >&2
        return 1
@@ -198,6 +254,7 @@ ssh "$REMOTE" \
      exit 1
    fi
    if wait_for_local_health; then
+     DEPLOY_SUCCEEDED=1
      exit 0
    fi
    echo \"Tomcat did not respond on port \$REMOTE_HTTP_PORT after startup.\" >&2
