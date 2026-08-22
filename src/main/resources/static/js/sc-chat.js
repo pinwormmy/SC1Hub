@@ -7,6 +7,7 @@
 
     const COLLAPSED_CLASS = 'is-collapsed';
     const MAX_QUESTION_LENGTH = 800;
+    const CHAT_AD_LOAD_QUIET_MILLIS = 800;
 
     let lastSeq = 0;
     const renderedIds = new Set();
@@ -23,6 +24,9 @@
     let adObserver = null;
     let currentAdLineEl = null;
     let currentAdIframeEl = null;
+    let currentAdNearViewport = false;
+    let adLoadDelayId = null;
+    let adLoadIdleId = null;
     let chatExpanded = document.body.classList.contains('sc-chat-fullscreen');
     let batchRendering = false;
 
@@ -88,7 +92,61 @@
         };
     }
 
-    // 최신 광고가 실제 화면에 보일 때만 iframe을 로드한다.
+    function cancelScheduledChatAdLoad() {
+        if (adLoadDelayId !== null) {
+            window.clearTimeout(adLoadDelayId);
+            adLoadDelayId = null;
+        }
+        if (adLoadIdleId !== null && 'cancelIdleCallback' in window) {
+            window.cancelIdleCallback(adLoadIdleId);
+            adLoadIdleId = null;
+        }
+    }
+
+    function loadCurrentChatAd() {
+        adLoadIdleId = null;
+        const iframeEl = currentAdIframeEl;
+        if (!chatExpanded || !currentAdNearViewport || !iframeEl
+                || !iframeEl.isConnected || !iframeEl.dataset.src) {
+            return;
+        }
+        iframeEl.src = iframeEl.dataset.src;
+        delete iframeEl.dataset.src;
+        if (adObserver) {
+            adObserver.unobserve(iframeEl);
+        }
+        currentAdNearViewport = false;
+    }
+
+    function loadChatAdWhenIdle() {
+        adLoadDelayId = null;
+        if (!chatExpanded || !currentAdNearViewport || !currentAdIframeEl
+                || !currentAdIframeEl.dataset.src) {
+            return;
+        }
+        if ('requestIdleCallback' in window) {
+            adLoadIdleId = window.requestIdleCallback(loadCurrentChatAd);
+            return;
+        }
+        loadCurrentChatAd();
+    }
+
+    function scheduleChatAdLoad() {
+        if (!chatExpanded || !currentAdNearViewport || !currentAdIframeEl
+                || !currentAdIframeEl.dataset.src) {
+            return;
+        }
+        cancelScheduledChatAdLoad();
+        adLoadDelayId = window.setTimeout(loadChatAdWhenIdle, CHAT_AD_LOAD_QUIET_MILLIS);
+    }
+
+    function postponeChatAdForUserInput() {
+        if (adLoadDelayId !== null || adLoadIdleId !== null) {
+            scheduleChatAdLoad();
+        }
+    }
+
+    // 최신 광고가 실제 화면에 보이고 사용자 입력이 잠잠할 때만 iframe을 로드한다.
     function getAdObserver() {
         if (adObserver || typeof IntersectionObserver === 'undefined') {
             return adObserver;
@@ -96,6 +154,10 @@
         adObserver = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 if (!entry.isIntersecting) {
+                    if (entry.target === currentAdIframeEl) {
+                        currentAdNearViewport = false;
+                        cancelScheduledChatAdLoad();
+                    }
                     return;
                 }
                 const iframeEl = entry.target;
@@ -103,17 +165,15 @@
                     adObserver.unobserve(iframeEl);
                     return;
                 }
-                if (iframeEl.dataset.src) {
-                    iframeEl.src = iframeEl.dataset.src;
-                    delete iframeEl.dataset.src;
-                }
-                adObserver.unobserve(iframeEl);
+                currentAdNearViewport = true;
+                scheduleChatAdLoad();
             });
         }, { root: outputEl, rootMargin: '200px 0px' });
         return adObserver;
     }
 
     function removePreviousChatAd() {
+        cancelScheduledChatAdLoad();
         if (currentAdIframeEl && adObserver) {
             adObserver.unobserve(currentAdIframeEl);
         }
@@ -122,6 +182,7 @@
         }
         currentAdLineEl = null;
         currentAdIframeEl = null;
+        currentAdNearViewport = false;
     }
 
     function observePendingChatAd() {
@@ -133,16 +194,20 @@
             observer.observe(currentAdIframeEl);
             return;
         }
-        currentAdIframeEl.src = currentAdIframeEl.dataset.src;
-        delete currentAdIframeEl.dataset.src;
+        currentAdNearViewport = true;
+        scheduleChatAdLoad();
     }
 
     function setChatExpanded(expanded) {
         chatExpanded = expanded;
         if (chatExpanded) {
             observePendingChatAd();
-        } else if (currentAdIframeEl && currentAdIframeEl.dataset.src && adObserver) {
-            adObserver.unobserve(currentAdIframeEl);
+        } else if (currentAdIframeEl && currentAdIframeEl.dataset.src) {
+            cancelScheduledChatAdLoad();
+            if (adObserver) {
+                adObserver.unobserve(currentAdIframeEl);
+            }
+            currentAdNearViewport = false;
         }
     }
 
@@ -169,6 +234,8 @@
         iframeEl.setAttribute('frameborder', '0');
         iframeEl.setAttribute('scrolling', 'no');
         iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
+        iframeEl.setAttribute('loading', 'lazy');
+        iframeEl.setAttribute('fetchpriority', 'low');
         iframeEl.title = '쿠팡 파트너스 광고';
 
         const noticeEl = document.createElement('span');
@@ -619,6 +686,11 @@
     window.addEventListener('sc:chat-expanded', (event) => {
         setChatExpanded(Boolean(event.detail && event.detail.expanded));
     });
+    window.addEventListener('pointerdown', postponeChatAdForUserInput, { passive: true });
+    window.addEventListener('keydown', postponeChatAdForUserInput);
+    window.addEventListener('wheel', postponeChatAdForUserInput, { passive: true });
+    window.addEventListener('touchmove', postponeChatAdForUserInput, { passive: true });
+    outputEl.addEventListener('scroll', postponeChatAdForUserInput, { passive: true });
 
     window.scChat = { send, ask, system: systemLine, runAdminCommand };
 

@@ -129,6 +129,10 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(chatSource.contains("window.addEventListener('sc:chat-expanded'"));
         assertTrue(chatSource.contains("if (!chatExpanded || !currentAdIframeEl || !currentAdIframeEl.dataset.src)"));
         assertTrue(chatSource.contains("setChatExpanded(Boolean(event.detail && event.detail.expanded))"));
+        assertTrue(chatSource.contains("CHAT_AD_LOAD_QUIET_MILLIS = 800"));
+        assertTrue(chatSource.contains("window.requestIdleCallback(loadCurrentChatAd)"));
+        assertTrue(chatSource.contains("postponeChatAdForUserInput"));
+        assertTrue(chatSource.contains("iframeEl.setAttribute('fetchpriority', 'low')"));
     }
 
     @Test
@@ -142,7 +146,12 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("window.addEventListener('load'"));
         assertTrue(source.contains("IntersectionObserver"));
         assertTrue(source.contains("!pageLoaded || !nearViewport"));
+        assertTrue(source.contains("AD_LOAD_QUIET_MILLIS = 800"));
+        assertTrue(source.contains("window.requestIdleCallback(renderAd)"));
+        assertTrue(source.contains("postponeAdForUserInput"));
+        assertTrue(source.contains("rootMargin: '100px 0px'"));
         assertTrue(source.contains("iframeEl.setAttribute('loading', 'lazy')"));
+        assertTrue(source.contains("iframeEl.setAttribute('fetchpriority', 'low')"));
         assertTrue(source.contains("iframeEl.title = '쿠팡 파트너스 상품 광고'"));
         assertTrue(source.contains("window.matchMedia('(max-width: 768px)')"));
     }
