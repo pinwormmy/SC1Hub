@@ -31,6 +31,7 @@
     justify-content: center;
     width: 100%;
     min-height: ${coupangDynamicPcHeight}px;
+    contain: layout paint;
 }
 @media (max-width: 768px) {
     .coupang-dynamic-ad-frame {
@@ -63,7 +64,31 @@
         var renderDelayId = null;
         var renderIdleId = null;
         var monitoringUserInput = false;
-        var AD_LOAD_QUIET_MILLIS = 800;
+        var lastUserInputAt = 0;
+        var AD_LOAD_QUIET_MILLIS = 1200;
+
+        function now() {
+            return window.performance.now();
+        }
+
+        function quietMillisRemaining() {
+            return Math.max(0, AD_LOAD_QUIET_MILLIS - (now() - lastUserInputAt));
+        }
+
+        function isUserEditing() {
+            var activeEl = document.activeElement;
+            if (!activeEl) {
+                return false;
+            }
+            var tagName = activeEl.tagName;
+            return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT'
+                    || activeEl.isContentEditable;
+        }
+
+        function hasPendingUserInput() {
+            return Boolean(navigator.scheduling && navigator.scheduling.isInputPending
+                    && navigator.scheduling.isInputPending());
+        }
 
         function stopMonitoringUserInput() {
             if (!monitoringUserInput) {
@@ -75,6 +100,7 @@
             window.removeEventListener('wheel', postponeAdForUserInput);
             window.removeEventListener('touchmove', postponeAdForUserInput);
             window.removeEventListener('scroll', postponeAdForUserInput);
+            document.removeEventListener('focusout', resumeAdAfterInput);
         }
 
         function cancelScheduledAdRender() {
@@ -92,8 +118,15 @@
             if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
                 return;
             }
-            rendered = true;
             renderIdleId = null;
+            if (hasPendingUserInput()) {
+                lastUserInputAt = now();
+            }
+            if (isUserEditing() || quietMillisRemaining() > 0) {
+                scheduleAdRender();
+                return;
+            }
+            rendered = true;
             cancelScheduledAdRender();
             stopMonitoringUserInput();
             if (observer) {
@@ -131,6 +164,14 @@
             if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
                 return;
             }
+            var remaining = quietMillisRemaining();
+            if (remaining > 0) {
+                renderDelayId = window.setTimeout(renderAdWhenIdle, remaining);
+                return;
+            }
+            if (isUserEditing()) {
+                return;
+            }
             if ('requestIdleCallback' in window) {
                 renderIdleId = window.requestIdleCallback(renderAd);
                 return;
@@ -148,6 +189,7 @@
             window.addEventListener('wheel', postponeAdForUserInput, { passive: true });
             window.addEventListener('touchmove', postponeAdForUserInput, { passive: true });
             window.addEventListener('scroll', postponeAdForUserInput, { passive: true });
+            document.addEventListener('focusout', resumeAdAfterInput);
         }
 
         function scheduleAdRender() {
@@ -156,11 +198,18 @@
             }
             cancelScheduledAdRender();
             startMonitoringUserInput();
-            renderDelayId = window.setTimeout(renderAdWhenIdle, AD_LOAD_QUIET_MILLIS);
+            renderDelayId = window.setTimeout(renderAdWhenIdle, quietMillisRemaining());
         }
 
         function postponeAdForUserInput() {
-            if (renderDelayId !== null || renderIdleId !== null) {
+            if (!rendered && nearViewport) {
+                lastUserInputAt = now();
+            }
+        }
+
+        function resumeAdAfterInput() {
+            if (!rendered && nearViewport) {
+                lastUserInputAt = now();
                 scheduleAdRender();
             }
         }
@@ -179,6 +228,7 @@
                 var entry = entries[entries.length - 1];
                 nearViewport = Boolean(entry && entry.isIntersecting);
                 if (nearViewport) {
+                    lastUserInputAt = now();
                     scheduleAdRender();
                 } else {
                     cancelScheduledAdRender();

@@ -111,11 +111,16 @@ class LoginKeepAliveViewCoverageTest {
     void sharedChatLoadsPartnerAdOnlyAfterChatExpansion() throws IOException {
         Path chatScriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
         Path terminalScriptPath = Paths.get("src/main/resources/static/js/sc-terminal.js");
+        Path stylePath = Paths.get("src/main/resources/static/css/style.css");
         String chatSource = new String(Files.readAllBytes(chatScriptPath), StandardCharsets.UTF_8);
         String terminalSource = new String(Files.readAllBytes(terminalScriptPath), StandardCharsets.UTF_8);
+        String styleSource = new String(Files.readAllBytes(stylePath), StandardCharsets.UTF_8);
         int insertAdStart = chatSource.indexOf("function insertAdLine(config)");
         int insertAdEnd = chatSource.indexOf("function maybeInsertAd(message)", insertAdStart);
         String insertAdSource = chatSource.substring(insertAdStart, insertAdEnd);
+        int postponeStart = chatSource.indexOf("function postponeChatAdForUserInput()");
+        int postponeEnd = chatSource.indexOf("function resumeChatAdAfterInput()", postponeStart);
+        String postponeSource = chatSource.substring(postponeStart, postponeEnd);
         int storeDeferredSource = insertAdSource.indexOf("iframeEl.dataset.src = adSrc");
         int observeDeferredAd = insertAdSource.indexOf("observePendingChatAd();", storeDeferredSource);
 
@@ -127,12 +132,18 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(observeDeferredAd > storeDeferredSource);
         assertFalse(insertAdSource.contains("iframeEl.src = adSrc"));
         assertTrue(chatSource.contains("window.addEventListener('sc:chat-expanded'"));
-        assertTrue(chatSource.contains("if (!chatExpanded || !currentAdIframeEl || !currentAdIframeEl.dataset.src)"));
+        assertTrue(chatSource.contains("expanded && isChatExpanded()"));
         assertTrue(chatSource.contains("setChatExpanded(Boolean(event.detail && event.detail.expanded))"));
-        assertTrue(chatSource.contains("CHAT_AD_LOAD_QUIET_MILLIS = 800"));
+        assertTrue(chatSource.contains("currentAdIframeEl.removeAttribute('src')"));
+        assertTrue(chatSource.contains("CHAT_AD_LOAD_QUIET_MILLIS = 1200"));
         assertTrue(chatSource.contains("window.requestIdleCallback(loadCurrentChatAd)"));
         assertTrue(chatSource.contains("postponeChatAdForUserInput"));
+        assertTrue(chatSource.contains("navigator.scheduling.isInputPending()"));
+        assertTrue(postponeSource.contains("lastChatAdUserInputAt = window.performance.now()"));
+        assertFalse(postponeSource.contains("scheduleChatAdLoad()"));
         assertTrue(chatSource.contains("iframeEl.setAttribute('fetchpriority', 'low')"));
+        assertTrue(styleSource.contains(".sc-chat__ad {\n    display: none;"));
+        assertTrue(styleSource.contains("body.sc-chat-fullscreen .sc-chat__ad {\n    display: flex;"));
     }
 
     @Test
@@ -146,9 +157,10 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("window.addEventListener('load'"));
         assertTrue(source.contains("IntersectionObserver"));
         assertTrue(source.contains("!pageLoaded || !nearViewport"));
-        assertTrue(source.contains("AD_LOAD_QUIET_MILLIS = 800"));
+        assertTrue(source.contains("AD_LOAD_QUIET_MILLIS = 1200"));
         assertTrue(source.contains("window.requestIdleCallback(renderAd)"));
         assertTrue(source.contains("postponeAdForUserInput"));
+        assertTrue(source.contains("navigator.scheduling.isInputPending()"));
         assertTrue(source.contains("rootMargin: '100px 0px'"));
         assertTrue(source.contains("iframeEl.setAttribute('loading', 'lazy')"));
         assertTrue(source.contains("iframeEl.setAttribute('fetchpriority', 'low')"));

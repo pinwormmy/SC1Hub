@@ -1,13 +1,14 @@
 (() => {
     const terminalEl = document.getElementById('scTerminal');
     const outputEl = document.getElementById('scTerminalOutput');
-    if (!terminalEl || !outputEl) {
+    const inputEl = document.getElementById('scTerminalInput');
+    if (!terminalEl || !outputEl || !inputEl) {
         return;
     }
 
     const COLLAPSED_CLASS = 'is-collapsed';
     const MAX_QUESTION_LENGTH = 800;
-    const CHAT_AD_LOAD_QUIET_MILLIS = 800;
+    const CHAT_AD_LOAD_QUIET_MILLIS = 1200;
 
     let lastSeq = 0;
     const renderedIds = new Set();
@@ -27,7 +28,8 @@
     let currentAdNearViewport = false;
     let adLoadDelayId = null;
     let adLoadIdleId = null;
-    let chatExpanded = document.body.classList.contains('sc-chat-fullscreen');
+    let lastChatAdUserInputAt = 0;
+    let monitoringChatAdUserInput = false;
     let batchRendering = false;
 
     function getMemberMeta() {
@@ -103,11 +105,66 @@
         }
     }
 
+    function isChatExpanded() {
+        return document.body.classList.contains('sc-chat-fullscreen');
+    }
+
+    function isChatInputActive() {
+        return document.activeElement === inputEl;
+    }
+
+    function hasPendingChatAd() {
+        return isChatExpanded() && currentAdNearViewport && currentAdIframeEl
+            && currentAdIframeEl.isConnected && currentAdIframeEl.dataset.src;
+    }
+
+    function getChatAdQuietMillisRemaining() {
+        return Math.max(0, CHAT_AD_LOAD_QUIET_MILLIS
+            - (window.performance.now() - lastChatAdUserInputAt));
+    }
+
+    function hasPendingUserInput() {
+        return Boolean(navigator.scheduling && navigator.scheduling.isInputPending
+            && navigator.scheduling.isInputPending());
+    }
+
+    function startMonitoringChatAdUserInput() {
+        if (monitoringChatAdUserInput) {
+            return;
+        }
+        monitoringChatAdUserInput = true;
+        window.addEventListener('pointerdown', postponeChatAdForUserInput, { passive: true });
+        window.addEventListener('keydown', postponeChatAdForUserInput);
+        window.addEventListener('wheel', postponeChatAdForUserInput, { passive: true });
+        window.addEventListener('touchmove', postponeChatAdForUserInput, { passive: true });
+        outputEl.addEventListener('scroll', postponeChatAdForUserInput, { passive: true });
+        inputEl.addEventListener('blur', resumeChatAdAfterInput);
+    }
+
+    function stopMonitoringChatAdUserInput() {
+        if (!monitoringChatAdUserInput) {
+            return;
+        }
+        monitoringChatAdUserInput = false;
+        window.removeEventListener('pointerdown', postponeChatAdForUserInput);
+        window.removeEventListener('keydown', postponeChatAdForUserInput);
+        window.removeEventListener('wheel', postponeChatAdForUserInput);
+        window.removeEventListener('touchmove', postponeChatAdForUserInput);
+        outputEl.removeEventListener('scroll', postponeChatAdForUserInput);
+        inputEl.removeEventListener('blur', resumeChatAdAfterInput);
+    }
+
     function loadCurrentChatAd() {
         adLoadIdleId = null;
         const iframeEl = currentAdIframeEl;
-        if (!chatExpanded || !currentAdNearViewport || !iframeEl
-                || !iframeEl.isConnected || !iframeEl.dataset.src) {
+        if (!hasPendingChatAd() || iframeEl !== currentAdIframeEl) {
+            return;
+        }
+        if (hasPendingUserInput()) {
+            lastChatAdUserInputAt = window.performance.now();
+        }
+        if (isChatInputActive() || getChatAdQuietMillisRemaining() > 0) {
+            scheduleChatAdLoad();
             return;
         }
         iframeEl.src = iframeEl.dataset.src;
@@ -116,12 +173,20 @@
             adObserver.unobserve(iframeEl);
         }
         currentAdNearViewport = false;
+        stopMonitoringChatAdUserInput();
     }
 
     function loadChatAdWhenIdle() {
         adLoadDelayId = null;
-        if (!chatExpanded || !currentAdNearViewport || !currentAdIframeEl
-                || !currentAdIframeEl.dataset.src) {
+        if (!hasPendingChatAd()) {
+            return;
+        }
+        const quietMillisRemaining = getChatAdQuietMillisRemaining();
+        if (quietMillisRemaining > 0) {
+            adLoadDelayId = window.setTimeout(loadChatAdWhenIdle, quietMillisRemaining);
+            return;
+        }
+        if (isChatInputActive()) {
             return;
         }
         if ('requestIdleCallback' in window) {
@@ -132,16 +197,24 @@
     }
 
     function scheduleChatAdLoad() {
-        if (!chatExpanded || !currentAdNearViewport || !currentAdIframeEl
-                || !currentAdIframeEl.dataset.src) {
+        if (!hasPendingChatAd()) {
             return;
         }
         cancelScheduledChatAdLoad();
-        adLoadDelayId = window.setTimeout(loadChatAdWhenIdle, CHAT_AD_LOAD_QUIET_MILLIS);
+        startMonitoringChatAdUserInput();
+        adLoadDelayId = window.setTimeout(loadChatAdWhenIdle,
+            getChatAdQuietMillisRemaining());
     }
 
     function postponeChatAdForUserInput() {
-        if (adLoadDelayId !== null || adLoadIdleId !== null) {
+        if (hasPendingChatAd()) {
+            lastChatAdUserInputAt = window.performance.now();
+        }
+    }
+
+    function resumeChatAdAfterInput() {
+        if (hasPendingChatAd()) {
+            lastChatAdUserInputAt = window.performance.now();
             scheduleChatAdLoad();
         }
     }
@@ -174,6 +247,7 @@
 
     function removePreviousChatAd() {
         cancelScheduledChatAdLoad();
+        stopMonitoringChatAdUserInput();
         if (currentAdIframeEl && adObserver) {
             adObserver.unobserve(currentAdIframeEl);
         }
@@ -186,7 +260,7 @@
     }
 
     function observePendingChatAd() {
-        if (!chatExpanded || !currentAdIframeEl || !currentAdIframeEl.dataset.src) {
+        if (!isChatExpanded() || !currentAdIframeEl || !currentAdIframeEl.dataset.src) {
             return;
         }
         const observer = getAdObserver();
@@ -198,16 +272,33 @@
         scheduleChatAdLoad();
     }
 
+    function unloadCurrentChatAd() {
+        if (!currentAdIframeEl) {
+            return;
+        }
+        const loadedSrc = currentAdIframeEl.getAttribute('src');
+        if (loadedSrc) {
+            currentAdIframeEl.dataset.src = loadedSrc;
+            currentAdIframeEl.removeAttribute('src');
+        }
+    }
+
     function setChatExpanded(expanded) {
-        chatExpanded = expanded;
-        if (chatExpanded) {
+        const actuallyExpanded = expanded && isChatExpanded();
+        if (currentAdLineEl) {
+            currentAdLineEl.setAttribute('aria-hidden', actuallyExpanded ? 'false' : 'true');
+        }
+        if (actuallyExpanded) {
+            lastChatAdUserInputAt = window.performance.now();
             observePendingChatAd();
-        } else if (currentAdIframeEl && currentAdIframeEl.dataset.src) {
+        } else {
             cancelScheduledChatAdLoad();
-            if (adObserver) {
+            stopMonitoringChatAdUserInput();
+            if (adObserver && currentAdIframeEl) {
                 adObserver.unobserve(currentAdIframeEl);
             }
             currentAdNearViewport = false;
+            unloadCurrentChatAd();
         }
     }
 
@@ -222,6 +313,7 @@
 
         const lineEl = document.createElement('div');
         lineEl.className = 'sc-chat__line sc-chat__ad';
+        lineEl.setAttribute('aria-hidden', isChatExpanded() ? 'false' : 'true');
 
         const iframeEl = document.createElement('iframe');
         const adSrc = 'https://ads-partners.coupang.com/widgets.html'
@@ -254,12 +346,6 @@
 
         if (shouldScroll) {
             scrollToBottom();
-            // iframe 로드로 높이가 늘어난 뒤에도 하단 고정을 유지한다.
-            iframeEl.addEventListener('load', () => {
-                if (isNearBottom()) {
-                    scrollToBottom();
-                }
-            });
         }
     }
 
@@ -686,11 +772,6 @@
     window.addEventListener('sc:chat-expanded', (event) => {
         setChatExpanded(Boolean(event.detail && event.detail.expanded));
     });
-    window.addEventListener('pointerdown', postponeChatAdForUserInput, { passive: true });
-    window.addEventListener('keydown', postponeChatAdForUserInput);
-    window.addEventListener('wheel', postponeChatAdForUserInput, { passive: true });
-    window.addEventListener('touchmove', postponeChatAdForUserInput, { passive: true });
-    outputEl.addEventListener('scroll', postponeChatAdForUserInput, { passive: true });
 
     window.scChat = { send, ask, system: systemLine, runAdminCommand };
 
