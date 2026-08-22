@@ -15,8 +15,15 @@ if [[ ! -s "$CONFIG_PATH" ]]; then
 fi
 
 CONFIG_DIR="$(dirname "$CONFIG_PATH")"
-NORMALIZED_PATH="$(mktemp "$CONFIG_DIR/.application-online.properties.normalized.XXXXXX")"
-TEMP_PATH="$(mktemp "$CONFIG_DIR/.application-online.properties.migrate.XXXXXX")"
+umask 077
+NORMALIZED_PATH="$CONFIG_DIR/.application-online.properties.normalized.$$"
+TEMP_PATH="$CONFIG_DIR/.application-online.properties.migrate.$$"
+if [[ -e "$NORMALIZED_PATH" || -e "$TEMP_PATH" ]]; then
+    echo "Datasource migration temporary path already exists." >&2
+    exit 1
+fi
+: > "$NORMALIZED_PATH"
+: > "$TEMP_PATH"
 cleanup() {
     rm -f "$NORMALIZED_PATH" "$TEMP_PATH"
 }
