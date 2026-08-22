@@ -88,9 +88,8 @@
         slideEl.dataset.scTitlePrepared = 'true';
     }
 
-    function updateTitleSlideOverflow() {
-        titleSlideRafId = 0;
-        const slideEls = document.querySelectorAll('.sc-title-slide');
+    function updateTitleSlideOverflow(rootEl = document) {
+        const slideEls = rootEl.querySelectorAll('.sc-title-slide');
         slideEls.forEach((slideEl) => {
             prepareTitleSlide(slideEl);
             const containerEl = slideEl.closest('.sc-title-cell') || slideEl.closest('.title');
@@ -103,11 +102,20 @@
         });
     }
 
+    window.scUpdateTitleSlides = (rootEl) => {
+        updateTitleSlideOverflow(rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document);
+    };
+
+    function runScheduledTitleSlideUpdate() {
+        titleSlideRafId = 0;
+        updateTitleSlideOverflow();
+    }
+
     function scheduleTitleSlideUpdate() {
         if (titleSlideRafId) {
             cancelAnimationFrame(titleSlideRafId);
         }
-        titleSlideRafId = requestAnimationFrame(updateTitleSlideOverflow);
+        titleSlideRafId = requestAnimationFrame(runScheduledTitleSlideUpdate);
     }
 
     if (document.readyState === 'loading') {
@@ -379,7 +387,7 @@
 
                 const href = url || `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(postNum)}`;
                 const label = `[${boardDisplayName}] ${postNum}번 | ${title || '제목 없음'}`;
-                return `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></li>`;
+                return `<li><a href="${escapeHtml(href)}" data-google-vignette="false">${escapeHtml(label)}</a></li>`;
             }),
         );
 
@@ -423,6 +431,7 @@
         const anchorEl = document.createElement('a');
         anchorEl.className = options.className || 'pull btn btn-right cancel-btn';
         anchorEl.href = href;
+        anchorEl.setAttribute('data-google-vignette', 'false');
         if (options.accessKey) {
             anchorEl.setAttribute('data-sc-accesskey', options.accessKey);
         }
@@ -1232,6 +1241,7 @@
                 const liEl = document.createElement('li');
                 const anchorEl = document.createElement('a');
                 anchorEl.href = item.href;
+                anchorEl.setAttribute('data-google-vignette', 'false');
                 anchorEl.textContent = item.label;
                 if (item.accessKey) {
                     anchorEl.setAttribute('data-sc-accesskey', item.accessKey);
@@ -1341,6 +1351,7 @@
 
             const linkEl = document.createElement('a');
             linkEl.href = `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(post.postNum)}`;
+            linkEl.setAttribute('data-google-vignette', 'false');
             linkEl.textContent = post.title ?? '';
             titleTdEl.appendChild(linkEl);
 

@@ -63,29 +63,7 @@ body {
         radial-gradient(1100px 520px at 50% -120px, rgba(64, 90, 220, 0.32), transparent 70%),
         radial-gradient(900px 700px at 85% 110%, rgba(30, 48, 150, 0.20), transparent 65%),
         linear-gradient(180deg, #060c42 0%, #04072c 100%);
-    background-attachment: fixed;
-    text-shadow: 0 0 6px rgba(160, 200, 255, 0.14);
-}
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background:
-        repeating-linear-gradient(
-            to bottom,
-            rgba(255, 255, 255, 0.025) 0,
-            rgba(255, 255, 255, 0.025) 1px,
-            transparent 1px,
-            transparent 4px
-        );
-    mix-blend-mode: screen;
-    opacity: 0.10;
-}
-body > * {
-    position: relative;
-    z-index: 1;
+    background-attachment: scroll;
 }
 @media (max-width: 768px) {
     html {
@@ -990,10 +968,6 @@ body.sc-chat-fullscreen .sc-chat__ad {
 }
 
 @media screen and (max-width: 768px) {
-    body::before {
-        opacity: 0.12;
-    }
-
     fieldset {
         padding: 8px;
         background-color: var(--sc-bg-panel);

@@ -11,4 +11,5 @@ public class ChatSelfDTO {
     private int pollIntervalMillis;
     private int hiddenPollIntervalMillis;
     private int maxMessageLength;
+    private int historySize;
 }

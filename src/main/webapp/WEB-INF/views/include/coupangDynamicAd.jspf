@@ -61,74 +61,12 @@
         var nearViewport = false;
         var rendered = false;
         var observer = null;
-        var renderDelayId = null;
-        var renderIdleId = null;
-        var monitoringUserInput = false;
-        var lastUserInputAt = 0;
-        var AD_LOAD_QUIET_MILLIS = 1200;
-
-        function now() {
-            return window.performance.now();
-        }
-
-        function quietMillisRemaining() {
-            return Math.max(0, AD_LOAD_QUIET_MILLIS - (now() - lastUserInputAt));
-        }
-
-        function isUserEditing() {
-            var activeEl = document.activeElement;
-            if (!activeEl) {
-                return false;
-            }
-            var tagName = activeEl.tagName;
-            return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT'
-                    || activeEl.isContentEditable;
-        }
-
-        function hasPendingUserInput() {
-            return Boolean(navigator.scheduling && navigator.scheduling.isInputPending
-                    && navigator.scheduling.isInputPending());
-        }
-
-        function stopMonitoringUserInput() {
-            if (!monitoringUserInput) {
-                return;
-            }
-            monitoringUserInput = false;
-            document.removeEventListener('pointerdown', postponeAdForUserInput);
-            document.removeEventListener('keydown', postponeAdForUserInput);
-            window.removeEventListener('wheel', postponeAdForUserInput);
-            window.removeEventListener('touchmove', postponeAdForUserInput);
-            window.removeEventListener('scroll', postponeAdForUserInput);
-            document.removeEventListener('focusout', resumeAdAfterInput);
-        }
-
-        function cancelScheduledAdRender() {
-            if (renderDelayId !== null) {
-                window.clearTimeout(renderDelayId);
-                renderDelayId = null;
-            }
-            if (renderIdleId !== null && 'cancelIdleCallback' in window) {
-                window.cancelIdleCallback(renderIdleId);
-                renderIdleId = null;
-            }
-        }
 
         function renderAd() {
             if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
                 return;
             }
-            renderIdleId = null;
-            if (hasPendingUserInput()) {
-                lastUserInputAt = now();
-            }
-            if (isUserEditing() || quietMillisRemaining() > 0) {
-                scheduleAdRender();
-                return;
-            }
             rendered = true;
-            cancelScheduledAdRender();
-            stopMonitoringUserInput();
             if (observer) {
                 observer.disconnect();
             }
@@ -153,70 +91,14 @@
             iframeEl.setAttribute('scrolling', 'no');
             iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
             iframeEl.setAttribute('loading', 'lazy');
-            iframeEl.setAttribute('fetchpriority', 'low');
             iframeEl.title = '쿠팡 파트너스 상품 광고';
             iframeEl.src = adSrc;
             frameHostEl.appendChild(iframeEl);
         }
 
-        function renderAdWhenIdle() {
-            renderDelayId = null;
-            if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
-                return;
-            }
-            var remaining = quietMillisRemaining();
-            if (remaining > 0) {
-                renderDelayId = window.setTimeout(renderAdWhenIdle, remaining);
-                return;
-            }
-            if (isUserEditing()) {
-                return;
-            }
-            if ('requestIdleCallback' in window) {
-                renderIdleId = window.requestIdleCallback(renderAd);
-                return;
-            }
-            renderAd();
-        }
-
-        function startMonitoringUserInput() {
-            if (monitoringUserInput) {
-                return;
-            }
-            monitoringUserInput = true;
-            document.addEventListener('pointerdown', postponeAdForUserInput, { passive: true });
-            document.addEventListener('keydown', postponeAdForUserInput);
-            window.addEventListener('wheel', postponeAdForUserInput, { passive: true });
-            window.addEventListener('touchmove', postponeAdForUserInput, { passive: true });
-            window.addEventListener('scroll', postponeAdForUserInput, { passive: true });
-            document.addEventListener('focusout', resumeAdAfterInput);
-        }
-
-        function scheduleAdRender() {
-            if (rendered || !pageLoaded || !nearViewport || !containerEl.isConnected) {
-                return;
-            }
-            cancelScheduledAdRender();
-            startMonitoringUserInput();
-            renderDelayId = window.setTimeout(renderAdWhenIdle, quietMillisRemaining());
-        }
-
-        function postponeAdForUserInput() {
-            if (!rendered && nearViewport) {
-                lastUserInputAt = now();
-            }
-        }
-
-        function resumeAdAfterInput() {
-            if (!rendered && nearViewport) {
-                lastUserInputAt = now();
-                scheduleAdRender();
-            }
-        }
-
         function markPageLoaded() {
             pageLoaded = true;
-            scheduleAdRender();
+            renderAd();
         }
 
         if (!pageLoaded) {
@@ -228,17 +110,13 @@
                 var entry = entries[entries.length - 1];
                 nearViewport = Boolean(entry && entry.isIntersecting);
                 if (nearViewport) {
-                    lastUserInputAt = now();
-                    scheduleAdRender();
-                } else {
-                    cancelScheduledAdRender();
-                    stopMonitoringUserInput();
+                    renderAd();
                 }
-            }, { rootMargin: '100px 0px' });
+            }, { rootMargin: '300px 0px' });
             observer.observe(containerEl);
         } else {
             nearViewport = true;
-            scheduleAdRender();
+            renderAd();
         }
     })();
 </script>

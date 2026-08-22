@@ -1,14 +1,13 @@
 (() => {
     const terminalEl = document.getElementById('scTerminal');
     const outputEl = document.getElementById('scTerminalOutput');
-    const inputEl = document.getElementById('scTerminalInput');
-    if (!terminalEl || !outputEl || !inputEl) {
+    if (!terminalEl || !outputEl) {
         return;
     }
 
     const COLLAPSED_CLASS = 'is-collapsed';
     const MAX_QUESTION_LENGTH = 800;
-    const CHAT_AD_LOAD_QUIET_MILLIS = 1200;
+    const DEFAULT_MAX_RENDERED_MESSAGES = 50;
 
     let lastSeq = 0;
     const renderedIds = new Set();
@@ -18,19 +17,15 @@
     let hiddenPollIntervalMillis = 10000;
     let errorBackoffMillis = 0;
     let self = null;
-    // 광고 위치는 메시지 id/역할만으로 결정적으로 계산한다.
-    // 페이지를 이동해도 서버 버퍼가 같은 순서로 재렌더링되므로 광고가 같은 자리에 유지된다.
-    let recentRoles = [];
-    let sinceLastAd = Number.POSITIVE_INFINITY;
+    // 광고 위치는 현재 유지하는 메시지 id/역할만으로 결정적으로 다시 계산한다.
     let adObserver = null;
     let currentAdLineEl = null;
     let currentAdIframeEl = null;
-    let currentAdNearViewport = false;
-    let adLoadDelayId = null;
-    let adLoadIdleId = null;
-    let lastChatAdUserInputAt = 0;
-    let monitoringChatAdUserInput = false;
+    let currentAdSrc = null;
+    let currentAdAfterMessageId = null;
     let batchRendering = false;
+    let batchFragment = null;
+    let maxRenderedMessages = DEFAULT_MAX_RENDERED_MESSAGES;
 
     function getMemberMeta() {
         const metaEl = document.getElementById('scMemberMeta');
@@ -51,8 +46,6 @@
             outputEl.insertBefore(logEl, outputEl.firstChild);
             renderedIds.clear();
             lastSeq = 0;
-            recentRoles = [];
-            sinceLastAd = Number.POSITIVE_INFINITY;
         }
         return logEl;
     }
@@ -94,132 +87,28 @@
         };
     }
 
-    function cancelScheduledChatAdLoad() {
-        if (adLoadDelayId !== null) {
-            window.clearTimeout(adLoadDelayId);
-            adLoadDelayId = null;
-        }
-        if (adLoadIdleId !== null && 'cancelIdleCallback' in window) {
-            window.cancelIdleCallback(adLoadIdleId);
-            adLoadIdleId = null;
-        }
-    }
-
     function isChatExpanded() {
         return document.body.classList.contains('sc-chat-fullscreen');
     }
 
-    function isChatInputActive() {
-        return document.activeElement === inputEl;
-    }
-
-    function hasPendingChatAd() {
-        return isChatExpanded() && currentAdNearViewport && currentAdIframeEl
-            && currentAdIframeEl.isConnected && currentAdIframeEl.dataset.src;
-    }
-
-    function getChatAdQuietMillisRemaining() {
-        return Math.max(0, CHAT_AD_LOAD_QUIET_MILLIS
-            - (window.performance.now() - lastChatAdUserInputAt));
-    }
-
-    function hasPendingUserInput() {
-        return Boolean(navigator.scheduling && navigator.scheduling.isInputPending
-            && navigator.scheduling.isInputPending());
-    }
-
-    function startMonitoringChatAdUserInput() {
-        if (monitoringChatAdUserInput) {
+    function createCurrentChatAdIframe() {
+        if (!isChatExpanded() || !currentAdLineEl || !currentAdLineEl.isConnected
+                || currentAdIframeEl || !currentAdSrc) {
             return;
         }
-        monitoringChatAdUserInput = true;
-        window.addEventListener('pointerdown', postponeChatAdForUserInput, { passive: true });
-        window.addEventListener('keydown', postponeChatAdForUserInput);
-        window.addEventListener('wheel', postponeChatAdForUserInput, { passive: true });
-        window.addEventListener('touchmove', postponeChatAdForUserInput, { passive: true });
-        outputEl.addEventListener('scroll', postponeChatAdForUserInput, { passive: true });
-        inputEl.addEventListener('blur', resumeChatAdAfterInput);
+        const iframeEl = document.createElement('iframe');
+        iframeEl.width = currentAdLineEl.dataset.adWidth;
+        iframeEl.height = currentAdLineEl.dataset.adHeight;
+        iframeEl.setAttribute('frameborder', '0');
+        iframeEl.setAttribute('scrolling', 'no');
+        iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
+        iframeEl.title = '쿠팡 파트너스 광고';
+        iframeEl.src = currentAdSrc;
+        currentAdLineEl.insertBefore(iframeEl, currentAdLineEl.firstChild);
+        currentAdIframeEl = iframeEl;
     }
 
-    function stopMonitoringChatAdUserInput() {
-        if (!monitoringChatAdUserInput) {
-            return;
-        }
-        monitoringChatAdUserInput = false;
-        window.removeEventListener('pointerdown', postponeChatAdForUserInput);
-        window.removeEventListener('keydown', postponeChatAdForUserInput);
-        window.removeEventListener('wheel', postponeChatAdForUserInput);
-        window.removeEventListener('touchmove', postponeChatAdForUserInput);
-        outputEl.removeEventListener('scroll', postponeChatAdForUserInput);
-        inputEl.removeEventListener('blur', resumeChatAdAfterInput);
-    }
-
-    function loadCurrentChatAd() {
-        adLoadIdleId = null;
-        const iframeEl = currentAdIframeEl;
-        if (!hasPendingChatAd() || iframeEl !== currentAdIframeEl) {
-            return;
-        }
-        if (hasPendingUserInput()) {
-            lastChatAdUserInputAt = window.performance.now();
-        }
-        if (isChatInputActive() || getChatAdQuietMillisRemaining() > 0) {
-            scheduleChatAdLoad();
-            return;
-        }
-        iframeEl.src = iframeEl.dataset.src;
-        delete iframeEl.dataset.src;
-        if (adObserver) {
-            adObserver.unobserve(iframeEl);
-        }
-        currentAdNearViewport = false;
-        stopMonitoringChatAdUserInput();
-    }
-
-    function loadChatAdWhenIdle() {
-        adLoadDelayId = null;
-        if (!hasPendingChatAd()) {
-            return;
-        }
-        const quietMillisRemaining = getChatAdQuietMillisRemaining();
-        if (quietMillisRemaining > 0) {
-            adLoadDelayId = window.setTimeout(loadChatAdWhenIdle, quietMillisRemaining);
-            return;
-        }
-        if (isChatInputActive()) {
-            return;
-        }
-        if ('requestIdleCallback' in window) {
-            adLoadIdleId = window.requestIdleCallback(loadCurrentChatAd);
-            return;
-        }
-        loadCurrentChatAd();
-    }
-
-    function scheduleChatAdLoad() {
-        if (!hasPendingChatAd()) {
-            return;
-        }
-        cancelScheduledChatAdLoad();
-        startMonitoringChatAdUserInput();
-        adLoadDelayId = window.setTimeout(loadChatAdWhenIdle,
-            getChatAdQuietMillisRemaining());
-    }
-
-    function postponeChatAdForUserInput() {
-        if (hasPendingChatAd()) {
-            lastChatAdUserInputAt = window.performance.now();
-        }
-    }
-
-    function resumeChatAdAfterInput() {
-        if (hasPendingChatAd()) {
-            lastChatAdUserInputAt = window.performance.now();
-            scheduleChatAdLoad();
-        }
-    }
-
-    // 최신 광고가 실제 화면에 보이고 사용자 입력이 잠잠할 때만 iframe을 로드한다.
+    // 확장된 채팅에서 최신 광고가 실제 화면 근처에 보일 때 iframe을 만든다.
     function getAdObserver() {
         if (adObserver || typeof IntersectionObserver === 'undefined') {
             return adObserver;
@@ -227,60 +116,51 @@
         adObserver = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
                 if (!entry.isIntersecting) {
-                    if (entry.target === currentAdIframeEl) {
-                        currentAdNearViewport = false;
-                        cancelScheduledChatAdLoad();
-                    }
                     return;
                 }
-                const iframeEl = entry.target;
-                if (iframeEl !== currentAdIframeEl || !iframeEl.isConnected) {
-                    adObserver.unobserve(iframeEl);
+                const lineEl = entry.target;
+                if (lineEl !== currentAdLineEl || !lineEl.isConnected) {
+                    adObserver.unobserve(lineEl);
                     return;
                 }
-                currentAdNearViewport = true;
-                scheduleChatAdLoad();
+                createCurrentChatAdIframe();
+                adObserver.unobserve(lineEl);
             });
         }, { root: outputEl, rootMargin: '200px 0px' });
         return adObserver;
     }
 
     function removePreviousChatAd() {
-        cancelScheduledChatAdLoad();
-        stopMonitoringChatAdUserInput();
-        if (currentAdIframeEl && adObserver) {
-            adObserver.unobserve(currentAdIframeEl);
+        if (currentAdLineEl && adObserver) {
+            adObserver.unobserve(currentAdLineEl);
         }
         if (currentAdLineEl) {
             currentAdLineEl.remove();
         }
         currentAdLineEl = null;
         currentAdIframeEl = null;
-        currentAdNearViewport = false;
+        currentAdSrc = null;
+        currentAdAfterMessageId = null;
     }
 
     function observePendingChatAd() {
-        if (!isChatExpanded() || !currentAdIframeEl || !currentAdIframeEl.dataset.src) {
+        if (!isChatExpanded() || !currentAdLineEl || currentAdIframeEl || !currentAdSrc) {
             return;
         }
         const observer = getAdObserver();
         if (observer) {
-            observer.observe(currentAdIframeEl);
+            observer.observe(currentAdLineEl);
             return;
         }
-        currentAdNearViewport = true;
-        scheduleChatAdLoad();
+        createCurrentChatAdIframe();
     }
 
     function unloadCurrentChatAd() {
         if (!currentAdIframeEl) {
             return;
         }
-        const loadedSrc = currentAdIframeEl.getAttribute('src');
-        if (loadedSrc) {
-            currentAdIframeEl.dataset.src = loadedSrc;
-            currentAdIframeEl.removeAttribute('src');
-        }
+        currentAdIframeEl.remove();
+        currentAdIframeEl = null;
     }
 
     function setChatExpanded(expanded) {
@@ -289,59 +169,52 @@
             currentAdLineEl.setAttribute('aria-hidden', actuallyExpanded ? 'false' : 'true');
         }
         if (actuallyExpanded) {
-            lastChatAdUserInputAt = window.performance.now();
             observePendingChatAd();
         } else {
-            cancelScheduledChatAdLoad();
-            stopMonitoringChatAdUserInput();
-            if (adObserver && currentAdIframeEl) {
-                adObserver.unobserve(currentAdIframeEl);
+            if (adObserver && currentAdLineEl) {
+                adObserver.unobserve(currentAdLineEl);
             }
-            currentAdNearViewport = false;
             unloadCurrentChatAd();
         }
     }
 
     // 쿠팡 g.js는 document.write 방식이라 동적 삽입이 불가능해,
     // g.js가 최종 생성하는 위젯 iframe을 직접 만들어 채팅 로그에 붙인다.
-    function insertAdLine(config) {
+    function insertAdLine(config, afterMessageEl, afterMessageId) {
         const logEl = ensureChatLog();
         const shouldScroll = !batchRendering && isNearBottom();
 
-        // 새 광고 후보가 생기는 즉시 이전 광고와 대기 중인 iframe 로드를 제거한다.
+        // 배치에서 결정된 최신 후보 하나만 DOM에 만들고 이전 광고는 제거한다.
         removePreviousChatAd();
 
         const lineEl = document.createElement('div');
         lineEl.className = 'sc-chat__line sc-chat__ad';
         lineEl.setAttribute('aria-hidden', isChatExpanded() ? 'false' : 'true');
 
-        const iframeEl = document.createElement('iframe');
         const adSrc = 'https://ads-partners.coupang.com/widgets.html'
             + '?id=' + encodeURIComponent(config.id)
             + '&template=carousel'
             + '&trackingCode=' + encodeURIComponent(config.trackingCode)
             + '&subId=&width=' + config.width + '&height=' + config.height + '&tsource=';
-        iframeEl.width = String(config.width);
-        iframeEl.height = String(config.height);
-        iframeEl.setAttribute('frameborder', '0');
-        iframeEl.setAttribute('scrolling', 'no');
-        iframeEl.setAttribute('referrerpolicy', 'unsafe-url');
-        iframeEl.setAttribute('loading', 'lazy');
-        iframeEl.setAttribute('fetchpriority', 'low');
-        iframeEl.title = '쿠팡 파트너스 광고';
+        lineEl.dataset.adWidth = String(config.width);
+        lineEl.dataset.adHeight = String(config.height);
 
         const noticeEl = document.createElement('span');
         noticeEl.className = 'sc-chat__ad-notice';
         noticeEl.textContent = '* 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.';
 
-        lineEl.appendChild(iframeEl);
         lineEl.appendChild(noticeEl);
-        logEl.appendChild(lineEl);
+        if (afterMessageEl && afterMessageEl.parentElement === logEl) {
+            afterMessageEl.insertAdjacentElement('afterend', lineEl);
+        } else {
+            logEl.appendChild(lineEl);
+        }
         currentAdLineEl = lineEl;
-        currentAdIframeEl = iframeEl;
+        currentAdIframeEl = null;
+        currentAdSrc = adSrc;
+        currentAdAfterMessageId = afterMessageId;
 
-        // 확장 전에는 외부 광고 요청을 만들지 않고 URL만 보관한다.
-        iframeEl.dataset.src = adSrc;
+        // 축소 상태에서는 iframe 자체를 만들지 않는다. 확장 후 근접하면 즉시 로드한다.
         observePendingChatAd();
 
         if (shouldScroll) {
@@ -349,28 +222,51 @@
         }
     }
 
-    function maybeInsertAd(message) {
+    function refreshLatestChatAd() {
         const config = getChatAdConfig();
         if (!config) {
+            removePreviousChatAd();
             return;
         }
-        // AI 답변: 직전 N개(기본 5) 채팅에 AI 답변이 없을 때만 광고를 붙인다.
-        const hadRecentAi = recentRoles.includes('AI');
-        recentRoles.push(message.role);
-        if (recentRoles.length > config.aiRecentWindow) {
-            recentRoles.shift();
-        }
-        sinceLastAd += 1;
+        const logEl = ensureChatLog();
+        const messageEls = Array.from(logEl.querySelectorAll('.sc-chat__line[data-msg-id]'))
+            .sort((leftEl, rightEl) => Number.parseInt(leftEl.dataset.msgId || '', 10)
+                - Number.parseInt(rightEl.dataset.msgId || '', 10));
+        const recentRoles = [];
+        let sinceLastAd = Number.POSITIVE_INFINITY;
+        let candidate = null;
 
-        const aiAdDue = message.role === 'AI' && !hadRecentAi;
-        // 대화 N회(기본 20)마다: 전역 메시지 id 기준이라 재렌더링해도 같은 자리에 붙는다.
-        const intervalAdDue = config.messageInterval > 0
-            && message.id % config.messageInterval === 0;
-        // 광고끼리 최소 N개 메시지 간격을 두어 연달아 붙는 것을 막는다.
-        if ((aiAdDue || intervalAdDue) && sinceLastAd >= config.aiRecentWindow) {
-            insertAdLine(config);
-            sinceLastAd = 0;
+        messageEls.forEach((messageEl) => {
+            const messageId = Number.parseInt(messageEl.dataset.msgId || '', 10);
+            const role = messageEl.dataset.role || '';
+            const hadRecentAi = recentRoles.includes('AI');
+            recentRoles.push(role);
+            if (recentRoles.length > config.aiRecentWindow) {
+                recentRoles.shift();
+            }
+            sinceLastAd += 1;
+
+            const aiAdDue = role === 'AI' && !hadRecentAi;
+            const intervalAdDue = config.messageInterval > 0
+                && messageId % config.messageInterval === 0;
+            if ((aiAdDue || intervalAdDue) && sinceLastAd >= config.aiRecentWindow) {
+                candidate = { messageEl, messageId };
+                sinceLastAd = 0;
+            }
+        });
+
+        if (!candidate) {
+            removePreviousChatAd();
+            return;
         }
+        if (currentAdLineEl && currentAdLineEl.isConnected
+                && currentAdAfterMessageId === candidate.messageId) {
+            if (candidate.messageEl.nextElementSibling !== currentAdLineEl) {
+                candidate.messageEl.insertAdjacentElement('afterend', currentAdLineEl);
+            }
+            return;
+        }
+        insertAdLine(config, candidate.messageEl, candidate.messageId);
     }
 
     // AI 답변 끝의 "관련: <제목> <URL>" 줄은 URL을 숨기고 제목에 링크를 건다.
@@ -386,8 +282,20 @@
         contentEl.textContent = text.slice(0, match.index) + '\n관련: ';
         const linkEl = document.createElement('a');
         linkEl.href = match[2];
+        linkEl.setAttribute('data-google-vignette', 'false');
         linkEl.textContent = match[1];
         contentEl.appendChild(linkEl);
+    }
+
+    function insertMessageLine(logEl, lineEl) {
+        const messageId = Number.parseInt(lineEl.dataset.msgId || '', 10);
+        const nextMessageEl = Array.from(logEl.querySelectorAll('.sc-chat__line[data-msg-id]'))
+            .find((candidateEl) => Number.parseInt(candidateEl.dataset.msgId || '', 10) > messageId);
+        if (nextMessageEl) {
+            logEl.insertBefore(lineEl, nextMessageEl);
+        } else {
+            logEl.appendChild(lineEl);
+        }
     }
 
     function renderMessage(message) {
@@ -403,6 +311,7 @@
         lineEl.className = 'sc-chat__line';
         lineEl.dataset.msgId = String(message.id);
         lineEl.dataset.nick = message.nickname || '';
+        lineEl.dataset.role = message.role || '';
 
         const timeEl = document.createElement('span');
         timeEl.className = 'sc-chat__time';
@@ -429,11 +338,35 @@
             lineEl.appendChild(delEl);
         }
 
-        logEl.appendChild(lineEl);
+        if (batchFragment) {
+            batchFragment.appendChild(lineEl);
+        } else {
+            insertMessageLine(logEl, lineEl);
+        }
         if (shouldScroll) {
             scrollToBottom();
         }
-        maybeInsertAd(message);
+        if (!batchRendering) {
+            pruneOldMessages();
+            refreshLatestChatAd();
+        }
+        return lineEl;
+    }
+
+    function pruneOldMessages() {
+        const logEl = ensureChatLog();
+        const messageEls = Array.from(logEl.querySelectorAll('.sc-chat__line[data-msg-id]'))
+            .sort((leftEl, rightEl) => Number.parseInt(leftEl.dataset.msgId || '', 10)
+                - Number.parseInt(rightEl.dataset.msgId || '', 10));
+        const removeCount = Math.max(0, messageEls.length - maxRenderedMessages);
+        for (let index = 0; index < removeCount; index += 1) {
+            const messageEl = messageEls[index];
+            const messageId = Number.parseInt(messageEl.dataset.msgId || '', 10);
+            if (!Number.isNaN(messageId)) {
+                renderedIds.delete(messageId);
+            }
+            messageEl.remove();
+        }
     }
 
     function renderMessages(messages) {
@@ -441,12 +374,34 @@
             return;
         }
         const shouldScroll = isNearBottom();
+        const logEl = ensureChatLog();
+        const orderedMessages = messages.slice().sort((left, right) => {
+            const leftId = left && typeof left.id === 'number' ? left.id : Number.POSITIVE_INFINITY;
+            const rightId = right && typeof right.id === 'number' ? right.id : Number.POSITIVE_INFINITY;
+            return leftId - rightId;
+        });
+        const firstNewMessage = orderedMessages.find((message) => message
+            && typeof message.id === 'number' && !renderedIds.has(message.id));
+        const existingMessageIds = Array.from(logEl.querySelectorAll('.sc-chat__line[data-msg-id]'))
+            .map((messageEl) => Number.parseInt(messageEl.dataset.msgId || '', 10))
+            .filter((messageId) => !Number.isNaN(messageId));
+        const largestExistingId = existingMessageIds.length > 0
+            ? Math.max(...existingMessageIds)
+            : Number.NEGATIVE_INFINITY;
+        const canAppendBatch = !firstNewMessage || firstNewMessage.id > largestExistingId;
         batchRendering = true;
+        batchFragment = canAppendBatch ? document.createDocumentFragment() : null;
         try {
-            messages.forEach(renderMessage);
+            orderedMessages.forEach(renderMessage);
         } finally {
+            if (batchFragment) {
+                logEl.appendChild(batchFragment);
+            }
+            batchFragment = null;
             batchRendering = false;
         }
+        pruneOldMessages();
+        refreshLatestChatAd();
         if (shouldScroll) {
             scrollToBottom();
         }
@@ -496,6 +451,9 @@
         }
         if (data.self) {
             self = data.self;
+            if (self.historySize > 0) {
+                maxRenderedMessages = self.historySize;
+            }
             if (self.pollIntervalMillis > 0) {
                 pollIntervalMillis = self.pollIntervalMillis;
             }

@@ -53,4 +53,17 @@ class ChatRoomServiceTest {
         assertEquals("유저B", recent.get(1).getNickname());
         assertEquals("유저C", recent.get(2).getNickname());
     }
+
+    @Test
+    void pollRecentReturnsOnlyLatestMessagesInChronologicalOrder() {
+        for (int index = 1; index <= 60; index += 1) {
+            chatRoomService.postBotMessage("유저" + index, "메시지" + index);
+        }
+
+        List<ChatMessageDTO> recent = chatRoomService.pollRecent(50).getMessages();
+
+        assertEquals(50, recent.size());
+        assertEquals("유저11", recent.get(0).getNickname());
+        assertEquals("유저60", recent.get(49).getNickname());
+    }
 }

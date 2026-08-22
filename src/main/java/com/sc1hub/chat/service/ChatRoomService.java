@@ -116,6 +116,29 @@ public class ChatRoomService {
         return response;
     }
 
+    public ChatPollResponseDTO pollRecent(int limit) {
+        ChatPollResponseDTO response = new ChatPollResponseDTO();
+        List<ChatMessageDTO> messages = new ArrayList<>();
+        lock.lock();
+        try {
+            if (limit > 0) {
+                Iterator<ChatMessageDTO> iterator = buffer.descendingIterator();
+                while (iterator.hasNext() && messages.size() < limit) {
+                    ChatMessageDTO message = iterator.next();
+                    if (message != null && !message.isDeleted()) {
+                        messages.add(message);
+                    }
+                }
+                Collections.reverse(messages);
+            }
+            response.setMessages(messages);
+            response.setLastSeq(seq.get());
+        } finally {
+            lock.unlock();
+        }
+        return response;
+    }
+
     public ChatMessageDTO postUserMessage(MemberDTO member, HttpSession session, String ip, String content) {
         String trimmed = content == null ? "" : content.trim();
         if (!StringUtils.hasText(trimmed)) {

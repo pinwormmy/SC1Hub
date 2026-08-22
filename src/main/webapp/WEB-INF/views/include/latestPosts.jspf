@@ -57,12 +57,17 @@
         const anchorEl = document.createElement('a');
         anchorEl.className = 'sc-title-clip';
         anchorEl.href = url;
+        anchorEl.setAttribute('data-google-vignette', 'false');
         const titleEl = document.createElement('span');
         titleEl.className = 'sc-title-slide';
         titleEl.textContent = '[최신글] ' + title;
         anchorEl.appendChild(titleEl);
         containerEl.appendChild(anchorEl);
-        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+        requestAnimationFrame(() => {
+            if (typeof window.scUpdateTitleSlides === 'function') {
+                window.scUpdateTitleSlides(containerEl);
+            }
+        });
     }
 
     function stopRotation() {

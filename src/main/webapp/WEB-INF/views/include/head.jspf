@@ -42,15 +42,22 @@
 <link rel="stylesheet" href="/css/sc1hub-layout.css?v=${applicationScope.assetVersion}">
 <link rel="stylesheet" href="/css/style.css?v=${applicationScope.assetVersion}">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/style.css">
+<link rel="preload"
+      href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2"
+      as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+    font-family: "NeoDungGeunMo Pro";
+    font-style: normal;
+    font-weight: normal;
+    font-display: swap;
+    src: url("https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2") format("woff2");
+}
+</style>
 <script>
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';
     const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
-    const ADSENSE_DELAY_MS = 4000;
-    let adsenseDelayId = null;
-    let adsenseIdleId = null;
-    let navigationPending = false;
 
     const resolveInternalUrl = (linkEl) => {
         if (!(linkEl instanceof HTMLAnchorElement)) {
@@ -83,95 +90,44 @@
         }
     };
 
-    const protectInternalNavigation = () => {
+    const markExistingInternalLinks = () => {
         markInternalLinks(document);
-        const observer = new MutationObserver((records) => {
-            records.forEach((record) => {
-                record.addedNodes.forEach((node) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        markInternalLinks(node);
-                    }
-                });
-            });
-        });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
     };
 
-    const cancelScheduledAdsense = () => {
-        if (adsenseDelayId !== null) {
-            window.clearTimeout(adsenseDelayId);
-            adsenseDelayId = null;
-        }
-        if (adsenseIdleId !== null && 'cancelIdleCallback' in window) {
-            window.cancelIdleCallback(adsenseIdleId);
-            adsenseIdleId = null;
-        }
-    };
-
-    const prepareInternalNavigation = (event) => {
-        if (event.defaultPrevented || event.button !== 0
-                || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-            return;
-        }
+    const markActivatedInternalLink = (event) => {
         const targetEl = event.target instanceof Element ? event.target : null;
         const linkEl = targetEl ? targetEl.closest('a[href]') : null;
-        if (!linkEl || linkEl.hasAttribute('download')
-                || (linkEl.target && linkEl.target.toLowerCase() !== '_self')
-                || !resolveInternalUrl(linkEl)) {
-            return;
+        if (linkEl) {
+            markInternalLink(linkEl);
         }
-        navigationPending = true;
-        cancelScheduledAdsense();
-        window.stop();
     };
 
     const loadAdsense = () => {
-        if (navigationPending
-                || Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
+        if (Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
             return;
         }
         const scriptEl = document.createElement('script');
         scriptEl.async = true;
         scriptEl.crossOrigin = 'anonymous';
-        scriptEl.fetchPriority = 'low';
         scriptEl.src = ADSENSE_SRC;
         document.head.appendChild(scriptEl);
     };
 
-    const loadAdsenseWhenIdle = () => {
-        adsenseDelayId = null;
-        if (navigationPending) {
-            return;
-        }
-        if ('requestIdleCallback' in window) {
-            adsenseIdleId = window.requestIdleCallback(() => {
-                adsenseIdleId = null;
-                loadAdsense();
-            });
-            return;
-        }
-        loadAdsense();
-    };
-
-    const scheduleAdsense = () => {
-        if (!navigationPending && adsenseDelayId === null) {
-            adsenseDelayId = window.setTimeout(loadAdsenseWhenIdle, ADSENSE_DELAY_MS);
-        }
-    };
-
-    document.addEventListener('pointerdown', prepareInternalNavigation, { capture: true });
-    document.addEventListener('click', prepareInternalNavigation, { capture: true });
-
-    if (document.readyState === 'complete') {
-        scheduleAdsense();
-    } else {
-        window.addEventListener('load', scheduleAdsense, { once: true });
-    }
+    // 기존 링크는 한 번만 표시하고, 이후 동적 링크는 실제 클릭 직전에만 처리한다.
+    // 전체 DOM 감시와 네트워크 강제 중단을 피해서 입력과 페이지 전환을 막지 않는다.
+    document.addEventListener('click', markActivatedInternalLink, { capture: true });
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', protectInternalNavigation, { once: true });
+        document.addEventListener('DOMContentLoaded', markExistingInternalLinks, { once: true });
     } else {
-        protectInternalNavigation();
+        markExistingInternalLinks();
+    }
+
+    // 초기 화면과 페이지 전환 완료를 막지 않되, 별도 지연 없이 정상 속도로 광고를 시작한다.
+    if (document.readyState === 'complete') {
+        loadAdsense();
+    } else {
+        window.addEventListener('load', loadAdsense, { once: true });
     }
 })();
 </script>

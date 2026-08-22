@@ -71,7 +71,9 @@ public class ChatController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
         }
 
-        ChatPollResponseDTO response = chatRoomService.poll(afterSeq);
+        ChatPollResponseDTO response = afterSeq <= 0
+                ? chatRoomService.pollRecent(chatProperties.getHistorySize())
+                : chatRoomService.poll(afterSeq);
         if (afterSeq <= 0) {
             response.setSelf(buildSelf(request, session));
         }
@@ -189,6 +191,7 @@ public class ChatController {
         self.setPollIntervalMillis(chatProperties.getPollIntervalMillis());
         self.setHiddenPollIntervalMillis(chatProperties.getHiddenPollIntervalMillis());
         self.setMaxMessageLength(chatProperties.getMaxMessageLength());
+        self.setHistorySize(chatProperties.getHistorySize());
 
         String memberId = member == null ? null : member.getId();
         String restriction = moderationService.checkRestricted(memberId, resolveClientIp(request));

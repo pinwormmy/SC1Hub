@@ -69,23 +69,28 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void sharedPagePrioritizesInternalNavigationOverAdsAndDoesNotLoadGlobalJquery() throws IOException {
+    void sharedPageKeepsInternalNavigationLightweightAndLoadsAdsenseAsynchronously() throws IOException {
         String headSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
         String footerSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/footer.jspf")), StandardCharsets.UTF_8);
 
-        assertTrue(headSource.contains("requestIdleCallback"));
-        assertTrue(headSource.contains("cancelIdleCallback"));
-        assertTrue(headSource.contains("window.addEventListener('load'"));
-        assertTrue(headSource.contains("document.addEventListener('pointerdown'"));
-        assertTrue(headSource.contains("window.stop()"));
-        assertTrue(headSource.contains("fetchPriority = 'low'"));
+        assertTrue(headSource.contains("scriptEl.async = true"));
+        assertTrue(headSource.contains("scriptEl.crossOrigin = 'anonymous'"));
+        assertTrue(headSource.contains("window.addEventListener('load', loadAdsense, { once: true })"));
         assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
-        assertFalse(headSource.contains("<script async src=\"https://pagead2.googlesyndication.com"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
-        assertTrue(headSource.contains("MutationObserver"));
+        assertTrue(headSource.contains("document.addEventListener('click', markActivatedInternalLink"));
+        assertTrue(headSource.contains("DOMContentLoaded', markExistingInternalLinks, { once: true }"));
+        assertTrue(headSource.contains("font-display: swap"));
+        assertFalse(headSource.contains("requestIdleCallback"));
+        assertFalse(headSource.contains("cancelIdleCallback"));
+        assertFalse(headSource.contains("ADSENSE_DELAY_MS"));
+        assertFalse(headSource.contains("window.setTimeout"));
+        assertFalse(headSource.contains("document.addEventListener('pointerdown'"));
+        assertFalse(headSource.contains("window.stop()"));
+        assertFalse(headSource.contains("MutationObserver"));
         assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(footerSource.contains("jquery"));
     }
@@ -95,16 +100,25 @@ class LoginKeepAliveViewCoverageTest {
         Path scriptPath = Paths.get("src/main/resources/static/js/sc-chat.js");
         String source = new String(Files.readAllBytes(scriptPath), StandardCharsets.UTF_8);
 
-        int insertAdStart = source.indexOf("function insertAdLine(config)");
+        int insertAdStart = source.indexOf("function insertAdLine(config, afterMessageEl, afterMessageId)");
         int removePreviousAd = source.indexOf("removePreviousChatAd();", insertAdStart);
-        int appendNewAd = source.indexOf("logEl.appendChild(lineEl);", insertAdStart);
+        int appendNewAd = source.indexOf("afterMessageEl.insertAdjacentElement('afterend', lineEl)", insertAdStart);
+        int createIframe = source.indexOf("document.createElement('iframe')");
 
-        assertTrue(source.contains("adObserver.unobserve(currentAdIframeEl)"));
+        assertTrue(source.contains("adObserver.unobserve(currentAdLineEl)"));
         assertTrue(source.contains("currentAdLineEl.remove()"));
-        assertTrue(source.contains("iframeEl !== currentAdIframeEl || !iframeEl.isConnected"));
+        assertTrue(source.contains("lineEl !== currentAdLineEl || !lineEl.isConnected"));
         assertTrue(insertAdStart >= 0);
         assertTrue(removePreviousAd > insertAdStart);
         assertTrue(appendNewAd > removePreviousAd);
+        assertTrue(source.contains("function refreshLatestChatAd()"));
+        assertTrue(source.contains("candidate = { messageEl, messageId }"));
+        assertTrue(source.contains("lineEl.dataset.role = message.role || ''"));
+        assertTrue(source.contains("document.createDocumentFragment()"));
+        assertTrue(source.contains("DEFAULT_MAX_RENDERED_MESSAGES = 50"));
+        assertTrue(source.contains("self.historySize"));
+        assertTrue(source.contains("messageEls.length - maxRenderedMessages"));
+        assertTrue(createIframe >= 0 && createIframe == source.lastIndexOf("document.createElement('iframe')"));
     }
 
     @Test
@@ -115,33 +129,29 @@ class LoginKeepAliveViewCoverageTest {
         String chatSource = new String(Files.readAllBytes(chatScriptPath), StandardCharsets.UTF_8);
         String terminalSource = new String(Files.readAllBytes(terminalScriptPath), StandardCharsets.UTF_8);
         String styleSource = new String(Files.readAllBytes(stylePath), StandardCharsets.UTF_8);
-        int insertAdStart = chatSource.indexOf("function insertAdLine(config)");
-        int insertAdEnd = chatSource.indexOf("function maybeInsertAd(message)", insertAdStart);
+        int insertAdStart = chatSource.indexOf("function insertAdLine(config, afterMessageEl, afterMessageId)");
+        int insertAdEnd = chatSource.indexOf("function refreshLatestChatAd()", insertAdStart);
         String insertAdSource = chatSource.substring(insertAdStart, insertAdEnd);
-        int postponeStart = chatSource.indexOf("function postponeChatAdForUserInput()");
-        int postponeEnd = chatSource.indexOf("function resumeChatAdAfterInput()", postponeStart);
-        String postponeSource = chatSource.substring(postponeStart, postponeEnd);
-        int storeDeferredSource = insertAdSource.indexOf("iframeEl.dataset.src = adSrc");
-        int observeDeferredAd = insertAdSource.indexOf("observePendingChatAd();", storeDeferredSource);
 
         assertTrue(terminalSource.contains("new CustomEvent('sc:chat-expanded'"));
         assertTrue(terminalSource.contains("detail: { expanded }"));
         assertTrue(insertAdStart >= 0);
         assertTrue(insertAdEnd > insertAdStart);
-        assertTrue(storeDeferredSource >= 0);
-        assertTrue(observeDeferredAd > storeDeferredSource);
+        assertTrue(insertAdSource.contains("currentAdSrc = adSrc"));
+        assertTrue(insertAdSource.contains("observePendingChatAd();"));
+        assertFalse(insertAdSource.contains("document.createElement('iframe')"));
         assertFalse(insertAdSource.contains("iframeEl.src = adSrc"));
+        assertTrue(chatSource.contains("function createCurrentChatAdIframe()"));
+        assertTrue(chatSource.contains("iframeEl.src = currentAdSrc"));
         assertTrue(chatSource.contains("window.addEventListener('sc:chat-expanded'"));
         assertTrue(chatSource.contains("expanded && isChatExpanded()"));
         assertTrue(chatSource.contains("setChatExpanded(Boolean(event.detail && event.detail.expanded))"));
-        assertTrue(chatSource.contains("currentAdIframeEl.removeAttribute('src')"));
-        assertTrue(chatSource.contains("CHAT_AD_LOAD_QUIET_MILLIS = 1200"));
-        assertTrue(chatSource.contains("window.requestIdleCallback(loadCurrentChatAd)"));
-        assertTrue(chatSource.contains("postponeChatAdForUserInput"));
-        assertTrue(chatSource.contains("navigator.scheduling.isInputPending()"));
-        assertTrue(postponeSource.contains("lastChatAdUserInputAt = window.performance.now()"));
-        assertFalse(postponeSource.contains("scheduleChatAdLoad()"));
-        assertTrue(chatSource.contains("iframeEl.setAttribute('fetchpriority', 'low')"));
+        assertTrue(chatSource.contains("currentAdIframeEl.remove()"));
+        assertFalse(chatSource.contains("CHAT_AD_LOAD_QUIET_MILLIS"));
+        assertFalse(chatSource.contains("requestIdleCallback"));
+        assertFalse(chatSource.contains("postponeChatAdForUserInput"));
+        assertFalse(chatSource.contains("navigator.scheduling.isInputPending()"));
+        assertFalse(chatSource.contains("fetchpriority"));
         assertTrue(styleSource.contains(".sc-chat__ad {\n    display: none;"));
         assertTrue(styleSource.contains("body.sc-chat-fullscreen .sc-chat__ad {\n    display: flex;"));
     }
@@ -157,14 +167,36 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(source.contains("window.addEventListener('load'"));
         assertTrue(source.contains("IntersectionObserver"));
         assertTrue(source.contains("!pageLoaded || !nearViewport"));
-        assertTrue(source.contains("AD_LOAD_QUIET_MILLIS = 1200"));
-        assertTrue(source.contains("window.requestIdleCallback(renderAd)"));
-        assertTrue(source.contains("postponeAdForUserInput"));
-        assertTrue(source.contains("navigator.scheduling.isInputPending()"));
-        assertTrue(source.contains("rootMargin: '100px 0px'"));
+        assertTrue(source.contains("rootMargin: '300px 0px'"));
         assertTrue(source.contains("iframeEl.setAttribute('loading', 'lazy')"));
-        assertTrue(source.contains("iframeEl.setAttribute('fetchpriority', 'low')"));
         assertTrue(source.contains("iframeEl.title = '쿠팡 파트너스 상품 광고'"));
         assertTrue(source.contains("window.matchMedia('(max-width: 768px)')"));
+        assertFalse(source.contains("AD_LOAD_QUIET_MILLIS"));
+        assertFalse(source.contains("requestIdleCallback"));
+        assertFalse(source.contains("postponeAdForUserInput"));
+        assertFalse(source.contains("navigator.scheduling.isInputPending()"));
+        assertFalse(source.contains("fetchpriority"));
+    }
+
+    @Test
+    void sharedUiAvoidsContinuousPaintAndSyntheticGlobalResizeWork() throws IOException {
+        String styleSource = new String(
+                Files.readAllBytes(Paths.get("src/main/resources/static/css/style.css")),
+                StandardCharsets.UTF_8);
+        String latestPostsSource = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("include/latestPosts.jspf")),
+                StandardCharsets.UTF_8);
+        String terminalSource = new String(
+                Files.readAllBytes(Paths.get("src/main/resources/static/js/sc-terminal.js")),
+                StandardCharsets.UTF_8);
+
+        assertTrue(styleSource.contains("background-attachment: scroll"));
+        assertFalse(styleSource.contains("background-attachment: fixed"));
+        assertFalse(styleSource.contains("mix-blend-mode"));
+        assertFalse(styleSource.contains("text-shadow: 0 0 6px"));
+        assertFalse(styleSource.contains("body::before"));
+        assertTrue(latestPostsSource.contains("window.scUpdateTitleSlides(containerEl)"));
+        assertFalse(latestPostsSource.contains("dispatchEvent(new Event('resize'))"));
+        assertTrue(terminalSource.contains("function updateTitleSlideOverflow(rootEl = document)"));
     }
 }
