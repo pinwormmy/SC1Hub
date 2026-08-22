@@ -5,6 +5,9 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.service.PostContentSanitizer;
 import com.sc1hub.content.dto.ContentPostRequest;
 import com.sc1hub.content.dto.ContentPostResponse;
+import com.sc1hub.content.dto.ContentPostForm;
+import com.sc1hub.content.service.ContentPostComposer;
+import com.sc1hub.file.dto.PostImageResponse;
 import com.sc1hub.file.service.PostImageService;
 import com.sc1hub.member.dto.MemberDTO;
 import org.junit.jupiter.api.Test;
@@ -13,8 +16,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockMultipartFile;
+
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -33,7 +41,7 @@ class ContentAdminControllerTest {
     @Test
     void publishPost_usesAuthenticatedAdminWriterAndReturnsLocation() throws Exception {
         PostContentSanitizer sanitizer = new PostContentSanitizer();
-        ContentAdminController controller = new ContentAdminController(boardService, sanitizer, postImageService);
+        ContentAdminController controller = controller(sanitizer);
         when(boardService.getKoreanTitle("tvspboard")).thenReturn("테프전");
         doAnswer(invocation -> {
             BoardDTO post = invocation.getArgument(1);
@@ -58,5 +66,73 @@ class ContentAdminControllerTest {
         assertEquals(42, response.getBody().getPostNum());
         assertEquals("/boards/tvspboard/readPost?postNum=42", response.getHeaders().getLocation().toString());
         verify(boardService).submitPost(eq("tvspboard"), any(BoardDTO.class));
+    }
+
+    @Test
+    void listAndReadPosts_returnExistingBoardContentWithoutIncreasingViews() throws Exception {
+        ContentAdminController controller = controller(new PostContentSanitizer());
+        BoardDTO summary = new BoardDTO();
+        summary.setPostNum(12);
+        summary.setTitle("헌터 팀플");
+        BoardDTO detail = new BoardDTO();
+        detail.setPostNum(12);
+        detail.setContent("<p>본문</p>");
+        when(boardService.getKoreanTitle("teamplayguideboard")).thenReturn("팀플 게시판");
+        when(boardService.getRecentPosts("teamplayguideboard", 20))
+                .thenReturn(Collections.singletonList(summary));
+        when(boardService.readPost("teamplayguideboard", 12)).thenReturn(detail);
+
+        assertEquals("헌터 팀플", controller.listPosts("TEAMPLAYGUIDEBOARD", 20).get(0).getTitle());
+        assertEquals("<p>본문</p>", controller.readPost("teamplayguideboard", 12).getContent());
+    }
+
+    @Test
+    void listPosts_rejectsExcessiveLimit() {
+        ContentAdminController controller = controller(new PostContentSanitizer());
+        when(boardService.getKoreanTitle("tvspboard")).thenReturn("테프전");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> controller.listPosts("tvspboard", 101));
+
+        assertEquals("조회 개수는 1개 이상 100개 이하로 입력해주세요.", error.getMessage());
+    }
+
+    @Test
+    void publishPostWithMedia_placesOptimizedImageFirstAndYoutubeLast() throws Exception {
+        PostContentSanitizer sanitizer = new PostContentSanitizer();
+        ContentAdminController controller = controller(sanitizer);
+        when(boardService.getKoreanTitle("teamplayguideboard")).thenReturn("팀플 게시판");
+        when(postImageService.store(any(), eq(""))).thenReturn(new PostImageResponse(
+                "teamplay.jpg", "/uploadedImg/teamplay.jpg", "image/jpeg", 700, 394, 123_000));
+        doAnswer(invocation -> {
+            BoardDTO post = invocation.getArgument(1);
+            post.setPostNum(13);
+            assertEquals("운영자", post.getWriter());
+            assertTrue(post.getContent().startsWith("<figure class=\"sc-post-image\">"));
+            assertTrue(post.getContent().contains("width=\"700\""));
+            assertTrue(post.getContent().contains("합류냐 역공이냐"));
+            assertTrue(post.getContent().contains("https://www.youtube-nocookie.com/embed/vi36jGm_cgw"));
+            assertTrue(post.getContent().contains("width=\"100%\""));
+            assertTrue(post.getContent().endsWith("</div>"));
+            return null;
+        }).when(boardService).submitPost(eq("teamplayguideboard"), any(BoardDTO.class));
+
+        ContentPostForm form = new ContentPostForm();
+        form.setTitle("헌터 팀플");
+        form.setContent("<p>합류냐 역공이냐</p>");
+        form.setImageCaption("3초 안에 결정");
+        form.setYoutubeUrl("https://www.youtube.com/watch?v=vi36jGm_cgw");
+        MockMultipartFile image = new MockMultipartFile(
+                "upload", "teamplay.jpg", "image/jpeg", new byte[] { 1, 2, 3 });
+
+        ResponseEntity<ContentPostResponse> response = controller.publishPostWithMedia(
+                "teamplayguideboard", form, image, new MockHttpServletRequest());
+
+        assertEquals(201, response.getStatusCodeValue());
+        assertEquals(13, response.getBody().getPostNum());
+    }
+
+    private ContentAdminController controller(PostContentSanitizer sanitizer) {
+        return new ContentAdminController(boardService, sanitizer, postImageService, new ContentPostComposer());
     }
 }

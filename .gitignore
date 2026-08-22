@@ -5,6 +5,7 @@ HELP.md
 build/
 .local-data/
 .deploy.env
+.content-api.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
