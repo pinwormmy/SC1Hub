@@ -21,16 +21,16 @@ public class AssistantConfig {
     @Bean
     public RestTemplate geminiRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .connectTimeout(Duration.ofSeconds(5))
-                .readTimeout(Duration.ofSeconds(30))
+                .setConnectTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(30))
                 .build();
     }
 
     @Bean(name = "assistantOpenAiRestTemplate")
     public RestTemplate assistantOpenAiRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .connectTimeout(Duration.ofSeconds(5))
-                .readTimeout(Duration.ofSeconds(30))
+                .setConnectTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(30))
                 .build();
     }
 }

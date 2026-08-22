@@ -1,88 +1,65 @@
 # SC1Hub Platform Upgrade Runbook
 
-This runbook covers the one-time migration from the legacy Cafe24 runtime to
-the Jakarta-based runtime. It intentionally excludes application features and
-database schema changes so that the previous WAR can be restored safely.
+This runbook covers the no-plan-change platform refresh for the Cafe24 general
+hosting environment. The Cafe24 runtime must remain Tomcat 8.5 / JDK 8; the
+release changes only the application WAR and build dependencies.
 
 ## Target
 
-- Java 17
-- External Tomcat 10.0.x
-- Servlet 5.0 / JSP 3.0
-- Spring Boot 3.5.x application WAR
-- MariaDB 10.1.x, unchanged
+- Java 8 bytecode and runtime
+- Existing external Tomcat 8.5.x
+- Spring Boot 2.7.18 application WAR
+- MyBatis Spring Boot Starter 2.3.2
+- Gradle 7.6.4
+- Existing MariaDB and hosting plan, unchanged
+
+Spring Boot 3, Jakarta Servlet, Tomcat 10, and JDK 17 are explicitly out of
+scope because the current 64 MB hosting limit does not provide enough runtime
+headroom.
 
 ## Release gates
 
-Do not change the Cafe24 runtime until all of the following are true:
+Do not deploy until all of the following are true:
 
-1. The full test suite and `./gradlew clean build` pass on Java 17.
-2. The new WAR passes smoke tests on an external Tomcat 10.0.x instance.
-3. Database connectivity is verified against a non-production MariaDB 10.1.x
-   database using the production schema.
-4. The current production WAR, uploaded files, configuration, and database
-   have been backed up and the backup locations have been verified.
-5. Both the old and new WAR artifacts have recorded SHA-256 checksums.
-6. The Cafe24 Tomcat 10 home, webapps, log, and control-script paths have been
-   confirmed. Do not assume they are identical to the Tomcat 8.5 paths.
-7. Push authorization and deploy authorization have been obtained separately.
+1. `./gradlew clean build` passes on an actual Java 8 JDK.
+2. The WAR verifier confirms Java EE dependencies and rejects embedded Tomcat
+   jars or Jakarta Servlet API jars from `WEB-INF/lib`.
+3. The current production WAR and configuration have verified backups and
+   recorded SHA-256 checksums.
+4. The checkout is clean, on `main`, and the release commit is contained in
+   `origin/main`.
+5. The server is still Tomcat 8.5 / JDK 8 with `-Xmx64m` before deployment.
 
-Run the optional connector check against a disposable compatibility database
-with `SC1HUB_DB_COMPAT_URL`, `SC1HUB_DB_COMPAT_USERNAME`, and
-`SC1HUB_DB_COMPAT_PASSWORD`, then execute
-`./gradlew test --tests com.sc1hub.MariaDbConnectorIntegrationTest`. The
-release gate still requires a MariaDB 10.1.x staging database; a newer MySQL or
-H2 test does not substitute for that exact server-version check.
+## Deployment
 
-The upgrade WAR contains MariaDB Connector/J rather than MySQL Connector/J.
-Before Tomcat is stopped, `deploy.sh` runs
-`scripts/migrate-online-datasource-to-mariadb.sh` against the external online
-configuration. The script retains `application-online.properties.pre-jakarta`
-and refuses ambiguous configurations or `useSSL=true`; choose and verify an
-explicit MariaDB `sslMode` before cutover in that case. Never remove the
-pre-Jakarta configuration while rollback remains possible.
-
-The legacy `serverTimezone` option is replaced with
-`connectionTimeZone=LOCAL`, while the deployment configures the JVM with
-`-Duser.timezone=Asia/Seoul`. This avoids requiring named time-zone tables on
-the MariaDB server while keeping application-side date handling in Korea time.
-
-## Cutover
-
-1. Announce the maintenance window and stop writes where practical.
-2. Recheck the data and database backups.
-3. Change the Cafe24 server environment to Tomcat 10.0.x / JDK 17.
-4. Confirm the active Java and Tomcat versions through the server connection.
-5. Run the datasource configuration migration and verify that its backup exists.
-6. Deploy the pre-verified Jakarta WAR without rebuilding it on the server.
-7. Restart Tomcat and inspect startup logs for deployment errors.
-8. Verify the local health check and then the public endpoints:
-   - `/`
-   - `/api/chat/messages?afterSeq=0`
-   - `/strategy-tips`
-   - an existing board list and post
-   - login/session behavior
-   - an uploaded image
-9. Confirm that unauthenticated admin content API access is denied.
+1. Upload the verified WAR without changing the Cafe24 server environment or
+   hosting plan.
+2. Preserve the previous WAR as `ROOT.war.rollback`.
+3. Stop Tomcat, replace the WAR, remove only the exploded `ROOT` directory,
+   and restart Tomcat.
+4. Require the local health endpoint to stay responsive continuously for at
+   least 30 seconds after startup.
+5. Verify the public endpoints, login/session behavior, uploaded images, and
+   unauthenticated admin API denial.
+6. Inspect the new Catalina log for startup errors and memory failures.
 
 ## Rollback
 
-Rollback immediately if the application fails to start, database connectivity
-fails, sessions cannot be created, JSPs do not render, or critical write paths
-fail their smoke tests.
+Rollback immediately if startup fails, the 30-second stability gate fails,
+database connectivity fails, JSPs do not render, or a critical public check
+fails.
 
-1. Preserve the failed Tomcat 10 logs and deployed WAR for diagnosis.
-2. Change the Cafe24 server environment back to Tomcat 8.5.x / JDK 8.
-3. Restore the verified legacy WAR and
-   `application-online.properties.pre-jakarta` together.
-4. Restart Tomcat and repeat the public endpoint checks.
-5. Restore data or the database only if the cutover changed them unexpectedly.
-   The platform migration itself must not contain schema changes.
+1. Stop Tomcat and preserve the failed deployment log for diagnosis.
+2. Restore `ROOT.war.rollback` as `ROOT.war`.
+3. Remove only the failed exploded `ROOT` directory and restart Tomcat.
+4. Repeat the local and public endpoint checks.
+5. Do not change the Cafe24 runtime or plan during rollback; both WARs target
+   the same Tomcat 8.5 / JDK 8 environment.
 
-## Post-cutover
+## Post-deployment
 
-- Monitor application errors, HTTP 5xx responses, session/login failures,
-  image delivery, and database connection errors.
-- Keep the legacy artifacts and verified backups until the new runtime has
-  completed an agreed stability period.
-- Perform structural refactoring only after the platform release is stable.
+- Monitor HTTP 5xx responses, login/session failures, image delivery, database
+  connection errors, and memory errors.
+- Keep the legacy artifact and verified backups through the stability period.
+- Perform structural refactoring only after this dependency-only release is
+  stable.

@@ -1,7 +1,7 @@
 package com.sc1hub.common.util;
 
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
 
 public class CookieUtils {
 

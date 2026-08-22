@@ -3,7 +3,7 @@ package com.sc1hub.common.config;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.stereotype.Component;
 
-import jakarta.servlet.ServletContext;
+import javax.servlet.ServletContext;
 
 /**
  * 정적 리소스(css/js) 캐시 무효화용 버전 값.

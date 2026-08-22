@@ -5,6 +5,7 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -133,12 +134,20 @@ public class ContentPostComposer {
         }
         for (String token : rawQuery.split("&")) {
             String[] pair = token.split("=", 2);
-            String name = URLDecoder.decode(pair[0], StandardCharsets.UTF_8);
+            String name = decodeUtf8(pair[0]);
             if (expectedName.equals(name)) {
-                return pair.length > 1 ? URLDecoder.decode(pair[1], StandardCharsets.UTF_8) : "";
+                return pair.length > 1 ? decodeUtf8(pair[1]) : "";
             }
         }
         return null;
+    }
+
+    private String decodeUtf8(String value) {
+        try {
+            return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("UTF-8 is not supported by this Java runtime.", e);
+        }
     }
 
     private IllegalArgumentException invalidYoutubeUrl() {
