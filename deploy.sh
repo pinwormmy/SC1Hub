@@ -201,6 +201,15 @@ ssh "$REMOTE" \
      done
      return 1
    }
+   wait_for_stable_local_health() {
+     if ! wait_for_local_health; then
+       return 1
+     fi
+     for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+       perl -e 'select undef, undef, undef, 1' 2>/dev/null || true
+     done
+     wait_for_local_health
+   }
    wait_for_tomcat_shutdown() {
      attempt=0
      while [ \"\$attempt\" -lt 50 ]; do
@@ -262,7 +271,7 @@ ssh "$REMOTE" \
      rollback_and_restart || true
      exit 1
    fi
-   if wait_for_local_health; then
+   if wait_for_stable_local_health; then
      DEPLOY_SUCCEEDED=1
      exit 0
    fi
