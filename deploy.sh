@@ -127,8 +127,13 @@ ssh "$REMOTE" \
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
    chmod +x "\$REMOTE_DATASOURCE_MIGRATION_SCRIPT"
    RUNTIME_DETAILS=\$("\$REMOTE_TOMCAT_DIR/bin/version.sh" 2>&1 || true)
-   if ! printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'Server version: Apache Tomcat/10\.0\.' \
-      || ! printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'JVM Version: +17\.'; then
+   TOMCAT_RUNTIME_OK=0
+   JAVA_RUNTIME_OK=0
+   printf '%s' "\$RUNTIME_DETAILS" | grep -Fq 'Server version: Apache Tomcat/10.0.' \
+     && TOMCAT_RUNTIME_OK=1
+   printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'JVM Version:[[:space:]]+17\.' \
+     && JAVA_RUNTIME_OK=1
+   if [ "\$TOMCAT_RUNTIME_OK" != "1" ] || [ "\$JAVA_RUNTIME_OK" != "1" ]; then
      echo 'Cafe24 must be running Tomcat 10.0.x and Java 17 before this WAR is installed.' >&2
      exit 1
    fi
