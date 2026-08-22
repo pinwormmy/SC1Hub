@@ -127,16 +127,23 @@ ssh "$REMOTE" \
    chmod +x '$REMOTE_CLEANUP_SCRIPT'
    chmod +x "\$REMOTE_DATASOURCE_MIGRATION_SCRIPT"
    RUNTIME_DETAILS=\$("\$REMOTE_TOMCAT_DIR/bin/version.sh" 2>&1 || true)
-   TOMCAT_RUNTIME_OK=0
-   JAVA_RUNTIME_OK=0
-   printf '%s' "\$RUNTIME_DETAILS" | grep -Fq 'Server version: Apache Tomcat/10.0.' \
-     && TOMCAT_RUNTIME_OK=1
-   printf '%s' "\$RUNTIME_DETAILS" | grep -Eq 'JVM Version:[[:space:]]+17\.' \
-     && JAVA_RUNTIME_OK=1
-   if [ "\$TOMCAT_RUNTIME_OK" != "1" ] || [ "\$JAVA_RUNTIME_OK" != "1" ]; then
-     echo 'Cafe24 must be running Tomcat 10.0.x and Java 17 before this WAR is installed.' >&2
-     exit 1
-   fi
+   TOMCAT_VERSION=\$(printf '%s\n' "\$RUNTIME_DETAILS" | awk '/^Server version:/ { print \$4; exit }')
+   JVM_VERSION=\$(printf '%s\n' "\$RUNTIME_DETAILS" | awk '/^JVM Version:/ { print \$3; exit }')
+   case "\$TOMCAT_VERSION" in
+     Tomcat/10.0.*) ;;
+     *)
+       echo "Cafe24 Tomcat 10.0.x is required; detected: \${TOMCAT_VERSION:-unknown}" >&2
+       exit 1
+       ;;
+   esac
+   case "\$JVM_VERSION" in
+     17.*) ;;
+     *)
+       echo "Cafe24 Java 17 is required; detected: \${JVM_VERSION:-unknown}" >&2
+       exit 1
+       ;;
+   esac
+   echo "Cafe24 runtime verified: \$TOMCAT_VERSION / Java \$JVM_VERSION"
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
