@@ -19,6 +19,8 @@ import java.util.regex.Pattern;
 public class ContentPostComposer {
 
     private static final Pattern YOUTUBE_VIDEO_ID = Pattern.compile("[A-Za-z0-9_-]{6,20}");
+    private static final String YOUTUBE_EMBED_PREFIX = "https://www.youtube-nocookie.com/embed/";
+    private static final String YOUTUBE_WATCH_PREFIX = "https://www.youtube.com/watch?v=";
     private static final Set<String> YOUTUBE_HOSTS = new HashSet<>(Arrays.asList(
             "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
             "youtube-nocookie.com", "www.youtube-nocookie.com"
@@ -59,7 +61,8 @@ public class ContentPostComposer {
     }
 
     private void appendYoutube(StringBuilder html, String youtubeUrl, String youtubeTitle) {
-        String embedUrl = toYoutubeEmbedUrl(youtubeUrl);
+        String videoId = toYoutubeVideoId(youtubeUrl);
+        String embedUrl = YOUTUBE_EMBED_PREFIX + videoId;
         if (html.length() > 0) {
             html.append("<p><br></p>");
         }
@@ -73,9 +76,25 @@ public class ContentPostComposer {
                 .attr("allowfullscreen", "")
                 .attr("loading", "lazy");
         html.append(container.outerHtml());
+
+        Element source = new Element("div").addClass("sc-video-source");
+        source.appendElement("a")
+                .attr("href", YOUTUBE_WATCH_PREFIX + videoId)
+                .attr("target", "_blank")
+                .attr("rel", "noopener noreferrer")
+                .text("유튜브에서 영상 보기");
+        html.append(source.outerHtml());
     }
 
     String toYoutubeEmbedUrl(String rawUrl) {
+        return YOUTUBE_EMBED_PREFIX + toYoutubeVideoId(rawUrl);
+    }
+
+    String toYoutubeWatchUrl(String rawUrl) {
+        return YOUTUBE_WATCH_PREFIX + toYoutubeVideoId(rawUrl);
+    }
+
+    private String toYoutubeVideoId(String rawUrl) {
         try {
             URI uri = URI.create(rawUrl.trim());
             if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
@@ -96,7 +115,7 @@ public class ContentPostComposer {
             if (!StringUtils.hasText(videoId) || !YOUTUBE_VIDEO_ID.matcher(videoId).matches()) {
                 throw invalidYoutubeUrl();
             }
-            return "https://www.youtube-nocookie.com/embed/" + videoId;
+            return videoId;
         } catch (IllegalArgumentException e) {
             if ("올바른 유튜브 주소를 입력해주세요.".equals(e.getMessage())) {
                 throw e;

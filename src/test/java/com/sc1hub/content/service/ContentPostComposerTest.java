@@ -26,6 +26,11 @@ class ContentPostComposerTest {
         assertTrue(html.contains("<p>첫 단락</p><p>둘째 단락</p>"));
         assertTrue(html.contains("src=\"https://www.youtube-nocookie.com/embed/vi36jGm_cgw\""));
         assertTrue(html.contains("width=\"100%\""));
+        assertTrue(html.contains("class=\"sc-video-source\""));
+        assertTrue(html.contains("href=\"https://www.youtube.com/watch?v=vi36jGm_cgw\""));
+        assertTrue(html.indexOf("sc-post-image") < html.indexOf("<p>첫 단락</p>"));
+        assertTrue(html.indexOf("<p>둘째 단락</p>") < html.indexOf("sc-video-embed"));
+        assertTrue(html.indexOf("sc-video-embed") < html.indexOf("sc-video-source"));
         assertTrue(html.endsWith("</div>"));
     }
 
@@ -37,6 +42,8 @@ class ContentPostComposerTest {
                 composer.toYoutubeEmbedUrl("https://www.youtube.com/shorts/vi36jGm_cgw"));
         assertEquals("https://www.youtube-nocookie.com/embed/vi36jGm_cgw",
                 composer.toYoutubeEmbedUrl("https://www.youtube-nocookie.com/embed/vi36jGm_cgw"));
+        assertEquals("https://www.youtube.com/watch?v=vi36jGm_cgw",
+                composer.toYoutubeWatchUrl("https://youtu.be/vi36jGm_cgw?feature=shared"));
     }
 
     @Test

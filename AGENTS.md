@@ -39,6 +39,14 @@
 - Inspect `personaName`, `generationMode`, `status`, `publishedPostNum`, and `createdAt`.
 - `sc1hub.assistant.bot.autoPublishCatchUpEnabled=true` processes missed daily slots later the same day.
 
+## AI-Assisted Content Publishing
+
+- Keep AI/Codex publishing on the administrator content API and `scripts/sc1hub-content-api.sh`; do not automate the human `/boards/{boardTitle}/submitPost` form or change the editor just to support automation.
+- Before drafting, inspect the target board and recent posts with `boards`, `list`, and `read`. Keep the generated body file to article HTML only.
+- For a hero image or YouTube video, pass them as separate `publish` inputs. The server optimizes and places the image at the top, then places the responsive YouTube embed and canonical source link at the bottom. Do not duplicate either item inside the body HTML.
+- Set meaningful image alt text and captions through `SC1HUB_POST_IMAGE_ALT` and `SC1HUB_POST_IMAGE_CAPTION`. After publishing, read the returned post and verify title, writer, top image, body, bottom video/link, and public URL before reporting completion.
+- Publishing changes live data and always requires an explicit user request. Reading boards/posts and preparing a draft do not authorize publication.
+
 ## Handoff
 
 Report changed behavior/files, checks and results, current branch and exact commit SHA when committed, and whether the final build, `main` push, and deploy remain. If a temporary branch is still unmerged, state that clearly and include the proposed merge command. UI changes need screenshots before release.

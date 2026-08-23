@@ -43,6 +43,18 @@ class PostEditorViewCoverageTest {
         assertTrue(script.contains("safePreviewHtml"));
     }
 
+    @Test
+    void readPostStylesComposedImageAndYoutubeMediaResponsively() throws Exception {
+        String readView = read(VIEW_ROOT.resolve("board/readPost.jsp"));
+        String style = read(STATIC_ROOT.resolve("css/readPost.css"));
+
+        assertTrue(readView.contains("/css/readPost.css"));
+        assertTrue(style.contains(".post-content .sc-post-image"));
+        assertTrue(style.contains(".post-content .sc-video-embed"));
+        assertTrue(style.contains("padding-top: 56.25%"));
+        assertTrue(style.contains(".post-content .sc-video-source"));
+    }
+
     private String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }

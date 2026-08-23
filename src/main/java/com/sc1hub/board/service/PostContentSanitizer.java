@@ -19,7 +19,7 @@ public class PostContentSanitizer {
             "youtube.com", "www.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"
     ));
     private static final Set<String> ALLOWED_CLASSES = new HashSet<>(Arrays.asList(
-            "sc-video-embed", "sc-post-image"
+            "sc-video-embed", "sc-video-source", "sc-post-image"
     ));
 
     private final Safelist safelist;

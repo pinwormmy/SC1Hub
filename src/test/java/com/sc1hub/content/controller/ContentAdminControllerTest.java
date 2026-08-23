@@ -113,6 +113,8 @@ class ContentAdminControllerTest {
             assertTrue(post.getContent().contains("합류냐 역공이냐"));
             assertTrue(post.getContent().contains("https://www.youtube-nocookie.com/embed/vi36jGm_cgw"));
             assertTrue(post.getContent().contains("width=\"100%\""));
+            assertTrue(post.getContent().contains("class=\"sc-video-source\""));
+            assertTrue(post.getContent().contains("href=\"https://www.youtube.com/watch?v=vi36jGm_cgw\""));
             assertTrue(post.getContent().endsWith("</div>"));
             return null;
         }).when(boardService).submitPost(eq("teamplayguideboard"), any(BoardDTO.class));
