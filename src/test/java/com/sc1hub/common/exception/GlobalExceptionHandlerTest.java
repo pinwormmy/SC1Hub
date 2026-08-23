@@ -4,10 +4,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import javax.servlet.http.HttpServletResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 class GlobalExceptionHandlerTest {
 
@@ -40,5 +48,27 @@ class GlobalExceptionHandlerTest {
         assertEquals("POST", response.getHeader("Allow"));
         assertEquals("noindex,nofollow,noarchive", response.getHeader("X-Robots-Tag"));
         assertEquals("noindex,nofollow,noarchive", model.get("robots"));
+    }
+
+    @Test
+    void methodMismatch_isHandledThroughDispatcherServlet() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new PostOnlyController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(get("/post-only"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow", "POST"))
+                .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"))
+                .andExpect(view().name("alert"));
+    }
+
+    @RestController
+    private static class PostOnlyController {
+
+        @PostMapping("/post-only")
+        String postOnly() {
+            return "ok";
+        }
     }
 }

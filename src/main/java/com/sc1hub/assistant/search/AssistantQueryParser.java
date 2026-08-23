@@ -572,7 +572,7 @@ public class AssistantQueryParser {
         return boardId == null ? "" : boardId.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static List<String> extractKeywords(String message) {
+    public static List<String> extractKeywords(String message) {
         if (!StringUtils.hasText(message)) {
             return Collections.emptyList();
         }
@@ -594,7 +594,7 @@ public class AssistantQueryParser {
             if (normalizedToken.length() < 2) {
                 continue;
             }
-            if (STOPWORDS.contains(normalizedToken)) {
+            if (isStopword(normalizedToken)) {
                 continue;
             }
             unique.add(normalizedToken);
@@ -607,7 +607,7 @@ public class AssistantQueryParser {
         return keywords;
     }
 
-    private static String normalizeKeywordToken(String token) {
+    public static String normalizeKeywordToken(String token) {
         if (!StringUtils.hasText(token)) {
             return "";
         }
@@ -616,6 +616,11 @@ public class AssistantQueryParser {
             return normalized;
         }
         return stripKoreanParticles(normalized);
+    }
+
+    public static boolean isStopword(String value) {
+        return StringUtils.hasText(value)
+                && STOPWORDS.contains(value.trim().toLowerCase(Locale.ROOT));
     }
 
     private static boolean hasKorean(String value) {

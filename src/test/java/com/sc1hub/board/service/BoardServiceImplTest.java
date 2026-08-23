@@ -2,6 +2,7 @@ package com.sc1hub.board.service;
 
 import com.sc1hub.assistant.search.AssistantSearchTermsService;
 import com.sc1hub.board.dto.BoardDTO;
+import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.common.dto.PageDTO;
@@ -190,6 +191,136 @@ class BoardServiceImplTest {
 
         verify(boardMapper, never()).saveViewUserIp(anyString(), anyInt(), anyString());
         verify(boardMapper, never()).updateViews(anyString(), anyInt());
+    }
+
+    @Test
+    void addComment_insertsAndSynchronizesCommentCount() throws Exception {
+        CommentDTO comment = new CommentDTO();
+        comment.setPostNum(17);
+        comment.setContent("댓글");
+
+        boardService.addComment("FreeBoard", comment);
+
+        verify(boardMapper).addComment("freeboard", comment);
+        verify(boardMapper).updateCommentCount("freeboard", 17);
+    }
+
+    @Test
+    void deleteComment_allowsOwningMemberAndSynchronizesActualPost() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setId("owner");
+        MemberDTO owner = new MemberDTO();
+        owner.setId("owner");
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+
+        boardService.deleteComment("FreeBoard", 9, owner, null);
+
+        verify(boardMapper).deleteComment("freeboard", 9);
+        verify(boardMapper).updateCommentCount("freeboard", 17);
+    }
+
+    @Test
+    void deleteComment_allowsGuestOnlyWithStoredPassword() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setPassword("secret");
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+
+        boardService.deleteComment("FreeBoard", 9, null, " secret ");
+
+        verify(boardMapper).deleteComment("freeboard", 9);
+        verify(boardMapper).updateCommentCount("freeboard", 17);
+    }
+
+    @Test
+    void deleteComment_rejectsNonOwner() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setId("owner");
+        MemberDTO other = new MemberDTO();
+        other.setId("other");
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+
+        assertThrows(AccessDeniedException.class,
+                () -> boardService.deleteComment("FreeBoard", 9, other, null));
+
+        verify(boardMapper, never()).deleteComment(anyString(), anyInt());
+        verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
+    }
+
+    @Test
+    void deleteComment_rejectsLegacyGuestWithoutStoredPassword() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+
+        assertThrows(AccessDeniedException.class,
+                () -> boardService.deleteComment("FreeBoard", 9, null, "anything"));
+
+        verify(boardMapper, never()).deleteComment(anyString(), anyInt());
+    }
+
+    @Test
+    void deleteComment_rejectsWrongGuestPassword() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setPassword("secret");
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+
+        assertThrows(AccessDeniedException.class,
+                () -> boardService.deleteComment("FreeBoard", 9, null, "wrong"));
+
+        verify(boardMapper, never()).deleteComment(anyString(), anyInt());
+        verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
+    }
+
+    @Test
+    void deleteComment_doesNotUpdateCountWhenDeleteAffectsNoRow() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setId("owner");
+        MemberDTO owner = new MemberDTO();
+        owner.setId("owner");
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(0);
+
+        assertThrows(IllegalStateException.class,
+                () -> boardService.deleteComment("FreeBoard", 9, owner, null));
+
+        verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
+    }
+
+    @Test
+    void deleteComment_allowsAdministratorRegardlessOfOwner() throws Exception {
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setId("owner");
+        MemberDTO admin = new MemberDTO();
+        admin.setGrade(3);
+
+        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+
+        boardService.deleteComment("FreeBoard", 9, admin, null);
+
+        verify(boardMapper).deleteComment("freeboard", 9);
+        verify(boardMapper).updateCommentCount("freeboard", 17);
     }
 
     @Test

@@ -9,9 +9,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Collections;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,7 +29,7 @@ class AssistantQueryParserTest {
         ObjectMapper objectMapper = new ObjectMapper();
         AssistantQueryExpansion expansion = new AssistantQueryExpansion(objectMapper);
         queryParser = new AssistantQueryParser(aliasDictionaryMapper, objectMapper, expansion);
-        when(aliasDictionaryMapper.selectAll()).thenReturn(Collections.emptyList());
+        lenient().when(aliasDictionaryMapper.selectAll()).thenReturn(Collections.emptyList());
     }
 
     @Test
@@ -65,5 +67,12 @@ class AssistantQueryParserTest {
         assertEquals("TvP", result.getMatchup());
         assertTrue(result.getConfidence() >= 0.7);
         assertTrue(result.getBoardWeights().containsKey("tvspboard"));
+    }
+
+    @Test
+    void extractKeywords_normalizesParticlesAndFiltersStopwords() {
+        assertEquals(
+                Arrays.asList("히드라", "저그"),
+                AssistantQueryParser.extractKeywords("저그로 운영 공략 알려줘 히드라를"));
     }
 }

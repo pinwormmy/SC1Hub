@@ -29,7 +29,8 @@ public interface BoardService {
 
     List<CommentDTO> showCommentList(String boardTitle, PageDTO page) throws Exception;
 
-    void deleteComment(String boardTitle, int commentNum) throws Exception;
+    void deleteComment(String boardTitle, int commentNum, MemberDTO requestingMember, String guestPassword)
+            throws Exception;
 
     void updateCommentCount(String boardTitle, int postNum) throws Exception;
 

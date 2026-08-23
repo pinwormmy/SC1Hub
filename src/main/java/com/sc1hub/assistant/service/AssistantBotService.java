@@ -390,7 +390,6 @@ public class AssistantBotService {
                 return response;
             }
             boardService.addComment(history.getBoardTitle(), comment);
-            boardService.updateCommentCount(history.getBoardTitle(), history.getTargetPostNum());
             markPublished(historyId, history.getTargetPostNum());
             populatePublishedResponse(response, history.getTargetPostNum(),
                     buildReadPostRedirectUrl(history.getBoardTitle(), history.getTargetPostNum()));

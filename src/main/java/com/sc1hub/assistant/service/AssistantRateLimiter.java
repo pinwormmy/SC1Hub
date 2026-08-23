@@ -12,7 +12,6 @@ import java.time.LocalDate;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class AssistantRateLimiter {
@@ -57,16 +56,16 @@ public class AssistantRateLimiter {
 
         int current;
         int used;
-        synchronized (counter.lock) {
+        synchronized (counter) {
             if (!today.equals(counter.date)) {
                 counter.date = today;
-                counter.count.set(0);
+                counter.count = 0;
             }
-            current = counter.count.get();
+            current = counter.count;
             if (!unlimited && current >= limit) {
                 return RateLimitResult.denied(limit, current);
             }
-            used = counter.count.incrementAndGet();
+            used = ++counter.count;
         }
 
         maybeCleanup(today);
@@ -124,9 +123,8 @@ public class AssistantRateLimiter {
     }
 
     private static final class DailyCounter {
-        private final Object lock = new Object();
         private volatile LocalDate date;
-        private final AtomicInteger count = new AtomicInteger(0);
+        private int count;
 
         private DailyCounter(LocalDate date) {
             this.date = date;

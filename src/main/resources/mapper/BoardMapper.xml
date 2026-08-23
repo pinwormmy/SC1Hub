@@ -88,6 +88,13 @@
         order by comment_num
     </select>
 
+    <select id="readCommentForUpdate" resultMap="boardCommentDTO">
+        select post_num, comment_num, id, reg_date, content, nickname, password
+        from ${boardTitle}_comment
+        where comment_num=#{commentNum}
+        for update
+    </select>
+
     <delete id="deleteComment">
         delete from ${boardTitle}_comment
         where comment_num=#{commentNum}

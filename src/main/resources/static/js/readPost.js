@@ -1,5 +1,3 @@
-//alert("js test 22");
-let commentContent = document.getElementById("commentContent");
 showCommentList();
 
 // 공통 fetch 함수
@@ -52,7 +50,6 @@ async function addComment() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 postNum: postNum,
-                id: memberId,
                 content: commentContent.value,
                 nickname: nickname,
                 password: password
@@ -64,8 +61,7 @@ async function addComment() {
             try {
                 const data = JSON.parse(text);  // 그 다음 JSON으로 파싱을 시도합니다.
                 console.log(data);
-                await updateCommentCount(postNum);  // 이 함수는 기존에 정의되어 있다고 가정합니다.
-                await showCommentList();  // 이 함수는 기존에 정의되어 있다고 가정합니다.
+                await showCommentList();
                 commentContent.value = "";
                 if (!isLoggedIn) {
                     nicknameInput.value = "";
@@ -115,33 +111,46 @@ async function pageSettingAndLoadComment(commentPage) {
             const data = await response.json();
             console.log(data);
             await loadCommentFetch(data);
-
-            let commentPageDivTag = document.getElementById("comments-page");
-            commentPageDivTag.innerHTML = "";
-            let commentPageHtml = "";
-
-            if (data.prevPageSetPoint >= 1) {
-                commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + data.prevPageSetPoint + ")'>◁</a>";
-            }
-            if (data.totalPage > 1) {
-                for (let i = data.pageBeginPoint; i <= data.pageEndPoint; i++) {
-                    if (i == data.recentPage) {
-                        commentPageHtml += " " + i + " ";
-                    } else {
-                        commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + i + ")'>" + i + " </a>";
-                    }
-                }
-            }
-            if (data.nextPageSetPoint <= data.totalPage) {
-                commentPageHtml += "<a href='javascript:pageSettingAndLoadComment(" + data.nextPageSetPoint + ")'>▷</a>";
-            }
-            commentPageDivTag.innerHTML += commentPageHtml;
+            renderCommentPagination(document.getElementById("comments-page"), data);
         } else {
             console.error("페이지 설정 실패");
         }
     } catch (error) {
         console.error("페이지 설정 중 오류 발생:", error);
     }
+}
+
+function renderCommentPagination(container, page) {
+    const fragment = document.createDocumentFragment();
+
+    function appendPageLink(label, targetPage) {
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = label;
+        link.addEventListener("click", (event) => {
+            event.preventDefault();
+            void pageSettingAndLoadComment(targetPage);
+        });
+        fragment.appendChild(link);
+    }
+
+    if (page.prevPageSetPoint >= 1) {
+        appendPageLink("◁", page.prevPageSetPoint);
+    }
+    if (page.totalPage > 1) {
+        for (let number = page.pageBeginPoint; number <= page.pageEndPoint; number++) {
+            if (number == page.recentPage) {
+                fragment.appendChild(document.createTextNode(" " + number + " "));
+            } else {
+                appendPageLink(number + " ", number);
+            }
+        }
+    }
+    if (page.nextPageSetPoint <= page.totalPage) {
+        appendPageLink("▷", page.nextPageSetPoint);
+    }
+
+    container.replaceChildren(fragment);
 }
 
 // 댓글 불러오기
@@ -164,72 +173,95 @@ async function loadCommentFetch(pageDTO) {
     }
 }
 
-// 댓글 HTML로 표시
-async function showCommentWithHtml(CommentDTOList) {
-    let commentDivTag = document.getElementById("comments-list");
-    commentDivTag.innerHTML = "";
-    let commentListHtml = "";
-    commentDivTag.innerHTML += await commentHtmlWithString(commentListHtml, CommentDTOList);
-    console.log("댓글 코맨트 소스 작업  반영 확인");
+// 댓글 목록은 서버 값을 HTML 문자열로 조합하지 않고 DOM text node로 렌더링합니다.
+function showCommentWithHtml(comments) {
+    const commentList = document.getElementById("comments-list");
+    const fragment = document.createDocumentFragment();
+
+    for (const comment of Array.isArray(comments) ? comments : []) {
+        fragment.appendChild(createCommentElement(comment));
+    }
+    commentList.replaceChildren(fragment);
 }
 
-// 댓글 HTML 문자열 생성
-async function commentHtmlWithString(commentListHtml, CommentDTOList) {
-    console.log("댓글 코맨트 소스 반복문 준비 확인");
-    for (let comment of CommentDTOList) {
-        commentListHtml += "<div class='media'><div class='media-body'><div style='margin: 0; padding: 10px;'><div class='media-heading'>";
+function createCommentElement(comment) {
+    const media = document.createElement("div");
+    media.className = "media";
 
-        let displayNickname = "";
-        if (comment.memberDTO && comment.memberDTO.nickName) {
-            displayNickname = comment.memberDTO.nickName;
-        } else if (comment.nickname) {
-            displayNickname = comment.nickname + " (비회원)";
-        } else {
-            displayNickname = "익명";
-        }
+    const mediaBody = document.createElement("div");
+    mediaBody.className = "media-body";
 
-        commentListHtml += displayNickname + " &nbsp; <small>";
-        commentListHtml = await displayDeleteButton(commentListHtml, comment);
-        commentListHtml += comment.regDate + "</small></div><p style='margin: 0; padding: 0;'>" + comment.content + "</p></div></div></div>";
+    const wrapper = document.createElement("div");
+    wrapper.style.margin = "0";
+    wrapper.style.padding = "10px";
+
+    const heading = document.createElement("div");
+    heading.className = "media-heading";
+    heading.appendChild(document.createTextNode(resolveCommentNickname(comment) + " \u00a0 "));
+
+    const meta = document.createElement("small");
+    if (comment.deletable) {
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "pull btn btn-right cancel-btn";
+        deleteButton.textContent = "댓글삭제(-) ";
+        deleteButton.addEventListener("click", () => {
+            void deleteComment(comment.commentNum, comment.passwordRequired);
+        });
+        meta.appendChild(deleteButton);
     }
-    return commentListHtml;
+    meta.appendChild(document.createTextNode(comment.regDate || ""));
+    heading.appendChild(meta);
+
+    const content = document.createElement("p");
+    content.style.margin = "0";
+    content.style.padding = "0";
+    content.textContent = comment.content || "";
+
+    wrapper.append(heading, content);
+    mediaBody.appendChild(wrapper);
+    media.appendChild(mediaBody);
+    return media;
 }
 
-// 댓글 삭제 버튼 표시
-async function displayDeleteButton(commentListHtml, commentDTO) {
-    if ((memberId == commentDTO.id) || (memberGrade == 3)) {
-        commentListHtml += "<button class='pull btn btn-right cancel-btn' onclick='deleteComment(";
-        commentListHtml += commentDTO.commentNum + ");'>댓글삭제(-) </button>";
+function resolveCommentNickname(comment) {
+    if (comment.memberDTO && comment.memberDTO.nickName) {
+        return comment.memberDTO.nickName;
     }
-    return commentListHtml;
+    if (comment.nickname) {
+        return comment.nickname + " (비회원)";
+    }
+    return "익명";
 }
 
 // 댓글 삭제
-async function deleteComment(commentNum) {
+async function deleteComment(commentNum, passwordRequired) {
+    const formBody = new URLSearchParams({ commentNum: String(commentNum) });
+    if (passwordRequired) {
+        const password = window.prompt("댓글 비밀번호를 입력해주세요.");
+        if (password === null) {
+            return;
+        }
+        if (!password.trim()) {
+            alert("비밀번호를 입력해주세요.");
+            return;
+        }
+        formBody.set("password", password);
+    }
+
     try {
-        const response = await fetch(boardPath + "/deleteComment?commentNum=" + commentNum, { method: "POST" });
+        const response = await fetch(boardPath + "/deleteComment", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+            body: formBody
+        });
         if (response.ok) {
-            await updateCommentCount(postNum);
             await showCommentList();
         } else {
-            console.error("댓글 삭제 실패");
+            alert(await extractErrorMessage(response, "댓글 삭제 실패"));
         }
     } catch (error) {
         alert("댓글 삭제 오류");
-    }
-}
-
-// 댓글 수 업데이트
-async function updateCommentCount(postNum) {
-    try {
-        const response = await fetch(boardPath + "/updateCommentCount?postNum=" + postNum, { method: "PUT" });
-        if (response.ok) {
-            console.log("댓글 업데이트");
-        } else {
-            console.error("댓글수 갱신 오류");
-        }
-    } catch (error) {
-        alert("댓글수 갱신 오류");
     }
 }
 

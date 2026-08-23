@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import javax.servlet.http.HttpServletRequest;
@@ -49,6 +50,11 @@ public class BoardController {
     private static final String GUEST_WRITABLE_BOARD = "funboard";
     private static final String GUEST_POST_AUTH_SESSION_KEY = "authorizedGuestPostKeys";
     private static final String GUEST_NICKNAME_CONFLICT_MESSAGE = "기존 가입자 닉네임은 비회원이 사용할 수 없습니다.";
+    private static final String INVALID_COMMENT_MESSAGE = "댓글 내용을 확인해주세요.";
+    private static final String GUEST_COMMENT_CREDENTIALS_MESSAGE = "닉네임과 비밀번호를 확인해주세요.";
+    private static final int COMMENT_CONTENT_MAX_LENGTH = 500;
+    private static final int COMMENT_NICKNAME_MAX_LENGTH = 50;
+    private static final int COMMENT_PASSWORD_MAX_LENGTH = 100;
 
     private final BoardService boardService;
     private final MemberService memberService;
@@ -282,22 +288,35 @@ public class BoardController {
     @PostMapping("/{boardTitle}/addComment")
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle,
-            @RequestBody CommentDTO comment, HttpSession session) throws Exception {
+            @RequestBody CommentDTO comment,
+            @SessionAttribute(name = "member", required = false) MemberDTO member) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        log.info("댓글 인수 확인(댓글내용) : {}", comment.getContent());
-        MemberDTO member = getMember(session);
-        if (member == null) {
+        if (comment == null || comment.getPostNum() <= 0 || trimToNull(comment.getContent()) == null
+                || exceedsCodePointLimit(comment.getContent(), COMMENT_CONTENT_MAX_LENGTH)) {
+            return commentResponse(HttpStatus.BAD_REQUEST, INVALID_COMMENT_MESSAGE);
+        }
+
+        if (member != null) {
+            comment.setId(member.getId());
+            comment.setNickname(null);
+            comment.setPassword(null);
+        } else {
+            comment.setId(null);
             comment.setNickname(trimToNull(comment.getNickname()));
+            comment.setPassword(trimToNull(comment.getPassword()));
+            if (comment.getNickname() == null || comment.getPassword() == null) {
+                return commentResponse(HttpStatus.BAD_REQUEST, GUEST_COMMENT_CREDENTIALS_MESSAGE);
+            }
+            if (exceedsCodePointLimit(comment.getNickname(), COMMENT_NICKNAME_MAX_LENGTH)
+                    || exceedsCodePointLimit(comment.getPassword(), COMMENT_PASSWORD_MAX_LENGTH)) {
+                return commentResponse(HttpStatus.BAD_REQUEST, GUEST_COMMENT_CREDENTIALS_MESSAGE);
+            }
             if (isRegisteredMemberNickname(comment.getNickname())) {
-                Map<String, String> response = new HashMap<>();
-                response.put("message", GUEST_NICKNAME_CONFLICT_MESSAGE);
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+                return commentResponse(HttpStatus.BAD_REQUEST, GUEST_NICKNAME_CONFLICT_MESSAGE);
             }
         }
         boardService.addComment(boardTitle, comment);
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "댓글이 성공적으로 추가되었습니다.");
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return commentResponse(HttpStatus.OK, "댓글이 성공적으로 추가되었습니다.");
     }
 
     @PostMapping(value = "/{boardTitle}/commentPageSetting")
@@ -309,17 +328,30 @@ public class BoardController {
 
     @PostMapping("/{boardTitle}/showCommentList")
     @ResponseBody
-    public List<CommentDTO> showCommentList(@PathVariable String boardTitle, @RequestBody PageDTO page)
+    public List<CommentDTO> showCommentList(@PathVariable String boardTitle, @RequestBody PageDTO page,
+            @SessionAttribute(name = "member", required = false) MemberDTO member)
             throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        return boardService.showCommentList(boardTitle, page);
+        List<CommentDTO> comments = boardService.showCommentList(boardTitle, page);
+        applyCommentPermissions(comments, member);
+        return comments;
     }
 
     @PostMapping("/{boardTitle}/deleteComment")
     @ResponseBody
-    public void deleteComment(@PathVariable String boardTitle, int commentNum) throws Exception {
+    public ResponseEntity<Map<String, String>> deleteComment(@PathVariable String boardTitle,
+            @RequestParam int commentNum,
+            @RequestParam(required = false) String password,
+            @SessionAttribute(name = "member", required = false) MemberDTO member) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        boardService.deleteComment(boardTitle, commentNum);
+        try {
+            boardService.deleteComment(boardTitle, commentNum, member, password);
+            return commentResponse(HttpStatus.OK, "댓글이 삭제되었습니다.");
+        } catch (AccessDeniedException e) {
+            return commentResponse(HttpStatus.FORBIDDEN, "댓글 삭제 권한이 없습니다.");
+        } catch (IllegalArgumentException e) {
+            return commentResponse(HttpStatus.NOT_FOUND, "존재하지 않는 댓글입니다.");
+        }
     }
 
     @PutMapping(value = "/{boardTitle}/updateCommentCount")
@@ -595,6 +627,38 @@ public class BoardController {
 
     private boolean isAdmin(MemberDTO member) {
         return member != null && ADMIN_ID.equals(member.getId());
+    }
+
+    private boolean isCommentAdmin(MemberDTO member) {
+        return member != null && (member.getGrade() == 3 || ADMIN_ID.equals(member.getId()));
+    }
+
+    private void applyCommentPermissions(List<CommentDTO> comments, MemberDTO member) {
+        if (comments == null) {
+            return;
+        }
+        for (CommentDTO comment : comments) {
+            if (comment == null) {
+                continue;
+            }
+            boolean guestComment = trimToNull(comment.getId()) == null;
+            boolean guestHasPassword = guestComment && trimToNull(comment.getPassword()) != null;
+            boolean memberOwnsComment = member != null && Objects.equals(comment.getId(), member.getId());
+            boolean commentAdmin = isCommentAdmin(member);
+            comment.setGuestComment(guestComment);
+            comment.setDeletable(commentAdmin || memberOwnsComment || guestHasPassword);
+            comment.setPasswordRequired(guestHasPassword && !commentAdmin);
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> commentResponse(HttpStatus status, String message) {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", message);
+        return new ResponseEntity<>(response, status);
+    }
+
+    private boolean exceedsCodePointLimit(String value, int maxLength) {
+        return value != null && value.codePointCount(0, value.length()) > maxLength;
     }
 
     private String normalizeBoardTitle(String boardTitle) {

@@ -33,18 +33,6 @@ public class AssistantService {
     private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
     private static final Pattern SOURCE_ID_PATTERN = Pattern.compile("^([a-z0-9_]+):(\\d+)$");
-    private static final Set<String> STOPWORDS = new HashSet<>(Arrays.asList(
-            "추천", "질문", "방법", "어떻게", "알려줘", "알려주세요", "알려", "해줘", "해주세요", "좀",
-            "빌드", "빌드오더", "운영", "공략", "강의",
-            "recommend", "recommendation", "how", "why", "what", "where", "please", "help"
-    ));
-    private static final List<String> KOREAN_PARTICLE_SUFFIXES = Arrays.asList(
-            "으로부터", "로부터", "에게서", "한테서",
-            "으로써", "로써", "으로서", "로서",
-            "에서", "에게", "께서", "께", "한테",
-            "부터", "까지", "으로", "로",
-            "의", "은", "는", "이", "가", "을", "를", "과", "와", "도", "만", "에"
-    );
     private static final Set<String> FACT_KEYWORDS = new HashSet<>(Arrays.asList(
             "공격", "공격력", "방어", "방어력", "체력", "hp", "실드", "쉴드", "사거리", "사정거리", "시야",
             "이동속도", "속도", "공속", "공격속도", "쿨다운", "비용", "가격", "미네랄", "가스", "자원", "서플라이",
@@ -117,7 +105,7 @@ public class AssistantService {
         } catch (Exception e) {
             log.warn("검색 파서 처리 실패. 기본 키워드 로직으로 대체합니다.", e);
             parseResult = new AssistantQueryParseResult();
-            List<String> fallbackKeywords = extractKeywords(normalizedMessage);
+            List<String> fallbackKeywords = AssistantQueryParser.extractKeywords(normalizedMessage);
             parseResult.setKeywords(fallbackKeywords);
             parseResult.setExpandedTerms(fallbackKeywords);
         }
@@ -2193,11 +2181,11 @@ public class AssistantService {
                 if (!StringUtils.hasText(token)) {
                     continue;
                 }
-                String cleaned = normalizeKeywordToken(token);
+                String cleaned = AssistantQueryParser.normalizeKeywordToken(token);
                 if (!StringUtils.hasText(cleaned) || cleaned.length() < 2) {
                     continue;
                 }
-                if (STOPWORDS.contains(cleaned)) {
+                if (AssistantQueryParser.isStopword(cleaned)) {
                     continue;
                 }
                 unique.add(cleaned);
@@ -2714,11 +2702,11 @@ public class AssistantService {
             if (!StringUtils.hasText(token)) {
                 continue;
             }
-            String cleaned = normalizeKeywordToken(token);
+            String cleaned = AssistantQueryParser.normalizeKeywordToken(token);
             if (!StringUtils.hasText(cleaned) || cleaned.length() < 2) {
                 continue;
             }
-            if (STOPWORDS.contains(cleaned)) {
+            if (AssistantQueryParser.isStopword(cleaned)) {
                 continue;
             }
             result.add(cleaned);
@@ -3007,92 +2995,6 @@ public class AssistantService {
             return value;
         }
         return value.substring(0, Math.max(0, maxChars - 1)).trim() + "…";
-    }
-
-    private static List<String> extractKeywords(String message) {
-        if (!StringUtils.hasText(message)) {
-            return Collections.emptyList();
-        }
-        String normalized = message
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\p{L}\\p{N}]+", " ")
-                .trim();
-
-        if (normalized.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        String[] tokens = normalized.split("\\s+");
-        LinkedHashSet<String> unique = new LinkedHashSet<>();
-        for (String token : tokens) {
-            if (!StringUtils.hasText(token)) {
-                continue;
-            }
-            String normalizedToken = normalizeKeywordToken(token);
-            if (!StringUtils.hasText(normalizedToken)) {
-                continue;
-            }
-            if (normalizedToken.length() < 2) {
-                continue;
-            }
-            if (STOPWORDS.contains(normalizedToken)) {
-                continue;
-            }
-            unique.add(normalizedToken);
-        }
-
-        List<String> keywords = new ArrayList<>(unique);
-        keywords.sort((a, b) -> Integer.compare(b.length(), a.length()));
-        if (keywords.size() > 6) {
-            return keywords.subList(0, 6);
-        }
-        return keywords;
-    }
-
-    private static String normalizeKeywordToken(String token) {
-        if (!StringUtils.hasText(token)) {
-            return "";
-        }
-        String normalized = token.toLowerCase(Locale.ROOT).trim();
-        if (!hasKorean(normalized)) {
-            return normalized;
-        }
-        return stripKoreanParticles(normalized);
-    }
-
-    private static boolean hasKorean(String value) {
-        if (!StringUtils.hasText(value)) {
-            return false;
-        }
-        for (int i = 0; i < value.length(); i++) {
-            char ch = value.charAt(i);
-            if (ch >= 0xAC00 && ch <= 0xD7A3) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String stripKoreanParticles(String token) {
-        String result = token;
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (String suffix : KOREAN_PARTICLE_SUFFIXES) {
-                if (!StringUtils.hasText(suffix)) {
-                    continue;
-                }
-                if (result.length() <= suffix.length() + 1) {
-                    continue;
-                }
-                if (result.endsWith(suffix)) {
-                    result = result.substring(0, result.length() - suffix.length());
-                    changed = true;
-                    break;
-                }
-            }
-        }
-        return result;
     }
 
     private static String stripHtmlToText(String html) {

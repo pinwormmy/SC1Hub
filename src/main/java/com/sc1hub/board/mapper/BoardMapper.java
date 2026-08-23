@@ -34,7 +34,10 @@ public interface BoardMapper {
         List<CommentDTO> showCommentList(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page)
                         throws Exception;
 
-        void deleteComment(@Param("boardTitle") String boardTitle, @Param("commentNum") int commentNum)
+        CommentDTO readCommentForUpdate(@Param("boardTitle") String boardTitle,
+                        @Param("commentNum") int commentNum) throws Exception;
+
+        int deleteComment(@Param("boardTitle") String boardTitle, @Param("commentNum") int commentNum)
                         throws Exception;
 
         void updateCommentCount(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum) throws Exception;

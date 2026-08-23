@@ -14,12 +14,14 @@ import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.nio.file.AccessDeniedException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -112,9 +114,11 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void addComment(String boardTitle, CommentDTO comment) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         boardMapper.addComment(boardTitle, comment);
+        boardMapper.updateCommentCount(boardTitle, comment.getPostNum());
     }
 
     @Override
@@ -124,9 +128,21 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
-    public void deleteComment(String boardTitle, int commentNum) throws Exception {
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteComment(String boardTitle, int commentNum, MemberDTO requestingMember, String guestPassword)
+            throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        boardMapper.deleteComment(boardTitle, commentNum);
+        CommentDTO comment = boardMapper.readCommentForUpdate(boardTitle, commentNum);
+        if (comment == null) {
+            throw new IllegalArgumentException("존재하지 않는 댓글입니다.");
+        }
+        if (!canDeleteComment(comment, requestingMember, guestPassword)) {
+            throw new AccessDeniedException("댓글 삭제 권한이 없습니다.");
+        }
+        if (boardMapper.deleteComment(boardTitle, commentNum) != 1) {
+            throw new IllegalStateException("댓글 삭제 결과를 확인할 수 없습니다.");
+        }
+        boardMapper.updateCommentCount(boardTitle, comment.getPostNum());
     }
 
     @Override
@@ -333,5 +349,28 @@ public class BoardServiceImpl implements BoardService {
 
     private String normalizeBoardTitle(String boardTitle) {
         return BoardTitleNormalizer.normalizeNullable(boardTitle);
+    }
+
+    private boolean canDeleteComment(CommentDTO comment, MemberDTO member, String guestPassword) {
+        if (isAdmin(member)) {
+            return true;
+        }
+        if (StringUtils.hasText(comment.getId())) {
+            return member != null && Objects.equals(comment.getId(), member.getId());
+        }
+        return StringUtils.hasText(comment.getPassword())
+                && Objects.equals(comment.getPassword(), trimToNull(guestPassword));
+    }
+
+    private boolean isAdmin(MemberDTO member) {
+        return member != null && (member.getGrade() == 3 || "admin".equals(member.getId()));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
