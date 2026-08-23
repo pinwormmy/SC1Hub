@@ -15,6 +15,10 @@ repositories {
 	maven { url "https://repo.spring.io/plugins-release" }
 }
 
+configurations {
+	jspCompiler
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -30,6 +34,8 @@ dependencies {
 	runtimeOnly 'mysql:mysql-connector-java'
 	providedCompile 'org.springframework.boot:spring-boot-starter-tomcat'
 	providedRuntime 'org.apache.tomcat.embed:tomcat-embed-jasper'
+	jspCompiler 'org.apache.tomcat.embed:tomcat-embed-jasper'
+	jspCompiler 'org.apache.ant:ant:1.10.12'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
@@ -41,6 +47,74 @@ tasks.named('test') {
 
 tasks.named('processResources') {
 	exclude 'application-local.properties', 'application-online.properties'
+}
+
+def jspSourceDir = layout.projectDirectory.dir('src/main/webapp')
+def generatedJspClassesDir = layout.buildDirectory.dir('generated/jsp-classes')
+def generatedJspWebFragment = layout.buildDirectory.file('generated/jsp-web-fragment.xml')
+def generatedJspWebXml = layout.buildDirectory.file('generated/jsp-web.xml')
+
+tasks.register('precompileJsp', JavaExec) {
+	group = 'build'
+	description = 'Precompiles JSPs so the constrained Cafe24 JVM does not load ECJ at runtime.'
+	dependsOn tasks.named('classes')
+
+	inputs.files(fileTree(jspSourceDir) {
+		include '**/*.jsp', '**/*.jspf'
+	})
+	inputs.files(configurations.jspCompiler)
+	outputs.dir(generatedJspClassesDir)
+	outputs.file(generatedJspWebFragment)
+
+	classpath = sourceSets.main.runtimeClasspath + configurations.jspCompiler
+	mainClass = 'org.apache.jasper.JspC'
+
+	doFirst {
+		delete generatedJspClassesDir
+		delete generatedJspWebFragment
+		generatedJspClassesDir.get().asFile.mkdirs()
+		generatedJspWebFragment.get().asFile.parentFile.mkdirs()
+		args = [
+			'-uriroot', jspSourceDir.asFile.absolutePath,
+			'-d', generatedJspClassesDir.get().asFile.absolutePath,
+			'-webinc', generatedJspWebFragment.get().asFile.absolutePath,
+			'-compile',
+			'-source', '1.8',
+			'-target', '1.8',
+			'-javaEncoding', 'UTF-8'
+		]
+	}
+}
+
+tasks.register('generatePrecompiledJspWebXml') {
+	group = 'build'
+	description = 'Builds the deployment descriptor that maps JSP paths to precompiled servlets.'
+	dependsOn tasks.named('precompileJsp')
+	inputs.file(generatedJspWebFragment)
+	outputs.file(generatedJspWebXml)
+
+	doLast {
+		def fragment = generatedJspWebFragment.get().asFile.getText('UTF-8')
+		def webXml = generatedJspWebXml.get().asFile
+		webXml.parentFile.mkdirs()
+		webXml.setText("""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<web-app xmlns=\"http://xmlns.jcp.org/xml/ns/javaee\"
+		xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"
+		xsi:schemaLocation=\"http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd\"
+		version=\"3.1\">
+${fragment}
+</web-app>
+""", 'UTF-8')
+	}
+}
+
+tasks.named('bootWar') {
+	dependsOn tasks.named('generatePrecompiledJspWebXml')
+	webXml = generatedJspWebXml.get().asFile
+	from(generatedJspClassesDir) {
+		into 'WEB-INF/classes'
+		include '**/*.class'
+	}
 }
 
 tasks.register('verifyProductionWarFootprint') {
@@ -59,6 +133,28 @@ tasks.register('verifyProductionWarFootprint') {
 			}
 			if (forbiddenEntry != null) {
 				throw new GradleException("Production WAR contains forbidden runtime dependency: ${forbiddenEntry.name}")
+			}
+
+			def jspSourceCount = fileTree(jspSourceDir) {
+				include 'WEB-INF/views/**/*.jsp'
+			}.files.size()
+			def precompiledJspCount = zip.entries().findAll {
+				it.name ==~ /WEB-INF\/classes\/org\/apache\/jsp\/WEB_002dINF\/views\/.*_jsp\.class/
+			}.size()
+			if (precompiledJspCount != jspSourceCount) {
+				throw new GradleException(
+						"Production WAR precompiled ${precompiledJspCount} of ${jspSourceCount} JSPs")
+			}
+
+			def webXmlEntry = zip.getEntry('WEB-INF/web.xml')
+			if (webXmlEntry == null) {
+				throw new GradleException('Production WAR is missing WEB-INF/web.xml for precompiled JSP mappings')
+			}
+			def webXmlText = zip.getInputStream(webXmlEntry).getText('UTF-8')
+			def mappedJspCount = (webXmlText =~ /<url-pattern>\/WEB-INF\/views\/.*?\.jsp<\/url-pattern>/).count
+			if (mappedJspCount != jspSourceCount) {
+				throw new GradleException(
+						"Production WAR mapped ${mappedJspCount} of ${jspSourceCount} precompiled JSPs")
 			}
 		} finally {
 			zip.close()
