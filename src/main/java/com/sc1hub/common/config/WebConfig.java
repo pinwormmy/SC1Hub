@@ -14,7 +14,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.concurrent.TimeUnit;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @Slf4j
 public class WebConfig implements WebMvcConfigurer {
 

@@ -8,7 +8,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 import java.util.Properties;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class EmailConfig {
 
     private final int port;

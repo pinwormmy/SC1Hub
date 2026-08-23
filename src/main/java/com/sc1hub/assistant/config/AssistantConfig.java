@@ -8,7 +8,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
         AssistantProperties.class,
         AssistantRagProperties.class,

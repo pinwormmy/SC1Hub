@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import javax.servlet.SessionTrackingMode;
 import java.util.Collections;
 
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class ServerConfig {
 
     @Bean

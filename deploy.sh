@@ -100,6 +100,18 @@ ssh "$REMOTE" \
        echo 'export SPRING_CONFIG_ADDITIONAL_LOCATION=\"\${SPRING_CONFIG_ADDITIONAL_LOCATION:-file:/home/hosting_users/sc1hub/config/}\"'
      } >> \"\$SETENV_SH\"
    fi
+   if ! grep -q 'SC1Hub reflection accessor limit' \"\$SETENV_SH\"; then
+     {
+       echo ''
+       echo '# SC1Hub reflection accessor limit'
+       echo '# Avoid retaining accessors for rarely used reflective paths under the 64 MB Metaspace cap.'
+       echo 'export CATALINA_OPTS=\"\${CATALINA_OPTS:-} -Dsun.reflect.inflationThreshold=1000\"'
+     } >> \"\$SETENV_SH\"
+   fi
+   if ! grep -q -- '-Dsun.reflect.inflationThreshold=1000' \"\$SETENV_SH\"; then
+     echo 'Failed to configure the SC1Hub reflection accessor limit.' >&2
+     exit 1
+   fi
    LEGACY_ONLINE_PROPS=\"\$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
    if [ ! -f \"\$REMOTE_ONLINE_PROPS\" ] && [ -f \"\$LEGACY_ONLINE_PROPS\" ]; then
      cp \"\$LEGACY_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS\"
