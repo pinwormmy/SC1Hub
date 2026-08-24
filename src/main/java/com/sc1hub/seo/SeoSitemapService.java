@@ -16,12 +16,14 @@ import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class SeoSitemapService {
 
-    private static final long CACHE_MILLIS = 60L * 60L * 1000L;
+    static final long CACHE_MINUTES = 10L;
+    private static final long CACHE_MILLIS = TimeUnit.MINUTES.toMillis(CACHE_MINUTES);
     private static final String XML_HEADER = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
     private final BoardService boardService;

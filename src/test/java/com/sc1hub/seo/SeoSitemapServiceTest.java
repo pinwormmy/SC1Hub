@@ -11,6 +11,7 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,5 +45,23 @@ class SeoSitemapServiceTest {
         assertTrue(first == second);
         verify(boardService, times(1)).getBoardList();
         verify(boardService, times(1)).getSitemapPosts("tvszboard");
+    }
+
+    @Test
+    void getSitemapXml_refreshesAfterTenMinutes() throws Exception {
+        BoardService boardService = mock(BoardService.class);
+        Clock clock = mock(Clock.class);
+        when(clock.millis()).thenReturn(
+                0L,
+                TimeUnit.MINUTES.toMillis(9),
+                TimeUnit.MINUTES.toMillis(11));
+        when(boardService.getBoardList()).thenReturn(Collections.emptyList());
+        SeoSitemapService service = new SeoSitemapService(boardService, clock);
+
+        service.getSitemapXml();
+        service.getSitemapXml();
+        service.getSitemapXml();
+
+        verify(boardService, times(2)).getBoardList();
     }
 }

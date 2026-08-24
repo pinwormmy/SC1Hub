@@ -23,7 +23,7 @@ public class SeoController {
     public ResponseEntity<String> sitemap() {
         return ResponseEntity.ok()
                 .contentType(SITEMAP_MEDIA_TYPE)
-                .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+                .cacheControl(CacheControl.maxAge(SeoSitemapService.CACHE_MINUTES, TimeUnit.MINUTES).cachePublic())
                 .body(sitemapService.getSitemapXml());
     }
 }
