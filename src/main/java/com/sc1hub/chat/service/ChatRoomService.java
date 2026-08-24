@@ -216,6 +216,36 @@ public class ChatRoomService {
         return recent;
     }
 
+    public List<ChatMessageDTO> getRecentMessagesAfterLatestNickname(String nickname, int limit) {
+        if (limit <= 0) {
+            return Collections.emptyList();
+        }
+        if (!StringUtils.hasText(nickname)) {
+            return getRecentMessages(limit);
+        }
+
+        String normalizedNickname = nickname.trim();
+        List<ChatMessageDTO> recent = new ArrayList<>();
+        lock.lock();
+        try {
+            Iterator<ChatMessageDTO> iterator = buffer.descendingIterator();
+            while (iterator.hasNext() && recent.size() < limit) {
+                ChatMessageDTO message = iterator.next();
+                if (message == null || message.isDeleted()) {
+                    continue;
+                }
+                if (normalizedNickname.equals(message.getNickname())) {
+                    break;
+                }
+                recent.add(message);
+            }
+        } finally {
+            lock.unlock();
+        }
+        Collections.reverse(recent);
+        return recent;
+    }
+
     public ChatMessageDTO postAiMessage(String content) {
         String trimmed = content == null ? "" : content.trim();
         if (!StringUtils.hasText(trimmed)) {

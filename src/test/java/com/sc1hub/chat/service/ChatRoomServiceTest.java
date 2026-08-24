@@ -55,6 +55,32 @@ class ChatRoomServiceTest {
     }
 
     @Test
+    void getRecentMessagesAfterLatestNickname_returnsOnlyNewerMessages() {
+        chatRoomService.postBotMessage("유저A", "예전 질문");
+        chatRoomService.postBotMessage("고수봇", "이전 공략");
+        chatRoomService.postBotMessage("유저B", "새 질문");
+        chatRoomService.postBotMessage("유저C", "새 반응");
+
+        List<ChatMessageDTO> recent = chatRoomService
+                .getRecentMessagesAfterLatestNickname("고수봇", 3);
+
+        assertEquals(2, recent.size());
+        assertEquals("유저B", recent.get(0).getNickname());
+        assertEquals("유저C", recent.get(1).getNickname());
+    }
+
+    @Test
+    void getRecentMessagesAfterLatestNickname_returnsEmptyWhenSelfIsLatest() {
+        chatRoomService.postBotMessage("유저A", "예전 질문");
+        chatRoomService.postBotMessage("고수봇", "이전 공략");
+
+        List<ChatMessageDTO> recent = chatRoomService
+                .getRecentMessagesAfterLatestNickname("고수봇", 3);
+
+        assertEquals(0, recent.size());
+    }
+
+    @Test
     void pollRecentReturnsOnlyLatestMessagesInChronologicalOrder() {
         for (int index = 1; index <= 60; index += 1) {
             chatRoomService.postBotMessage("유저" + index, "메시지" + index);
