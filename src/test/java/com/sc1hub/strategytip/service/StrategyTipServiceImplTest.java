@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -114,6 +115,18 @@ class StrategyTipServiceImplTest {
         verify(strategyTipMapper, never()).insertDailyRecommendation(
                 eq(99), eq(LocalDate.of(2026, 8, 24)), anyString());
         verify(strategyTipMapper, never()).incrementRecommendCount(99);
+    }
+
+    @Test
+    void springContext_createsServiceWithMapperConstructor() {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+        context.getBeanFactory().registerSingleton("strategyTipMapper", strategyTipMapper);
+        context.register(StrategyTipServiceImpl.class);
+
+        context.refresh();
+
+        assertTrue(context.getBean(StrategyTipService.class) instanceof StrategyTipServiceImpl);
+        context.close();
     }
 
     private StrategyTipDTO tipWithRecommendCount(int recommendCount) {

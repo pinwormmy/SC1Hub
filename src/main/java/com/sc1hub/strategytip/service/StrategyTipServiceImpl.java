@@ -6,6 +6,7 @@ import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.strategytip.dto.StrategyTipCategoryDTO;
 import com.sc1hub.strategytip.dto.StrategyTipDTO;
 import com.sc1hub.strategytip.mapper.StrategyTipMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,7 @@ public class StrategyTipServiceImpl implements StrategyTipService {
     private final StrategyTipMapper strategyTipMapper;
     private final Clock clock;
 
+    @Autowired
     public StrategyTipServiceImpl(StrategyTipMapper strategyTipMapper) {
         this(strategyTipMapper, Clock.system(RECOMMENDATION_ZONE));
     }
