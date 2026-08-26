@@ -82,9 +82,9 @@ public class StrategyTipController {
 
     @PostMapping("/recommend")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> recommend(@RequestParam int tipNum) {
+    public ResponseEntity<Map<String, Object>> recommend(@RequestParam int tipNum, HttpSession session) {
         try {
-            int recommendCount = strategyTipService.recommend(tipNum);
+            int recommendCount = strategyTipService.recommend(tipNum, getMember(session), session.getId());
             Map<String, Object> response = new HashMap<>();
             response.put("recommendCount", recommendCount);
             return new ResponseEntity<>(response, HttpStatus.OK);

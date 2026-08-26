@@ -9,7 +9,14 @@ import com.sc1hub.strategytip.mapper.StrategyTipMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 @Service
@@ -20,11 +27,18 @@ public class StrategyTipServiceImpl implements StrategyTipService {
     private static final int PAGESET_LIMIT = 10;
     private static final int MAX_CONTENT_LENGTH = 160;
     private static final String ADMIN_ID = "admin";
+    private static final ZoneId RECOMMENDATION_ZONE = ZoneId.of("Asia/Seoul");
 
     private final StrategyTipMapper strategyTipMapper;
+    private final Clock clock;
 
     public StrategyTipServiceImpl(StrategyTipMapper strategyTipMapper) {
+        this(strategyTipMapper, Clock.system(RECOMMENDATION_ZONE));
+    }
+
+    StrategyTipServiceImpl(StrategyTipMapper strategyTipMapper, Clock clock) {
         this.strategyTipMapper = strategyTipMapper;
+        this.clock = clock;
     }
 
     @Override
@@ -80,13 +94,44 @@ public class StrategyTipServiceImpl implements StrategyTipService {
 
     @Override
     @Transactional
-    public int recommend(int tipNum) {
+    public int recommend(int tipNum, MemberDTO member, String sessionId) {
+        StrategyTipDTO existingTip = strategyTipMapper.selectTip(tipNum);
+        if (existingTip == null) {
+            throw new IllegalArgumentException("존재하지 않는 한줄 공략입니다.");
+        }
+
+        String userHash = hashRecommendationUser(member, sessionId);
+        LocalDate today = LocalDate.now(clock);
+        int inserted = strategyTipMapper.insertDailyRecommendation(tipNum, today, userHash);
+        if (inserted == 0) {
+            throw new IllegalArgumentException("이 한줄 공략은 오늘 이미 추천했습니다.");
+        }
+
         int updated = strategyTipMapper.incrementRecommendCount(tipNum);
         if (updated == 0) {
             throw new IllegalArgumentException("존재하지 않는 한줄 공략입니다.");
         }
         StrategyTipDTO tip = strategyTipMapper.selectTip(tipNum);
         return tip == null ? 0 : tip.getRecommendCount();
+    }
+
+    private String hashRecommendationUser(MemberDTO member, String sessionId) {
+        String memberId = member == null ? null : trimToNull(member.getId());
+        String identity = memberId == null
+                ? "session|" + requireValue(sessionId, "추천 사용자 정보를 확인할 수 없습니다.")
+                : "member|" + memberId;
+
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(identity.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hash = new StringBuilder(digest.length * 2);
+            for (byte value : digest) {
+                hash.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+            }
+            return hash.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
     }
 
     private boolean canDelete(StrategyTipDTO tip, String guestPassword, MemberDTO member) {

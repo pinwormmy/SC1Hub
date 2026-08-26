@@ -7,6 +7,7 @@ import com.sc1hub.strategytip.dto.StrategyTipDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Mapper
@@ -25,6 +26,10 @@ public interface StrategyTipMapper {
     void deleteTip(int tipNum);
 
     int incrementRecommendCount(int tipNum);
+
+    int insertDailyRecommendation(@Param("tipNum") int tipNum,
+                                  @Param("recommendDate") LocalDate recommendDate,
+                                  @Param("userHash") String userHash);
 
     List<StrategyTipDTO> selectTipsForRag();
 

@@ -19,5 +19,5 @@ public interface StrategyTipService {
 
     void deleteTip(int tipNum, String guestPassword, MemberDTO member);
 
-    int recommend(int tipNum);
+    int recommend(int tipNum, MemberDTO member, String sessionId);
 }

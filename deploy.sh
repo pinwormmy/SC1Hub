@@ -35,6 +35,7 @@ REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
+REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_strategy_recommendation.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
@@ -64,6 +65,7 @@ echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260824_create_one_line_strategy_recommendation.sql" "$REMOTE:$REMOTE_STRATEGY_RECOMMENDATION_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
@@ -80,6 +82,7 @@ ssh "$REMOTE" \
    REMOTE_WAR_BACKUP_PATH='$REMOTE_WAR_BACKUP_PATH'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
+   REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -139,6 +142,8 @@ ssh "$REMOTE" \
      echo 'Applying one-line strategy schema...'
      MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_SQL\"
    fi
+   echo 'Applying one-line strategy recommendation schema...'
+   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_STRATEGY_RECOMMENDATION_SQL\"
    if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
      echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
      exit 1

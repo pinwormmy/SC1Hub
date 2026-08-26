@@ -68,6 +68,11 @@
         where tip_num = #{tipNum}
     </update>
 
+    <insert id="insertDailyRecommendation">
+        insert ignore into one_line_strategy_recommendation(tip_num, recommend_date, user_hash)
+        values(#{tipNum}, #{recommendDate}, #{userHash})
+    </insert>
+
     <select id="selectTipsForRag" resultType="com.sc1hub.strategytip.dto.StrategyTipDTO">
         select t.tip_num, t.category, c.name as category_name, t.content, t.writer,
                t.reg_date, t.recommend_count

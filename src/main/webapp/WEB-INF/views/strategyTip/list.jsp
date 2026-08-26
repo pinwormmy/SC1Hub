@@ -148,17 +148,26 @@
 
     document.querySelectorAll('.strategy-tip-like').forEach(function(button) {
         button.addEventListener('click', function() {
+            if (button.disabled) {
+                return;
+            }
+            button.disabled = true;
             var tipNum = button.getAttribute('data-tip-num');
             fetch('/strategy-tips/recommend?tipNum=' + encodeURIComponent(tipNum), { method: 'POST' })
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
                     if (data.recommendCount !== undefined) {
                         button.querySelector('span').textContent = data.recommendCount;
+                        button.title = '오늘 추천 완료';
                     } else if (data.message) {
+                        if (data.message.indexOf('오늘 이미 추천') === -1) {
+                            button.disabled = false;
+                        }
                         window.alert(data.message);
                     }
                 })
                 .catch(function() {
+                    button.disabled = false;
                     window.alert('추천 처리 중 문제가 발생했습니다.');
                 });
         });
