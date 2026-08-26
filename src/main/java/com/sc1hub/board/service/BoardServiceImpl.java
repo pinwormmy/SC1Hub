@@ -79,7 +79,9 @@ public class BoardServiceImpl implements BoardService {
     public void submitModifyPost(String boardTitle, BoardDTO post) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         preparePostForPersistence(post);
-        boardMapper.submitModifyPost(boardTitle, post);
+        if (boardMapper.submitModifyPost(boardTitle, post) != 1) {
+            throw new IllegalStateException("게시글 수정 결과를 확인할 수 없습니다.");
+        }
     }
 
     @Override
@@ -93,7 +95,7 @@ public class BoardServiceImpl implements BoardService {
                 && !requestingMember.getId().equals("admin")) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");
         }
-        boardMapper.deletePost(boardTitle, postNum);
+        deleteExistingPost(boardTitle, postNum);
     }
 
     @Override
@@ -103,7 +105,13 @@ public class BoardServiceImpl implements BoardService {
         if (postToDelete == null) {
             throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
         }
-        boardMapper.deletePost(boardTitle, postNum);
+        deleteExistingPost(boardTitle, postNum);
+    }
+
+    private void deleteExistingPost(String boardTitle, int postNum) throws Exception {
+        if (boardMapper.deletePost(boardTitle, postNum) != 1) {
+            throw new IllegalStateException("게시글 삭제 결과를 확인할 수 없습니다.");
+        }
     }
 
     @Override

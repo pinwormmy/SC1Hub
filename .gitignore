@@ -16,6 +16,9 @@ build/
 ### assistant local data ###
 data/assistant/
 
+### generated post media ###
+/artifacts/post-images/
+
 ### properties ###
 application-local.properties
 application-online.properties

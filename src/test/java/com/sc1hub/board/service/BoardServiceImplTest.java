@@ -120,6 +120,7 @@ class BoardServiceImplTest {
         admin.setNickName("Someone");
 
         when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(1);
 
         boardService.deletePost("FreeBoard", postNum, admin);
 
@@ -138,6 +139,7 @@ class BoardServiceImplTest {
         member.setNickName("Alice");
 
         when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(1);
 
         boardService.deletePost("FreeBoard", postNum, member);
 
@@ -384,11 +386,41 @@ class BoardServiceImplTest {
         when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
         when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms2");
+        when(boardMapper.submitModifyPost("freeboard", post)).thenReturn(1);
 
         boardService.submitModifyPost("FreeBoard", post);
 
         assertEquals(normalizedContent, post.getContent());
         assertEquals("terms2", post.getSearchTerms());
         verify(boardMapper).submitModifyPost("freeboard", post);
+    }
+
+    @Test
+    void submitModifyPost_throwsWhenNoRowWasUpdated() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setTitle("title");
+        post.setContent("<p>content</p>");
+        when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
+        when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(post.getContent());
+        when(searchTermsService.buildSearchTerms("title", post.getContent())).thenReturn("terms");
+        when(boardMapper.submitModifyPost("freeboard", post)).thenReturn(0);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> boardService.submitModifyPost("FreeBoard", post));
+
+        assertEquals("게시글 수정 결과를 확인할 수 없습니다.", error.getMessage());
+    }
+
+    @Test
+    void deletePost_throwsWhenNoRowWasDeleted() throws Exception {
+        int postNum = 123;
+        BoardDTO post = new BoardDTO();
+        when(boardMapper.readPost("freeboard", postNum)).thenReturn(post);
+        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(0);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> boardService.deletePost("FreeBoard", postNum));
+
+        assertEquals("게시글 삭제 결과를 확인할 수 없습니다.", error.getMessage());
     }
 }

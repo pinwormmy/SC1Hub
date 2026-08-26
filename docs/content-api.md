@@ -1,6 +1,6 @@
 # SC1Hub 관리자 콘텐츠 API
 
-브라우저 세션 없이 게시판을 조회하고, 이미지를 최적화해 업로드하고, 유튜브 영상이 포함된 글을 게시하는 관리자 전용 API다.
+브라우저 세션 없이 게시판과 게시글을 조회·생성·수정·삭제하고, 이미지를 최적화해 업로드하며, 유튜브 영상이 포함된 글을 발행하는 관리자 전용 API다.
 
 ## 인증
 
@@ -55,9 +55,60 @@ scripts/sc1hub-content-api.sh publish \
 
 AI가 만드는 본문 HTML에는 상단 이미지나 하단 유튜브를 다시 넣지 않는다. 본문은 제목 아래의 실제 글 내용만 담고, 이미지와 유튜브는 `publish`의 별도 인자로 전달해야 서버가 순서와 모바일 레이아웃을 일관되게 보장한다. 게시 후 응답의 `postNum`을 `read`로 다시 조회해 이미지 → 본문 → 영상/원본 링크 순서를 확인한다.
 
+게시물용 생성 이미지는 Git에 넣지 않는다. 원본·최적화본·중간 파일은 `.gitignore`에 등록된 `artifacts/post-images/`에서만 임시로 사용한다. 게시 후 API `read`와 공개 페이지에서 서버 이미지가 정상 노출되는 것을 확인하면 로컬 원본, 최적화본, 중간 파일과 이미지 생성 도구의 해당 출력까지 모두 삭제한다. 게시가 보류되거나 실패한 동안에는 재개에 필요한 최소 파일만 유지한다.
+
 JSON HTML을 직접 게시하거나 이미지만 별도로 업로드하는 기존 API도 유지된다.
 
 ```text
 POST /api/admin/content/boards/{boardTitle}/posts  application/json
 POST /api/admin/content/images                    multipart/form-data
+```
+
+## 기존 게시글 수정
+
+`update`는 게시글 전체를 교체하는 `PUT` 명령이다. 먼저 `read`로 현재 HTML을 확인하고, 수정할 본문 HTML 파일을 준비한 다음 실행한다.
+
+```bash
+SC1HUB_POST_IMAGE_ALT='23넥 아비터 운영 빌드 참고 이미지' \
+SC1HUB_POST_IMAGE_CAPTION='23넥 아비터 운영을 표현한 전략게임 패러디 일러스트' \
+scripts/sc1hub-content-api.sh update \
+  pvstboard \
+  2 \
+  '쉽고 안정적인 정석. 23넥 아비터 운영 빌드' \
+  /tmp/post-body.html \
+  /tmp/post-image.jpg \
+  'https://www.youtube.com/watch?v=csIPbJ719iw'
+```
+
+이미지와 유튜브를 전달하면 `publish`와 동일하게 이미지 → 본문 → 영상/원본 링크 순서로 재구성한다. 전달하지 않으면 HTML 파일의 본문만 저장한다. 기존 작성자는 요청값과 관계없이 보존하고, 제목·본문·공지 여부와 수정 시각을 갱신한다. 응답의 `postNum`을 다시 `read`해 최종 상태를 확인한다.
+
+대응하는 API는 다음과 같다.
+
+```text
+PUT /api/admin/content/boards/{boardTitle}/posts/{postNum}  application/json
+PUT /api/admin/content/boards/{boardTitle}/posts/{postNum}  multipart/form-data
+```
+
+## 게시글 삭제
+
+삭제는 복구가 어려우므로 스크립트에서 정확한 게시판과 글 번호 뒤에 `--confirm`을 반드시 붙인다.
+
+```bash
+scripts/sc1hub-content-api.sh delete pvstboard 2 --confirm
+```
+
+서버는 게시글 존재 여부와 실제 삭제 행 수를 확인하고 성공 시 `204 No Content`를 반환한다.
+
+```text
+DELETE /api/admin/content/boards/{boardTitle}/posts/{postNum}
+```
+
+## 게시글 CRUD 요약
+
+```text
+Create  POST   /api/admin/content/boards/{boardTitle}/posts
+Read    GET    /api/admin/content/boards/{boardTitle}/posts/{postNum}
+Update  PUT    /api/admin/content/boards/{boardTitle}/posts/{postNum}
+Delete  DELETE /api/admin/content/boards/{boardTitle}/posts/{postNum}
+List    GET    /api/admin/content/boards/{boardTitle}/posts?limit=20
 ```

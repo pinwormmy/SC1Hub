@@ -21,11 +21,11 @@ public interface BoardMapper {
 
         void submitPost(@Param("boardTitle") String boardTitle, @Param("board") BoardDTO board) throws Exception;
 
-        void submitModifyPost(@Param("boardTitle") String boardTitle, @Param("board") BoardDTO board) throws Exception;
+        int submitModifyPost(@Param("boardTitle") String boardTitle, @Param("board") BoardDTO board) throws Exception;
 
         BoardDTO readPost(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum) throws Exception;
 
-        void deletePost(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum) throws Exception;
+        int deletePost(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum) throws Exception;
 
         int countTotalPost(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page) throws Exception;
 

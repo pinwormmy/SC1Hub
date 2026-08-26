@@ -16,11 +16,13 @@ import com.sc1hub.member.dto.MemberDTO;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -78,14 +80,7 @@ public class ContentAdminController {
     @GetMapping(value = "/boards/{boardTitle}/posts/{postNum}", produces = MediaType.APPLICATION_JSON_VALUE)
     public BoardDTO readPost(@PathVariable String boardTitle, @PathVariable int postNum) throws Exception {
         String normalizedBoardTitle = requireBoard(boardTitle);
-        if (postNum < 1) {
-            throw new IllegalArgumentException("게시글 번호를 확인해주세요.");
-        }
-        BoardDTO post = boardService.readPost(normalizedBoardTitle, postNum);
-        if (post == null) {
-            throw new ResourceNotFoundException("존재하지 않는 게시글입니다.");
-        }
-        return post;
+        return requirePost(normalizedBoardTitle, postNum);
     }
 
     @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
@@ -109,16 +104,36 @@ public class ContentAdminController {
             @RequestParam(value = "upload", required = false) MultipartFile upload,
             HttpServletRequest request) throws Exception {
         String normalizedBoardTitle = requireBoard(boardTitle);
-        PostImageResponse image = upload == null || upload.isEmpty()
-                ? null
-                : postImageService.store(upload, request.getContextPath());
-        ContentPostRequest payload = new ContentPostRequest();
-        payload.setTitle(form.getTitle());
-        payload.setWriter(form.getWriter());
-        payload.setNotice(form.isNotice());
-        payload.setContent(contentPostComposer.compose(form.getTitle(), form.getContent(), image,
-                form.getImageAlt(), form.getImageCaption(), form.getYoutubeUrl(), form.getYoutubeTitle()));
+        ContentPostRequest payload = composePayload(form, upload, request);
         return publish(normalizedBoardTitle, payload, request);
+    }
+
+    @PutMapping(value = "/boards/{boardTitle}/posts/{postNum}", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ContentPostResponse> updatePost(@PathVariable String boardTitle,
+            @PathVariable int postNum, @RequestBody ContentPostRequest payload, HttpServletRequest request)
+            throws Exception {
+        return update(requireBoard(boardTitle), postNum, payload, request);
+    }
+
+    @PutMapping(value = "/boards/{boardTitle}/posts/{postNum}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ContentPostResponse> updatePostWithMedia(@PathVariable String boardTitle,
+            @PathVariable int postNum, @ModelAttribute ContentPostForm form,
+            @RequestParam(value = "upload", required = false) MultipartFile upload,
+            HttpServletRequest request) throws Exception {
+        String normalizedBoardTitle = requireBoard(boardTitle);
+        ContentPostRequest payload = composePayload(form, upload, request);
+        return update(normalizedBoardTitle, postNum, payload, request);
+    }
+
+    @DeleteMapping(value = "/boards/{boardTitle}/posts/{postNum}")
+    public ResponseEntity<Void> deletePost(@PathVariable String boardTitle, @PathVariable int postNum)
+            throws Exception {
+        String normalizedBoardTitle = requireBoard(boardTitle);
+        requirePost(normalizedBoardTitle, postNum);
+        boardService.deletePost(normalizedBoardTitle, postNum);
+        return ResponseEntity.noContent().build();
     }
 
     private ResponseEntity<ContentPostResponse> publish(String normalizedBoardTitle,
@@ -138,6 +153,40 @@ public class ContentAdminController {
         return ResponseEntity.created(URI.create(url)).body(response);
     }
 
+    private ResponseEntity<ContentPostResponse> update(String normalizedBoardTitle, int postNum,
+            ContentPostRequest payload, HttpServletRequest request) throws Exception {
+        BoardDTO existingPost = requirePost(normalizedBoardTitle, postNum);
+        validate(payload);
+
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(postNum);
+        post.setTitle(payload.getTitle().trim());
+        post.setContent(contentSanitizer.sanitize(payload.getContent()));
+        post.setWriter(existingPost.getWriter());
+        post.setGuestPassword(existingPost.getGuestPassword());
+        post.setNotice(payload.isNotice() ? 1 : 0);
+        boardService.submitModifyPost(normalizedBoardTitle, post);
+
+        String url = request.getContextPath() + "/boards/" + normalizedBoardTitle
+                + "/readPost?postNum=" + postNum;
+        ContentPostResponse response = new ContentPostResponse(postNum, normalizedBoardTitle, url);
+        return ResponseEntity.ok().location(URI.create(url)).body(response);
+    }
+
+    private ContentPostRequest composePayload(ContentPostForm form, MultipartFile upload,
+            HttpServletRequest request) throws IOException {
+        PostImageResponse image = upload == null || upload.isEmpty()
+                ? null
+                : postImageService.store(upload, request.getContextPath());
+        ContentPostRequest payload = new ContentPostRequest();
+        payload.setTitle(form.getTitle());
+        payload.setWriter(form.getWriter());
+        payload.setNotice(form.isNotice());
+        payload.setContent(contentPostComposer.compose(form.getTitle(), form.getContent(), image,
+                form.getImageAlt(), form.getImageCaption(), form.getYoutubeUrl(), form.getYoutubeTitle()));
+        return payload;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleInvalidRequest(IllegalArgumentException e) {
         return ResponseEntity.badRequest().body(Collections.singletonMap("message", e.getMessage()));
@@ -154,6 +203,17 @@ public class ContentAdminController {
             throw new IllegalArgumentException("존재하지 않는 게시판입니다.");
         }
         return normalizedBoardTitle;
+    }
+
+    private BoardDTO requirePost(String normalizedBoardTitle, int postNum) throws Exception {
+        if (postNum < 1) {
+            throw new IllegalArgumentException("게시글 번호를 확인해주세요.");
+        }
+        BoardDTO post = boardService.readPost(normalizedBoardTitle, postNum);
+        if (post == null) {
+            throw new ResourceNotFoundException("존재하지 않는 게시글입니다.");
+        }
+        return post;
     }
 
     private void validate(ContentPostRequest payload) {

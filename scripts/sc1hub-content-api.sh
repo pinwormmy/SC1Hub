@@ -39,13 +39,19 @@ Usage:
   scripts/sc1hub-content-api.sh read BOARD POST_NUM
   scripts/sc1hub-content-api.sh upload IMAGE_FILE
   scripts/sc1hub-content-api.sh publish BOARD TITLE CONTENT_HTML_FILE [IMAGE_FILE] [YOUTUBE_URL]
+  scripts/sc1hub-content-api.sh update BOARD POST_NUM TITLE CONTENT_HTML_FILE [IMAGE_FILE] [YOUTUBE_URL]
+  scripts/sc1hub-content-api.sh delete BOARD POST_NUM --confirm
 
-Optional publish environment variables:
+Optional publish/update environment variables:
   SC1HUB_POST_IMAGE_ALT
   SC1HUB_POST_IMAGE_CAPTION
   SC1HUB_POST_YOUTUBE_TITLE
-  SC1HUB_POST_WRITER
   SC1HUB_POST_NOTICE=true|false
+
+Optional publish-only environment variable:
+  SC1HUB_POST_WRITER
+
+Update preserves the existing post writer. Delete requires the literal --confirm flag.
 EOF
 }
 
@@ -95,6 +101,42 @@ case "$command" in
             curl_args+=( -F "youtubeTitle=${SC1HUB_POST_YOUTUBE_TITLE:-유튜브 영상}" )
         fi
         request "${curl_args[@]}" "$API_ROOT/boards/$board/posts"
+        ;;
+    update)
+        board="${2:?BOARD is required}"
+        post_num="${3:?POST_NUM is required}"
+        title="${4:?TITLE is required}"
+        content_file="${5:?CONTENT_HTML_FILE is required}"
+        image_file="${6:-}"
+        youtube_url="${7:-}"
+        curl_args=(
+            -X PUT
+            -F "title=$title"
+            -F "content=<$content_file"
+            -F "notice=${SC1HUB_POST_NOTICE:-false}"
+        )
+        if [[ -n "$image_file" ]]; then
+            curl_args+=( -F "upload=@$image_file" )
+            curl_args+=( -F "imageAlt=${SC1HUB_POST_IMAGE_ALT:-$title}" )
+            if [[ -n "${SC1HUB_POST_IMAGE_CAPTION:-}" ]]; then
+                curl_args+=( -F "imageCaption=$SC1HUB_POST_IMAGE_CAPTION" )
+            fi
+        fi
+        if [[ -n "$youtube_url" ]]; then
+            curl_args+=( -F "youtubeUrl=$youtube_url" )
+            curl_args+=( -F "youtubeTitle=${SC1HUB_POST_YOUTUBE_TITLE:-유튜브 영상}" )
+        fi
+        request "${curl_args[@]}" "$API_ROOT/boards/$board/posts/$post_num"
+        ;;
+    delete)
+        board="${2:?BOARD is required}"
+        post_num="${3:?POST_NUM is required}"
+        confirmation="${4:-}"
+        if [[ "$confirmation" != "--confirm" ]]; then
+            echo "Delete requires: scripts/sc1hub-content-api.sh delete BOARD POST_NUM --confirm" >&2
+            exit 2
+        fi
+        request -X DELETE "$API_ROOT/boards/$board/posts/$post_num"
         ;;
     *)
         usage
