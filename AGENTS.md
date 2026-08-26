@@ -24,13 +24,13 @@
 - Fetch remote refs when they matter, and use `git pull --ff-only origin main` before work when `origin/main` may have advanced. If `main` has diverged or the checkout contains conflicting user changes, inspect and report the situation instead of forcing it into shape.
 - Use a temporary `codex/<task>` branch in the same checkout only when the developer explicitly requests a branch or the task clearly requires isolation. Do not create a worktree for it. Merge it back into local `main` only when explicitly requested.
 - Before committing, review the diff and run the narrowest relevant checks. Commit only task-related files and report the current branch, exact commit SHA, and checks run.
-- Push, deploy, merge a temporary branch, or delete an unmerged branch only when explicitly requested. Do not open a pull request unless the developer explicitly asks for one.
+- Treat an explicit `push`/`푸시해` request as authorization to commit the verified task changes directly to local `main` and push `main` to `origin`. Treat an explicit `deploy`/`배포해` request as authorization for the complete release sequence: commit the verified task changes to `main`, push `main`, deploy that pushed commit, and run post-deployment verification. Do not ask for separate commit or push confirmation within either authorized sequence unless unrelated changes, divergence, destructive recovery, or another material scope change requires it. Merge a temporary branch or delete an unmerged branch only when explicitly requested, and do not open a pull request unless the developer explicitly asks for one.
 
 ## Release and Deploy Gate
 
 - Run releases from the primary local checkout. Before release, fetch/prune, confirm it is clean and on `main`, review `origin/main...main` and local branches, and confirm that no unrelated commits are included.
 - Run `./gradlew clean build` from the exact `main` commit intended for release. Push `main` only after this final verification succeeds. By default, deploy only a commit already contained in `origin/main`.
-- Push or deploy only with explicit authorization; authorization for one does not authorize the other. Deploying an unpushed or unintegrated commit requires separate explicit authorization and a report of the divergence.
+- A push request includes the prerequisite `main` commit; a deploy request includes the prerequisite `main` commit and push. Deploy only the resulting commit already contained in `origin/main`; if that sequence cannot be preserved, stop and report the divergence instead of deploying an unpushed or unintegrated commit.
 - After deployment, verify both the server health check and the public application endpoint. Report the deployed commit SHA and verification result.
 
 ## Assistant-Bot Diagnostics
