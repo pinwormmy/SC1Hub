@@ -103,15 +103,18 @@ ssh "$REMOTE" \
        echo 'export SPRING_CONFIG_ADDITIONAL_LOCATION=\"\${SPRING_CONFIG_ADDITIONAL_LOCATION:-file:/home/hosting_users/sc1hub/config/}\"'
      } >> \"\$SETENV_SH\"
    fi
+   if grep -q -- '-Dsun.reflect.inflationThreshold=' \"\$SETENV_SH\"; then
+     sed -i -E 's/-Dsun\.reflect\.inflationThreshold=[0-9]+/-Dsun.reflect.inflationThreshold=2147483647/g' \"\$SETENV_SH\"
+   fi
    if ! grep -q 'SC1Hub reflection accessor limit' \"\$SETENV_SH\"; then
      {
        echo ''
        echo '# SC1Hub reflection accessor limit'
-       echo '# Avoid retaining accessors for rarely used reflective paths under the 64 MB Metaspace cap.'
-       echo 'export CATALINA_OPTS=\"\${CATALINA_OPTS:-} -Dsun.reflect.inflationThreshold=1000\"'
+       echo '# Keep reflective calls native so generated accessor classes cannot consume the 64 MB Metaspace cap.'
+       echo 'export CATALINA_OPTS=\"\${CATALINA_OPTS:-} -Dsun.reflect.inflationThreshold=2147483647\"'
      } >> \"\$SETENV_SH\"
    fi
-   if ! grep -q -- '-Dsun.reflect.inflationThreshold=1000' \"\$SETENV_SH\"; then
+   if ! grep -q -- '-Dsun.reflect.inflationThreshold=2147483647' \"\$SETENV_SH\"; then
      echo 'Failed to configure the SC1Hub reflection accessor limit.' >&2
      exit 1
    fi
