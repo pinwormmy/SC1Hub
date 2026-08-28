@@ -65,7 +65,7 @@ class GeminiClientTest {
     }
 
     @Test
-    void generateSearchAnswer_usesLowThinkingLevel() {
+    void generateSearchAnswer_usesSearchModelAndMinimalThinkingLevel() {
         String responseJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"answer\"}]}}]}";
         when(restTemplate.postForObject(anyString(), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(responseJson);
@@ -74,13 +74,18 @@ class GeminiClientTest {
 
         assertEquals("answer", client.generateSearchAnswer("prompt", 1024));
 
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
-        verify(restTemplate).postForObject(anyString(), entityCaptor.capture(), eq(String.class));
+        verify(restTemplate).postForObject(urlCaptor.capture(), entityCaptor.capture(), eq(String.class));
         Map<?, ?> payload = (Map<?, ?>) entityCaptor.getValue().getBody();
         Map<?, ?> generationConfig = (Map<?, ?>) payload.get("generationConfig");
         Map<?, ?> thinkingConfig = (Map<?, ?>) generationConfig.get("thinkingConfig");
+        assertEquals(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+                urlCaptor.getValue()
+        );
         assertEquals(1024, generationConfig.get("maxOutputTokens"));
-        assertEquals("low", thinkingConfig.get("thinkingLevel"));
+        assertEquals("minimal", thinkingConfig.get("thinkingLevel"));
     }
 
     @Test

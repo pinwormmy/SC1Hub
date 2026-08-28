@@ -21,8 +21,6 @@ import java.util.Map;
 @Slf4j
 public class GeminiClient {
 
-    private static final String SEARCH_THINKING_LEVEL = "low";
-
     private final RestTemplate restTemplate;
     private final GeminiProperties geminiProperties;
     private final ObjectMapper objectMapper;
@@ -50,7 +48,12 @@ public class GeminiClient {
     }
 
     public String generateSearchAnswer(String prompt, Integer maxOutputTokens) {
-        return generateAnswer(prompt, maxOutputTokens, null, SEARCH_THINKING_LEVEL);
+        return generateAnswer(
+                prompt,
+                maxOutputTokens,
+                geminiProperties.getSearchModel(),
+                geminiProperties.getSearchThinkingLevel()
+        );
     }
 
     private String generateAnswer(String prompt,
