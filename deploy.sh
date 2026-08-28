@@ -34,6 +34,7 @@ REMOTE_UPLOAD_PATH="$REMOTE_WAR_PATH.uploading"
 REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
+REMOTE_OOM_RECOVERY_SCRIPT="$REMOTE_SCRIPT_DIR/restart-tomcat-after-oom.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
 REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_strategy_recommendation.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
@@ -64,6 +65,7 @@ scp "$WAR_FILE" "$REMOTE:$REMOTE_UPLOAD_PATH"
 echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
+scp "$ROOT_DIR/scripts/restart-tomcat-after-oom.sh" "$REMOTE:$REMOTE_OOM_RECOVERY_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260824_create_one_line_strategy_recommendation.sql" "$REMOTE:$REMOTE_STRATEGY_RECOMMENDATION_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
@@ -81,6 +83,7 @@ ssh "$REMOTE" \
    REMOTE_EXPLODED_DIR='$REMOTE_EXPLODED_DIR'
    REMOTE_WAR_BACKUP_PATH='$REMOTE_WAR_BACKUP_PATH'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
+   REMOTE_OOM_RECOVERY_SCRIPT='$REMOTE_OOM_RECOVERY_SCRIPT'
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
@@ -118,6 +121,17 @@ ssh "$REMOTE" \
      echo 'Failed to configure the SC1Hub reflection accessor limit.' >&2
      exit 1
    fi
+   if ! grep -q 'SC1Hub OOM recovery hook' \"\$SETENV_SH\"; then
+     {
+       echo ''
+       echo '# SC1Hub OOM recovery hook'
+       echo \"export CATALINA_OPTS=\\\"\\\${CATALINA_OPTS:-} -XX:OnOutOfMemoryError=\$REMOTE_OOM_RECOVERY_SCRIPT\\\"\"
+     } >> \"\$SETENV_SH\"
+   fi
+   if ! grep -q -- \"-XX:OnOutOfMemoryError=\$REMOTE_OOM_RECOVERY_SCRIPT\" \"\$SETENV_SH\"; then
+     echo 'Failed to configure the SC1Hub OOM recovery hook.' >&2
+     exit 1
+   fi
    LEGACY_ONLINE_PROPS=\"\$REMOTE_TOMCAT_DIR/webapps/ROOT/WEB-INF/classes/application-online.properties\"
    if [ ! -f \"\$REMOTE_ONLINE_PROPS\" ] && [ -f \"\$LEGACY_ONLINE_PROPS\" ]; then
      cp \"\$LEGACY_ONLINE_PROPS\" \"\$REMOTE_ONLINE_PROPS\"
@@ -128,7 +142,7 @@ ssh "$REMOTE" \
      exit 1
    fi
    chmod 600 \"\$REMOTE_ONLINE_PROPS\"
-   chmod +x '$REMOTE_CLEANUP_SCRIPT'
+   chmod +x '$REMOTE_CLEANUP_SCRIPT' \"\$REMOTE_OOM_RECOVERY_SCRIPT\"
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
@@ -171,6 +185,36 @@ ssh "$REMOTE" \
          return 1
        fi
      done
+     return 0
+   }
+   warm_up_representative_routes() {
+     for route in / /strategy-tips /boards/pvstboard /boards/zvszboard /boards/funboard \
+       '/boards/pvstboard/readPost?postNum=2' '/api/chat/messages?afterSeq=0' /sitemap.xml; do
+       if ! curl -fsS --max-time 5 -o /dev/null \"http://127.0.0.1:\$REMOTE_HTTP_PORT\$route\"; then
+         echo \"Representative warm-up failed: \$route\" >&2
+         return 1
+       fi
+     done
+     return 0
+   }
+   verify_metaspace_headroom() {
+     APP_PIDS=\$(jps -lv 2>/dev/null | awk '/org\\.apache\\.catalina\\.startup\\.Bootstrap/{print \$1}')
+     APP_PID_COUNT=\$(printf '%s\\n' \"\$APP_PIDS\" | awk 'NF { count++ } END { print count + 0 }')
+     if [ \"\$APP_PID_COUNT\" != \"1\" ]; then
+       echo \"Expected exactly one Catalina JVM, found \$APP_PID_COUNT.\" >&2
+       return 1
+     fi
+     APP_PID=\$(printf '%s\\n' \"\$APP_PIDS\" | awk 'NF { print; exit }')
+     METASPACE_USED_KB=\$(jstat -gc \"\$APP_PID\" | awk 'NR == 2 { printf \"%d\\n\", \$10 }')
+     if ! printf '%s' \"\$METASPACE_USED_KB\" | grep -Eq '^[0-9]+$'; then
+       echo 'Could not measure production Metaspace usage.' >&2
+       return 1
+     fi
+     echo \"Production Metaspace after warm-up: \${METASPACE_USED_KB}KB / 65536KB\"
+     if [ \"\$METASPACE_USED_KB\" -ge 60000 ]; then
+       echo 'Production Metaspace headroom is below the 5536KB release minimum.' >&2
+       return 1
+     fi
      return 0
    }
    wait_for_tomcat_shutdown() {
@@ -229,10 +273,14 @@ ssh "$REMOTE" \
      rollback_and_restart || true
      exit 1
    fi
-   if wait_for_stable_local_health; then
+   if wait_for_local_health &&
+      warm_up_representative_routes &&
+      verify_metaspace_headroom &&
+      wait_for_stable_local_health &&
+      verify_metaspace_headroom; then
      exit 0
    fi
-   echo \"Tomcat did not respond on port \$REMOTE_HTTP_PORT after startup.\" >&2
+   echo \"Tomcat failed startup, representative warm-up, or Metaspace verification.\" >&2
    echo \"Inspect \$REMOTE_TOMCAT_DIR/logs/catalina.out for startup details.\" >&2
    rollback_and_restart || true
    exit 1"

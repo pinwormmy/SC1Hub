@@ -15,6 +15,10 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -48,6 +52,36 @@ class UploadControllerTest {
 
         assertEquals(200, response.getStatus());
         assertArrayEquals(imageBytes, response.getContentAsByteArray());
+        assertEquals(Integer.toString(imageBytes.length), response.getHeader("Content-Length"));
+        assertEquals("public, max-age=31536000, immutable", response.getHeader("Cache-Control"));
+        assertEquals("nosniff", response.getHeader("X-Content-Type-Options"));
+    }
+
+    @Test
+    void imgSubmit_returnsNotModifiedWithoutReadingBody() throws Exception {
+        String uid = "81469f62-87c3-4b41-8832-eb089fa50414";
+        String fileName = "cached.jpg";
+        Path image = tempDir.resolve(uid + "_" + fileName);
+        Files.write(image, new byte[] { 1, 2, 3, 4 });
+        long lastModified = 1_788_000_000_000L;
+        Files.setLastModifiedTime(image, FileTime.fromMillis(lastModified));
+
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/uploadedImg/" + uid + "_" + fileName);
+        request.addHeader("If-Modified-Since", DateTimeFormatter.RFC_1123_DATE_TIME.format(
+                Instant.ofEpochMilli(lastModified).atZone(ZoneOffset.UTC)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.imgSubmit(uid + "_" + fileName, request, response);
+
+        assertEquals(304, response.getStatus());
+        assertEquals(0, response.getContentAsByteArray().length);
+        assertEquals("public, max-age=31536000, immutable", response.getHeader("Cache-Control"));
+        assertTrue(response.getHeader("Last-Modified") != null);
     }
 
     @Test

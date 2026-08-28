@@ -20,9 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -38,6 +36,8 @@ import java.util.Map;
 @Slf4j
 @Controller
 public class UploadController {
+
+    private static final String IMMUTABLE_IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
     // 슬래시 포함 여부가 또 중요해서 설정 경로 따로 만듬
     private String uploadPath;
@@ -102,7 +102,7 @@ public class UploadController {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
-        log.info("img upload path for submit: {}", targetPath);
+        log.debug("img upload path for submit: {}", targetPath);
         writeImageResponse(targetPath, request, response, uid, decodedFileName);
     }
 
@@ -127,37 +127,35 @@ public class UploadController {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
-        log.info("img upload path for /img: {}", targetPath);
+        log.debug("img upload path for /img: {}", targetPath);
         writeImageResponse(targetPath, request, response, ref.uid, ref.fileName);
     }
 
     private void writeImageResponse(Path targetPath, HttpServletRequest request, HttpServletResponse response,
             String uid, String decodedFileName) {
         if (Files.isRegularFile(targetPath)) {
-            byte[] buf = new byte[1024];
-            int readByte;
-            int length;
-            byte[] imgBuf;
-
-            try (InputStream fileInputStream = Files.newInputStream(targetPath);
-                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                 ServletOutputStream out = response.getOutputStream()) {
-
+            try {
+                long fileSize = Files.size(targetPath);
+                long lastModified = Files.getLastModifiedTime(targetPath).toMillis();
                 String contentType = Files.probeContentType(targetPath);
                 if (contentType == null) {
                     contentType = "application/octet-stream";
                 }
                 response.setContentType(contentType);
-
-                while ((readByte = fileInputStream.read(buf)) != -1) {
-                    outputStream.write(buf, 0, readByte);
+                response.setHeader("Cache-Control", IMMUTABLE_IMAGE_CACHE_CONTROL);
+                response.setHeader("X-Content-Type-Options", "nosniff");
+                response.setDateHeader("Last-Modified", lastModified);
+                if (isNotModified(request, lastModified)) {
+                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                    return;
                 }
-
-                imgBuf = outputStream.toByteArray();
-                length = imgBuf.length;
-                out.write(imgBuf, 0, length);
-                out.flush();
-
+                if (fileSize <= Integer.MAX_VALUE) {
+                    response.setContentLength((int) fileSize);
+                }
+                try (ServletOutputStream out = response.getOutputStream()) {
+                    Files.copy(targetPath, out);
+                    out.flush();
+                }
             } catch (IOException e) {
                 log.error("Failed to load uploaded image. path={}", targetPath, e);
             }
@@ -166,6 +164,18 @@ public class UploadController {
                 return;
             }
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
+    }
+
+    private boolean isNotModified(HttpServletRequest request, long lastModified) {
+        if (request == null) {
+            return false;
+        }
+        try {
+            long ifModifiedSince = request.getDateHeader("If-Modified-Since");
+            return ifModifiedSince >= 0 && ifModifiedSince >= (lastModified / 1000L) * 1000L;
+        } catch (IllegalArgumentException ignored) {
+            return false;
         }
     }
 

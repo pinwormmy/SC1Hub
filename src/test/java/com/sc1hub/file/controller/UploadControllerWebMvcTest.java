@@ -132,6 +132,10 @@ class UploadControllerWebMvcTest {
 
         mockMvc.perform(get("/uploadedImg/{imageName}", uid + "_" + storedFileName))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", allOf(
+                        containsString("max-age=31536000"),
+                        containsString("immutable"))))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(content().bytes(imageBytes));
     }
 
