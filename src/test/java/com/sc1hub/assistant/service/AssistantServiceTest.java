@@ -61,7 +61,7 @@ class AssistantServiceTest {
         assistantProperties.setContextPosts(3);
         assistantProperties.setAnswerMaxSentences(3);
         assistantProperties.setAnswerMaxChars(600);
-        assistantProperties.setAnswerMaxOutputTokens(2048);
+        assistantProperties.setAnswerMaxOutputTokens(1024);
         assistantProperties.setPerBoardLimit(5);
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
@@ -120,7 +120,7 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         MemberDTO member = new MemberDTO();
         member.setNickName("tester");
@@ -137,44 +137,44 @@ class AssistantServiceTest {
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture(), maxTokensCaptor.capture());
+        verify(geminiClient).generateSearchAnswer(promptCaptor.capture(), maxTokensCaptor.capture());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("User question"));
         assertTrue(prompt.contains("max 3 sentences"));
         assertTrue(prompt.contains("<= 600 chars"));
         assertTrue(prompt.contains("board=freeboard"));
         assertTrue(prompt.contains("title=5팩 골리앗 운영"));
-        assertEquals(2048, maxTokensCaptor.getValue());
+        assertEquals(1024, maxTokensCaptor.getValue());
     }
 
     @Test
     void chat_usesMinimumAnswerOutputBudget_whenConfiguredBudgetIsTooLow() throws Exception {
         assistantProperties.setAnswerMaxOutputTokens(512);
         when(boardMapper.getBoardList()).thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt()))
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt()))
                 .thenReturn("{\"answer\":\"짧은 답변입니다.\",\"citations\":[]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 알려줘", null);
 
         assertEquals("짧은 답변입니다.", response.getAnswer());
         ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(geminiClient).generateAnswer(anyString(), maxTokensCaptor.capture());
-        assertEquals(2048, maxTokensCaptor.getValue());
+        verify(geminiClient).generateSearchAnswer(anyString(), maxTokensCaptor.capture());
+        assertEquals(1024, maxTokensCaptor.getValue());
     }
 
     @Test
     void chat_retriesOnceWithLargerBudget_whenGeminiReturnsEmptyAnswer() throws Exception {
         assistantProperties.setAnswerMaxOutputTokens(512);
         when(boardMapper.getBoardList()).thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt()))
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt()))
                 .thenReturn("", "{\"answer\":\"재시도 답변입니다.\",\"citations\":[]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 알려줘", null);
 
         assertEquals("재시도 답변입니다.", response.getAnswer());
         ArgumentCaptor<Integer> maxTokensCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(geminiClient, times(2)).generateAnswer(anyString(), maxTokensCaptor.capture());
-        assertEquals(Arrays.asList(2048, 3072), maxTokensCaptor.getAllValues());
+        verify(geminiClient, times(2)).generateSearchAnswer(anyString(), maxTokensCaptor.capture());
+        assertEquals(Arrays.asList(1024, 1536), maxTokensCaptor.getAllValues());
     }
 
     @Test
@@ -193,7 +193,7 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[]}");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[]}");
 
         AssistantChatResponseDTO response = assistantService.chat("커공발 알려줘", null);
 
@@ -234,7 +234,7 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("pvzboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn(
                 "{\"answer\":\"커공발은 커세어 공업 발업 질럿 운영입니다.\",\"citations\":[\"pvzboard:4\"]}"
         );
 
@@ -255,7 +255,7 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn(
                 "{\"answer\":\"관련 글을 찾지 못했습니다.\",\"citations\":[]}"
         );
 
@@ -271,12 +271,12 @@ class AssistantServiceTest {
         unsafe.setBoardTitle("freeboard;drop table member;");
 
         when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(unsafe));
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("답변입니다.");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("답변입니다.");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩", null);
 
         verify(boardMapper).getBoardList();
-        verify(geminiClient).generateAnswer(anyString(), anyInt());
+        verify(geminiClient).generateSearchAnswer(anyString(), anyInt());
         assertTrue(response.getRelatedPosts().isEmpty());
     }
 
@@ -296,7 +296,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -305,7 +305,7 @@ class AssistantServiceTest {
         assertEquals("freeboard", response.getRelatedPosts().get(0).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
+        verify(geminiClient).generateSearchAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("chunkIndex=0"));
@@ -349,7 +349,7 @@ class AssistantServiceTest {
         AssistantRagSearchService.Match match = AssistantRagSearchService.Match.of(chunk, 0.9);
 
         when(ragSearchService.search(anyString(), anyInt())).thenReturn(Collections.singletonList(match));
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"freeboard:9\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 골리앗 운영 알려줘", null);
 
@@ -358,7 +358,7 @@ class AssistantServiceTest {
         assertEquals("tipboard", response.getRelatedPosts().get(1).getBoardTitle());
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
+        verify(geminiClient).generateSearchAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertTrue(prompt.contains("Site snippets"));
         assertTrue(prompt.contains("Site posts"));
@@ -397,8 +397,8 @@ class AssistantServiceTest {
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
         String classificationJson = "{\"intent\":\"guide\",\"playerRace\":\"T\",\"opponentRace\":\"P\",\"confidence\":0.9}";
-        when(geminiClient.generateAnswer(anyString())).thenReturn(classificationJson);
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"tvspboard:1\"]}");
+        when(geminiClient.generateSearchAnswer(anyString())).thenReturn(classificationJson);
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"tvspboard:1\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("5팩 운영", null);
 
@@ -407,8 +407,8 @@ class AssistantServiceTest {
         assertEquals(1, response.getRelatedPosts().size());
         assertEquals("tvspboard", response.getRelatedPosts().get(0).getBoardTitle());
         assertTrue(response.getRelatedPostsNotice() == null || response.getRelatedPostsNotice().contains("관련 글"));
-        verify(geminiClient).generateAnswer(anyString());
-        verify(geminiClient).generateAnswer(anyString(), anyInt());
+        verify(geminiClient).generateSearchAnswer(anyString());
+        verify(geminiClient).generateSearchAnswer(anyString(), anyInt());
     }
 
     @Test
@@ -438,8 +438,8 @@ class AssistantServiceTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString())).thenReturn("[2,1]");
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn(
+        when(geminiClient.generateSearchAnswer(anyString())).thenReturn("[2,1]");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn(
                 "{\"answer\":\"첫번째 답변\",\"citations\":[\"freeboard:2\"]}",
                 "{\"answer\":\"두번째 답변\",\"citations\":[\"freeboard:2\"]}"
         );
@@ -453,8 +453,8 @@ class AssistantServiceTest {
         assertEquals(2, secondCall.getRelatedPosts().get(0).getPostNum());
 
         // rerank 1회 + answer 2회
-        verify(geminiClient).generateAnswer(anyString());
-        verify(geminiClient, times(2)).generateAnswer(anyString(), anyInt());
+        verify(geminiClient).generateSearchAnswer(anyString());
+        verify(geminiClient, times(2)).generateSearchAnswer(anyString(), anyInt());
     }
 
     private AssistantQueryParseResult buildParseResult(String message) {

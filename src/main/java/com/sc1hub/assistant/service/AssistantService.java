@@ -40,8 +40,8 @@ public class AssistantService {
             "unit", "stats", "stat", "damage", "armor", "health", "shield", "range", "speed", "cooldown", "cost", "supply"
     ));
     private static final int FACT_BOARD_SCORE_BONUS = 2;
-    private static final int MIN_ANSWER_MAX_OUTPUT_TOKENS = 2048;
-    private static final int EMPTY_ANSWER_RETRY_MAX_OUTPUT_TOKENS = 3072;
+    private static final int MIN_ANSWER_MAX_OUTPUT_TOKENS = 1024;
+    private static final int EMPTY_ANSWER_RETRY_MAX_OUTPUT_TOKENS = 1536;
 
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
@@ -184,7 +184,7 @@ public class AssistantService {
 
     private AssistantAnswerResult generateAnswerResult(String prompt, Set<String> allowedSourceIds) {
         int answerMaxOutputTokens = resolveAnswerMaxOutputTokens();
-        String rawAnswer = geminiClient.generateAnswer(prompt, answerMaxOutputTokens);
+        String rawAnswer = geminiClient.generateSearchAnswer(prompt, answerMaxOutputTokens);
         AssistantAnswerResult result = parseAnswerResult(rawAnswer, allowedSourceIds);
         if (StringUtils.hasText(result.getAnswer())) {
             return result;
@@ -197,7 +197,7 @@ public class AssistantService {
 
         log.warn("AI 검색 답변이 빈 값으로 반환되어 더 큰 출력 예산으로 1회 재시도합니다. firstMaxOutputTokens={}, retryMaxOutputTokens={}",
                 answerMaxOutputTokens, retryMaxOutputTokens);
-        String retryRawAnswer = geminiClient.generateAnswer(prompt, retryMaxOutputTokens);
+        String retryRawAnswer = geminiClient.generateSearchAnswer(prompt, retryMaxOutputTokens);
         return parseAnswerResult(retryRawAnswer, allowedSourceIds);
     }
 
@@ -564,7 +564,7 @@ public class AssistantService {
             return null;
         }
         String prompt = buildMatchupIntentPrompt(message);
-        String raw = geminiClient.generateAnswer(prompt);
+        String raw = geminiClient.generateSearchAnswer(prompt);
         return parseLlmMatchupIntent(raw);
     }
 
@@ -674,7 +674,7 @@ public class AssistantService {
             return Collections.emptyList();
         }
         String prompt = buildRerankPrompt(message, candidates);
-        String raw = geminiClient.generateAnswer(prompt);
+        String raw = geminiClient.generateSearchAnswer(prompt);
         return parseRerankOrder(raw, candidates.size());
     }
 
@@ -2400,7 +2400,7 @@ public class AssistantService {
         if (llmRelatedPostsRateLimiter.tryAcquire(rateLimitPerMinute)) {
             try {
                 String prompt = buildLlmRelatedPostsPrompt(query, answer, evidenceCandidates, topCandidates);
-                String raw = geminiClient.generateAnswer(prompt);
+                String raw = geminiClient.generateSearchAnswer(prompt);
                 LlmRelatedPostsSelection selection = parseLlmRelatedPostsSelection(raw);
                 selection = sanitizeLlmRelatedPostsSelection(selection, evidenceCandidates, topCandidates);
                 if (selection == null) {

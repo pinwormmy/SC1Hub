@@ -136,13 +136,13 @@ class AssistantAliasDictionaryScenarioTest {
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());
 
-        when(geminiClient.generateAnswer(anyString(), anyInt()))
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt()))
                 .thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[\"pvszboard:1\"]}");
 
         AssistantChatResponseDTO response = assistantService.chat("커공발 빌드 알려줘", null);
 
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(geminiClient).generateAnswer(promptCaptor.capture(), anyInt());
+        verify(geminiClient).generateSearchAnswer(promptCaptor.capture(), anyInt());
         String prompt = promptCaptor.getValue();
         assertThat(prompt).contains("sourceId=pvszboard:1");
         assertThat(prompt.split("sourceId=").length - 1).isEqualTo(5);
@@ -158,7 +158,7 @@ class AssistantAliasDictionaryScenarioTest {
     void scenario2_sparseQuery_doesNotForceRelatedPosts() {
         when(aliasDictionaryMapper.selectAll()).thenReturn(Collections.emptyList());
         when(boardMapper.getBoardList()).thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[]}");
+        when(geminiClient.generateSearchAnswer(anyString(), anyInt())).thenReturn("{\"answer\":\"답변입니다.\",\"citations\":[]}");
 
         AssistantChatResponseDTO response = assistantService.chat("그냥 질문", null);
 

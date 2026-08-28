@@ -74,7 +74,7 @@ class AssistantServiceRelatedPostsTest {
         parseResult.setExpandedTerms(Arrays.asList("테스트", "빌드"));
         when(queryParser.parse(anyString())).thenReturn(parseResult);
 
-        when(geminiClient.generateAnswer(anyString(), Mockito.<Integer>any()))
+        when(geminiClient.generateSearchAnswer(anyString(), Mockito.<Integer>any()))
                 .thenReturn("{\"answer\":\"테스트 빌드 답변\",\"citations\":[\"testboard:1\"]}");
 
         AssistantChatResponseDTO response = service.chat("테스트 빌드", null);
@@ -103,4 +103,3 @@ class AssistantServiceRelatedPostsTest {
         return sb.toString();
     }
 }
-

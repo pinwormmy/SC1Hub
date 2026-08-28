@@ -61,6 +61,26 @@ class GeminiClientTest {
         Map<?, ?> payload = (Map<?, ?>) entityCaptor.getValue().getBody();
         Map<?, ?> generationConfig = (Map<?, ?>) payload.get("generationConfig");
         assertFalse(generationConfig.containsKey("temperature"));
+        assertFalse(generationConfig.containsKey("thinkingConfig"));
+    }
+
+    @Test
+    void generateSearchAnswer_usesLowThinkingLevel() {
+        String responseJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"answer\"}]}}]}";
+        when(restTemplate.postForObject(anyString(), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(responseJson);
+
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
+
+        assertEquals("answer", client.generateSearchAnswer("prompt", 1024));
+
+        ArgumentCaptor<HttpEntity> entityCaptor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).postForObject(anyString(), entityCaptor.capture(), eq(String.class));
+        Map<?, ?> payload = (Map<?, ?>) entityCaptor.getValue().getBody();
+        Map<?, ?> generationConfig = (Map<?, ?>) payload.get("generationConfig");
+        Map<?, ?> thinkingConfig = (Map<?, ?>) generationConfig.get("thinkingConfig");
+        assertEquals(1024, generationConfig.get("maxOutputTokens"));
+        assertEquals("low", thinkingConfig.get("thinkingLevel"));
     }
 
     @Test

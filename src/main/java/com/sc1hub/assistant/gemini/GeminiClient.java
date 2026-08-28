@@ -14,11 +14,14 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
 @Slf4j
 public class GeminiClient {
+
+    private static final String SEARCH_THINKING_LEVEL = "low";
 
     private final RestTemplate restTemplate;
     private final GeminiProperties geminiProperties;
@@ -39,6 +42,21 @@ public class GeminiClient {
     }
 
     public String generateAnswer(String prompt, Integer maxOutputTokens, String modelOverride) {
+        return generateAnswer(prompt, maxOutputTokens, modelOverride, null);
+    }
+
+    public String generateSearchAnswer(String prompt) {
+        return generateSearchAnswer(prompt, null);
+    }
+
+    public String generateSearchAnswer(String prompt, Integer maxOutputTokens) {
+        return generateAnswer(prompt, maxOutputTokens, null, SEARCH_THINKING_LEVEL);
+    }
+
+    private String generateAnswer(String prompt,
+                                  Integer maxOutputTokens,
+                                  String modelOverride,
+                                  String thinkingLevel) {
         if (!geminiProperties.isAllowLiveCalls()) {
             throw new GeminiException("Live Gemini API calls are disabled.");
         }
@@ -62,7 +80,7 @@ public class GeminiClient {
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
         headers.set("x-goog-api-key", apiKey);
 
-        Map<String, Object> payload = buildPayload(prompt, maxOutputTokens, true);
+        Map<String, Object> payload = buildPayload(prompt, maxOutputTokens, true, thinkingLevel);
 
         try {
             String responseBody = restTemplate.postForObject(url, new HttpEntity<>(payload, headers), String.class);
@@ -70,7 +88,7 @@ public class GeminiClient {
         } catch (HttpStatusCodeException e) {
             if (isUnknownFieldError(e, "responseMimeType")) {
                 try {
-                    Map<String, Object> fallback = buildPayload(prompt, maxOutputTokens, false);
+                    Map<String, Object> fallback = buildPayload(prompt, maxOutputTokens, false, thinkingLevel);
                     String responseBody = restTemplate.postForObject(url, new HttpEntity<>(fallback, headers), String.class);
                     return extractTextFromResponse(responseBody);
                 } catch (HttpStatusCodeException fallbackException) {
@@ -98,7 +116,10 @@ public class GeminiClient {
         return Math.max(0, geminiProperties.getMaxOutputTokens());
     }
 
-    private Map<String, Object> buildPayload(String prompt, Integer maxOutputTokens, boolean jsonMode) {
+    private Map<String, Object> buildPayload(String prompt,
+                                             Integer maxOutputTokens,
+                                             boolean jsonMode,
+                                             String thinkingLevel) {
         Map<String, Object> payload = new HashMap<>();
 
         Map<String, Object> userPart = new HashMap<>();
@@ -114,6 +135,11 @@ public class GeminiClient {
         int resolvedMaxOutputTokens = resolveMaxOutputTokens(maxOutputTokens);
         if (resolvedMaxOutputTokens > 0) {
             generationConfig.put("maxOutputTokens", resolvedMaxOutputTokens);
+        }
+        if (StringUtils.hasText(thinkingLevel)) {
+            Map<String, Object> thinkingConfig = new HashMap<>();
+            thinkingConfig.put("thinkingLevel", thinkingLevel.trim().toLowerCase(Locale.ROOT));
+            generationConfig.put("thinkingConfig", thinkingConfig);
         }
         if (jsonMode) {
             generationConfig.put("responseMimeType", "application/json");
