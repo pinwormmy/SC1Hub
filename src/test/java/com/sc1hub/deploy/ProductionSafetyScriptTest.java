@@ -26,8 +26,22 @@ class ProductionSafetyScriptTest {
         assertTrue(deployScript.contains("warm_up_representative_routes"));
         assertTrue(deployScript.contains("/boards/pvstboard/readPost?postNum=2"));
         assertTrue(deployScript.contains("verify_metaspace_headroom"));
-        assertTrue(deployScript.contains("-ge 60000"));
+        assertTrue(deployScript.contains("jinfo -flag MaxMetaspaceSize"));
+        assertTrue(deployScript.contains("METASPACE_PERCENT"));
+        assertTrue(deployScript.contains("-ge 95"));
+        assertTrue(deployScript.contains("-ge 85"));
+        assertTrue(deployScript.contains("metaspace-history.log"));
+        assertFalse(deployScript.contains("-ge 60000"));
         assertTrue(deployScript.contains("rollback_and_restart"));
+    }
+
+    @Test
+    void deployPreservesCatalinaOutInsteadOfTruncatingIt() throws Exception {
+        String deployScript = read(Paths.get("deploy.sh"));
+
+        assertTrue(deployScript.contains("ROTATED="));
+        assertTrue(deployScript.contains("Could not preserve catalina.out"));
+        assertTrue(deployScript.contains("NR > 10"));
     }
 
     @Test

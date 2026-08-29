@@ -216,15 +216,26 @@ ssh "$REMOTE" \
        echo \"Production JVM safety arguments are missing or duplicated. reflection=\$REFLECTION_ARG_COUNT oom=\$OOM_ARG_COUNT\" >&2
        return 1
      fi
+     METASPACE_MAX_BYTES=\$(jinfo -flag MaxMetaspaceSize \"\$APP_PID\" 2>/dev/null | sed -n 's/.*=\\([0-9][0-9]*\\).*/\\1/p')
+     if ! printf '%s' \"\$METASPACE_MAX_BYTES\" | grep -Eq '^[0-9]+$' || [ \"\$METASPACE_MAX_BYTES\" -le 0 ]; then
+       echo 'Could not read the production MaxMetaspaceSize flag.' >&2
+       return 1
+     fi
+     METASPACE_MAX_KB=\$((METASPACE_MAX_BYTES / 1024))
      METASPACE_USED_KB=\$(jstat -gc \"\$APP_PID\" | awk 'NR == 2 { printf \"%d\\n\", \$10 }')
      if ! printf '%s' \"\$METASPACE_USED_KB\" | grep -Eq '^[0-9]+$'; then
        echo 'Could not measure production Metaspace usage.' >&2
        return 1
      fi
-     echo \"Production Metaspace after warm-up: \${METASPACE_USED_KB}KB / 65536KB\"
-     if [ \"\$METASPACE_USED_KB\" -ge 60000 ]; then
-       echo 'Production Metaspace headroom is below the 5536KB release minimum.' >&2
+     METASPACE_PERCENT=\$((METASPACE_USED_KB * 100 / METASPACE_MAX_KB))
+     echo \"Production Metaspace after warm-up: \${METASPACE_USED_KB}KB / \${METASPACE_MAX_KB}KB (\${METASPACE_PERCENT}%)\"
+     printf '%s used=%sKB max=%sKB pct=%s\\n' \"\$(date '+%Y-%m-%d %H:%M:%S')\" \"\$METASPACE_USED_KB\" \"\$METASPACE_MAX_KB\" \"\$METASPACE_PERCENT\" >> \"\$REMOTE_TOMCAT_DIR/logs/metaspace-history.log\" 2>/dev/null || true
+     if [ \"\$METASPACE_PERCENT\" -ge 95 ]; then
+       echo \"Production Metaspace is at \${METASPACE_PERCENT}% of the \${METASPACE_MAX_KB}KB cap; refusing the release.\" >&2
        return 1
+     fi
+     if [ \"\$METASPACE_PERCENT\" -ge 85 ]; then
+       echo \"WARNING: Production Metaspace is at \${METASPACE_PERCENT}% of the \${METASPACE_MAX_KB}KB cap. A first-time cold code path can still exhaust the remainder.\" >&2
      fi
      return 0
    }
@@ -267,8 +278,17 @@ ssh "$REMOTE" \
      chmod 600 \"\$REMOTE_WAR_BACKUP_PATH\"
      HAD_EXISTING_WAR=1
    fi
-   if [ -f \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" ]; then
-     : > \"\$REMOTE_TOMCAT_DIR/logs/catalina.out\" || true
+   CATALINA_OUT=\"\$REMOTE_TOMCAT_DIR/logs/catalina.out\"
+   if [ -s \"\$CATALINA_OUT\" ]; then
+     ROTATED=\"\$CATALINA_OUT.\$(date '+%Y%m%dT%H%M%S')\"
+     if cp -p \"\$CATALINA_OUT\" \"\$ROTATED\"; then
+       : > \"\$CATALINA_OUT\" || true
+       ls -1t \"\$CATALINA_OUT.\"[0-9]* 2>/dev/null | awk 'NR > 10' | while read -r stale; do
+         rm -f \"\$stale\"
+       done
+     else
+       echo 'Could not preserve catalina.out before the release; keeping it intact.' >&2
+     fi
    fi
    $REMOTE_STOP_CMD || true
    if ! wait_for_tomcat_shutdown; then
