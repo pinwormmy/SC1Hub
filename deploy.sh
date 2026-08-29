@@ -121,14 +121,14 @@ ssh "$REMOTE" \
      echo 'Failed to configure the SC1Hub reflection accessor limit.' >&2
      exit 1
    fi
-   if ! grep -q 'SC1Hub OOM recovery hook' \"\$SETENV_SH\"; then
-     {
-       echo ''
-       echo '# SC1Hub OOM recovery hook'
-       echo \"export CATALINA_OPTS=\\\"\\\${CATALINA_OPTS:-} -XX:OnOutOfMemoryError=\$REMOTE_OOM_RECOVERY_SCRIPT\\\"\"
-     } >> \"\$SETENV_SH\"
-   fi
-   if ! grep -q -- \"-XX:OnOutOfMemoryError=\$REMOTE_OOM_RECOVERY_SCRIPT\" \"\$SETENV_SH\"; then
+   sed -i '\|^# SC1Hub OOM recovery hook$|d' \"\$SETENV_SH\"
+   sed -i '\|-XX:OnOutOfMemoryError=|d' \"\$SETENV_SH\"
+   {
+     echo ''
+     echo '# SC1Hub OOM recovery hook'
+     echo \"export CATALINA_OPTS=\\\"\\\${CATALINA_OPTS:-} '-XX:OnOutOfMemoryError=exec $REMOTE_OOM_RECOVERY_SCRIPT %p'\\\"\"
+   } >> \"\$SETENV_SH\"
+   if ! grep -Fq -- \"'-XX:OnOutOfMemoryError=exec $REMOTE_OOM_RECOVERY_SCRIPT %p'\" \"\$SETENV_SH\"; then
      echo 'Failed to configure the SC1Hub OOM recovery hook.' >&2
      exit 1
    fi
@@ -205,6 +205,17 @@ ssh "$REMOTE" \
        return 1
      fi
      APP_PID=\$(printf '%s\\n' \"\$APP_PIDS\" | awk 'NF { print; exit }')
+     APP_CMDLINE=\"/proc/\$APP_PID/cmdline\"
+     if [ ! -r \"\$APP_CMDLINE\" ]; then
+       echo \"Could not read production JVM command line for PID \$APP_PID.\" >&2
+       return 1
+     fi
+     REFLECTION_ARG_COUNT=\$(tr '\\000' '\\n' < \"\$APP_CMDLINE\" | grep -Fxc -- '-Dsun.reflect.inflationThreshold=2147483647' || true)
+     OOM_ARG_COUNT=\$(tr '\\000' '\\n' < \"\$APP_CMDLINE\" | grep -Fxc -- \"-XX:OnOutOfMemoryError=exec \$REMOTE_OOM_RECOVERY_SCRIPT %p\" || true)
+     if [ \"\$REFLECTION_ARG_COUNT\" != \"1\" ] || [ \"\$OOM_ARG_COUNT\" != \"1\" ]; then
+       echo \"Production JVM safety arguments are missing or duplicated. reflection=\$REFLECTION_ARG_COUNT oom=\$OOM_ARG_COUNT\" >&2
+       return 1
+     fi
      METASPACE_USED_KB=\$(jstat -gc \"\$APP_PID\" | awk 'NR == 2 { printf \"%d\\n\", \$10 }')
      if ! printf '%s' \"\$METASPACE_USED_KB\" | grep -Eq '^[0-9]+$'; then
        echo 'Could not measure production Metaspace usage.' >&2

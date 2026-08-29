@@ -118,6 +118,10 @@ ${fragment}
 tasks.named('bootWar') {
 	dependsOn tasks.named('generatePrecompiledJspWebXml')
 	webXml = generatedJspWebXml.get().asFile
+	layered {
+		enabled = false
+		includeLayerTools = false
+	}
 	from(generatedJspClassesDir) {
 		into 'WEB-INF/classes'
 		include '**/*.class'

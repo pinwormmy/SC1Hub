@@ -1,6 +1,7 @@
 package com.sc1hub.member.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -17,7 +18,7 @@ public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender emailSender;
 
-    public EmailServiceImpl(JavaMailSender emailSender) {
+    public EmailServiceImpl(@Lazy JavaMailSender emailSender) {
         this.emailSender = emailSender;
     }
 
