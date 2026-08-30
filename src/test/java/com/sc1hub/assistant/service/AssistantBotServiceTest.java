@@ -87,7 +87,7 @@ class AssistantBotServiceTest {
         botProperties.setAutoPublishCommentCandidatePosts(10);
         botProperties.setRecentCommentLimit(24);
         botProperties.setAutoPublishCommentReplyPriorityProbability(0.9);
-        botProperties.setPersonas(Arrays.asList(persona("프징징봇"), persona("테뻔뻔봇"), persona("저묵묵봇"), persona("훈훈봇")));
+        botProperties.setPersonas(Arrays.asList(persona("프징징봇"), persona("테뻔뻔봇"), persona("저묵묵봇"), persona("건강봇")));
 
         AssistantProperties assistantProperties = new AssistantProperties();
         Clock fixedClock = Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul"));
@@ -195,7 +195,7 @@ class AssistantBotServiceTest {
         resultsByPersona.put("프징징봇", AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"));
         resultsByPersona.put("테뻔뻔봇", AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"));
         resultsByPersona.put("저묵묵봇", AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"));
-        resultsByPersona.put("훈훈봇", AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
+        resultsByPersona.put("건강봇", AssistantBotService.AutoPublishResult.published("건강봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
 
         RecordingAssistantBotService recordingService = new RecordingAssistantBotService(
                 botProperties,
@@ -214,8 +214,8 @@ class AssistantBotServiceTest {
         AssistantBotService.AutoPublishResult result = recordingService.autoPublishOnce();
 
         assertEquals("published", result.getOutcome());
-        assertEquals("훈훈봇", result.getPersonaName());
-        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "훈훈봇"), recordingService.getVisitedPersonas());
+        assertEquals("건강봇", result.getPersonaName());
+        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "건강봇"), recordingService.getVisitedPersonas());
     }
 
     @Test
@@ -224,7 +224,7 @@ class AssistantBotServiceTest {
         resultsByPersona.put("프징징봇", AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"));
         resultsByPersona.put("테뻔뻔봇", AssistantBotService.AutoPublishResult.skipped("테뻔뻔봇", "no_due_candidate"));
         resultsByPersona.put("저묵묵봇", AssistantBotService.AutoPublishResult.failed("저묵묵봇", "draft_error:test"));
-        resultsByPersona.put("훈훈봇", AssistantBotService.AutoPublishResult.published("훈훈봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
+        resultsByPersona.put("건강봇", AssistantBotService.AutoPublishResult.published("건강봇", "comment", 2L, 202, "/boards/funboard/readPost?postNum=202"));
 
         RecordingAssistantBotService recordingService = new RecordingAssistantBotService(
                 botProperties,
@@ -243,11 +243,11 @@ class AssistantBotServiceTest {
         List<AssistantBotService.AutoPublishResult> results = recordingService.autoPublishAllPersonas();
 
         assertEquals(4, results.size());
-        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "훈훈봇"), recordingService.getVisitedPersonas());
+        assertEquals(Arrays.asList("프징징봇", "테뻔뻔봇", "저묵묵봇", "건강봇"), recordingService.getVisitedPersonas());
         assertEquals("프징징봇", results.get(0).getPersonaName());
         assertEquals("테뻔뻔봇", results.get(1).getPersonaName());
         assertEquals("저묵묵봇", results.get(2).getPersonaName());
-        assertEquals("훈훈봇", results.get(3).getPersonaName());
+        assertEquals("건강봇", results.get(3).getPersonaName());
     }
 
     @Test
@@ -944,29 +944,6 @@ class AssistantBotServiceTest {
     }
 
     @Test
-    void buildPrompt_forWarmPersonaIncludesPositiveBlessingStyle() {
-        String prompt = ReflectionTestUtils.invokeMethod(
-                assistantBotService,
-                "buildPrompt",
-                persona("훈훈봇"),
-                "post",
-                "funboard",
-                null,
-                Collections.singletonList(post(902, "테스터A", 0, "오늘 래더 한 판 이겨서 기분 좋다")),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                null,
-                1,
-                3
-        );
-
-        assertTrue(prompt.contains("짧은 응원"));
-        assertTrue(prompt.contains("스타크래프트 얘기뿐 아니라"));
-        assertTrue(prompt.contains("과장된 미담체는 피하라"));
-        assertTrue(prompt.contains("전혀 무관한 일상 소재"));
-    }
-
-    @Test
     void buildPrompt_forTebpeonPersonaIncludesSentenceRangeRule() {
         String prompt = ReflectionTestUtils.invokeMethod(
                 assistantBotService,
@@ -1187,7 +1164,6 @@ class AssistantBotServiceTest {
                 persona("프징징봇"),
                 persona("테뻔뻔봇"),
                 persona("저묵묵봇"),
-                persona("훈훈봇"),
                 persona("야옹봇")
         ));
         AssistantBotDraftRequestDTO request = new AssistantBotDraftRequestDTO();
@@ -1286,24 +1262,6 @@ class AssistantBotServiceTest {
         assertTrue(rule.contains("단순 위로"));
         assertTrue(rule.contains("왜 도움이 되는지"));
         assertTrue(rule.contains("전문가 상담"));
-    }
-
-    @Test
-    void buildCommentInteractionRule_forWarmPersonaEncouragesWithoutOverdoingIt() {
-        BoardDTO targetPost = post(903, "테스터A", 0, "오늘 퇴근길에 비가 너무 많이 왔다");
-        targetPost.setContent("우산이 있었는데도 신발이 다 젖어서 좀 난감했다");
-
-        String rule = ReflectionTestUtils.invokeMethod(
-                assistantBotService,
-                "buildCommentInteractionRule",
-                persona("훈훈봇"),
-                targetPost
-        );
-
-        assertTrue(rule.contains("응원"));
-        assertTrue(rule.contains("긍정적인 덕담"));
-        assertTrue(rule.contains("설교"));
-        assertTrue(rule.contains("전혀 무관한 일상이든"));
     }
 
     @Test

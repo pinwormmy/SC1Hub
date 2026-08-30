@@ -3,8 +3,8 @@ package com.sc1hub.assistant.openai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.OpenAiProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -36,14 +36,17 @@ public class OpenAiAssistantBotClient {
     private final RestTemplate restTemplate;
     private final OpenAiProperties properties;
     private final ObjectMapper objectMapper;
+    private final MetaspaceUsageLogger metaspaceUsageLogger;
 
     public OpenAiAssistantBotClient(
-            @Qualifier("assistantOpenAiRestTemplate") RestTemplate restTemplate,
+            RestTemplate assistantRestTemplate,
             OpenAiProperties properties,
-            ObjectMapper objectMapper) {
-        this.restTemplate = restTemplate;
+            ObjectMapper objectMapper,
+            MetaspaceUsageLogger metaspaceUsageLogger) {
+        this.restTemplate = assistantRestTemplate;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.metaspaceUsageLogger = metaspaceUsageLogger;
     }
 
     public String generateAnswer(String prompt,
@@ -52,6 +55,10 @@ public class OpenAiAssistantBotClient {
                                  String reasoningEffort) {
         if (!properties.isAllowLiveCalls()) {
             throw new OpenAiAssistantBotException("Live OpenAI API calls are disabled.");
+        }
+        if (metaspaceUsageLogger.shouldPauseAiWork()) {
+            throw new OpenAiAssistantBotException(
+                    "OpenAI API call paused because JVM Metaspace headroom is low.");
         }
 
         String apiKey = requireText(properties.getApiKey(), "OpenAI API key is not configured.");

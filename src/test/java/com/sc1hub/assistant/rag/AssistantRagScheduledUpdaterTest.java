@@ -1,6 +1,7 @@
 package com.sc1hub.assistant.rag;
 
 import com.sc1hub.assistant.config.AssistantRagProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +21,9 @@ class AssistantRagScheduledUpdaterTest {
     @Mock
     private AssistantRagIndexService ragIndexService;
 
+    @Mock
+    private MetaspaceUsageLogger metaspaceUsageLogger;
+
     private AssistantRagProperties ragProperties;
     private AssistantRagScheduledUpdater updater;
 
@@ -27,7 +31,7 @@ class AssistantRagScheduledUpdaterTest {
     void setUp() {
         ragProperties = new AssistantRagProperties();
         ragProperties.getAutoUpdate().setEnabled(true);
-        updater = new AssistantRagScheduledUpdater(ragIndexService, ragProperties);
+        updater = new AssistantRagScheduledUpdater(ragIndexService, ragProperties, metaspaceUsageLogger);
     }
 
     @Test
@@ -46,6 +50,15 @@ class AssistantRagScheduledUpdaterTest {
         updater.autoUpdate();
 
         verify(ragIndexService).update();
+    }
+
+    @Test
+    void autoUpdate_skipsWhenMetaspaceHeadroomIsLow() {
+        when(metaspaceUsageLogger.shouldPauseAiWork()).thenReturn(true);
+
+        updater.autoUpdate();
+
+        verifyNoInteractions(ragIndexService);
     }
 
     @Test

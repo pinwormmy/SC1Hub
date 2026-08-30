@@ -3,6 +3,8 @@ package com.sc1hub.common.monitoring;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MetaspaceUsageLoggerTest {
 
@@ -26,7 +28,18 @@ class MetaspaceUsageLoggerTest {
     }
 
     @Test
+    void pausesAiWorkAtTheConfiguredThreshold() {
+        assertFalse(MetaspaceUsageLogger.isAtOrAboveThreshold(55000, 65536, 85));
+        assertTrue(MetaspaceUsageLogger.isAtOrAboveThreshold(55706, 65536, 85));
+        assertFalse(MetaspaceUsageLogger.isAtOrAboveThreshold(
+                65536,
+                MetaspaceUsageLogger.UNBOUNDED,
+                85
+        ));
+    }
+
+    @Test
     void samplingTheLiveJvmDoesNotThrow() {
-        new MetaspaceUsageLogger(85).sampleMetaspaceUsage();
+        new MetaspaceUsageLogger(85, 85).sampleMetaspaceUsage();
     }
 }

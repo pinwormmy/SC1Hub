@@ -3,6 +3,7 @@ package com.sc1hub.assistant.openai;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.OpenAiProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -14,6 +15,8 @@ import org.springframework.web.client.RestTemplate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
@@ -30,6 +33,7 @@ class OpenAiAssistantBotClientTest {
     private MockRestServiceServer server;
     private OpenAiProperties properties;
     private OpenAiAssistantBotClient client;
+    private MetaspaceUsageLogger metaspaceUsageLogger;
 
     @BeforeEach
     void setUp() {
@@ -38,7 +42,8 @@ class OpenAiAssistantBotClientTest {
         properties = new OpenAiProperties();
         properties.setApiKey("test-openai-key");
         properties.setAllowLiveCalls(true);
-        client = new OpenAiAssistantBotClient(restTemplate, properties, objectMapper);
+        metaspaceUsageLogger = mock(MetaspaceUsageLogger.class);
+        client = new OpenAiAssistantBotClient(restTemplate, properties, objectMapper, metaspaceUsageLogger);
     }
 
     @Test
@@ -124,6 +129,18 @@ class OpenAiAssistantBotClientTest {
 
         assertTrue(exception.getMessage().contains("[redacted]"));
         assertTrue(!exception.getMessage().contains("test-openai-key"));
+    }
+
+    @Test
+    void generateAnswer_pausesBeforeNetworkWhenMetaspaceIsLow() {
+        when(metaspaceUsageLogger.shouldPauseAiWork()).thenReturn(true);
+
+        OpenAiAssistantBotException exception = assertThrows(
+                OpenAiAssistantBotException.class,
+                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+
+        assertTrue(exception.getMessage().contains("Metaspace headroom is low"));
+        server.verify();
     }
 
     private String completedResponse(String outputText) {

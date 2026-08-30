@@ -24,10 +24,13 @@ public class MetaspaceUsageLogger {
     private static final long BYTES_PER_KB = 1024L;
 
     private final int warnPercent;
+    private final int aiPausePercent;
 
     public MetaspaceUsageLogger(
-            @Value("${sc1hub.monitoring.metaspaceWarnPercent:85}") int warnPercent) {
+            @Value("${sc1hub.monitoring.metaspaceWarnPercent:85}") int warnPercent,
+            @Value("${sc1hub.monitoring.metaspaceAiPausePercent:85}") int aiPausePercent) {
         this.warnPercent = warnPercent;
+        this.aiPausePercent = aiPausePercent;
     }
 
     @Scheduled(
@@ -58,6 +61,21 @@ public class MetaspaceUsageLogger {
 
     static long percentOf(long usedKb, long maxKb) {
         return maxKb <= 0 ? UNBOUNDED : usedKb * 100 / maxKb;
+    }
+
+    public boolean shouldPauseAiWork() {
+        MemoryUsage usage = findMetaspaceUsage();
+        if (usage == null) {
+            return false;
+        }
+        long usedKb = usage.getUsed() / BYTES_PER_KB;
+        long maxKb = toMaxKb(usage.getMax());
+        return isAtOrAboveThreshold(usedKb, maxKb, aiPausePercent);
+    }
+
+    static boolean isAtOrAboveThreshold(long usedKb, long maxKb, int thresholdPercent) {
+        long percent = percentOf(usedKb, maxKb);
+        return percent != UNBOUNDED && percent >= thresholdPercent;
     }
 
     private MemoryUsage findMetaspaceUsage() {

@@ -3,6 +3,7 @@ package com.sc1hub.assistant.gemini;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.GeminiProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,16 +26,24 @@ public class GeminiEmbeddingClient {
     private final RestTemplate restTemplate;
     private final GeminiProperties geminiProperties;
     private final ObjectMapper objectMapper;
+    private final MetaspaceUsageLogger metaspaceUsageLogger;
 
-    public GeminiEmbeddingClient(RestTemplate geminiRestTemplate, GeminiProperties geminiProperties, ObjectMapper objectMapper) {
-        this.restTemplate = geminiRestTemplate;
+    public GeminiEmbeddingClient(RestTemplate assistantRestTemplate,
+                                 GeminiProperties geminiProperties,
+                                 ObjectMapper objectMapper,
+                                 MetaspaceUsageLogger metaspaceUsageLogger) {
+        this.restTemplate = assistantRestTemplate;
         this.geminiProperties = geminiProperties;
         this.objectMapper = objectMapper;
+        this.metaspaceUsageLogger = metaspaceUsageLogger;
     }
 
     public float[] embedText(String text) {
         if (!geminiProperties.isAllowLiveCalls()) {
             throw new GeminiException("Live Gemini API calls are disabled.");
+        }
+        if (metaspaceUsageLogger.shouldPauseAiWork()) {
+            throw new GeminiException("Gemini embedding call paused because JVM Metaspace headroom is low.");
         }
 
         String apiKey = geminiProperties.getApiKey();

@@ -2,6 +2,7 @@ package com.sc1hub.assistant.gemini;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.GeminiProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,9 @@ class GeminiClientTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private MetaspaceUsageLogger metaspaceUsageLogger;
+
     private GeminiProperties geminiProperties;
     private ObjectMapper objectMapper;
 
@@ -52,7 +56,7 @@ class GeminiClientTest {
         when(restTemplate.postForObject(anyString(), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(responseJson);
 
-        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper, metaspaceUsageLogger);
 
         assertEquals("hello world", client.generateAnswer("prompt"));
 
@@ -70,7 +74,7 @@ class GeminiClientTest {
         when(restTemplate.postForObject(anyString(), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(responseJson);
 
-        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper, metaspaceUsageLogger);
 
         assertEquals("answer", client.generateSearchAnswer("prompt", 1024));
 
@@ -91,11 +95,22 @@ class GeminiClientTest {
     @Test
     void generateAnswer_throws_whenLiveCallsDisabled() {
         geminiProperties.setAllowLiveCalls(false);
-        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper);
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper, metaspaceUsageLogger);
 
         GeminiException exception = assertThrows(GeminiException.class, () -> client.generateAnswer("prompt"));
 
         assertEquals("Live Gemini API calls are disabled.", exception.getMessage());
+        verifyNoInteractions(restTemplate);
+    }
+
+    @Test
+    void generateAnswer_pausesBeforeNetworkWhenMetaspaceIsLow() {
+        when(metaspaceUsageLogger.shouldPauseAiWork()).thenReturn(true);
+        GeminiClient client = new GeminiClient(restTemplate, geminiProperties, objectMapper, metaspaceUsageLogger);
+
+        GeminiException exception = assertThrows(GeminiException.class, () -> client.generateAnswer("prompt"));
+
+        assertEquals("Gemini API call paused because JVM Metaspace headroom is low.", exception.getMessage());
         verifyNoInteractions(restTemplate);
     }
 }

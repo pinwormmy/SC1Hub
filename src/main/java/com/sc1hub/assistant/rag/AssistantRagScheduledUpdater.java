@@ -1,21 +1,27 @@
 package com.sc1hub.assistant.rag;
 
 import com.sc1hub.assistant.config.AssistantRagProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(prefix = "sc1hub.assistant.rag.autoUpdate", name = "enabled", havingValue = "true")
 @Slf4j
 public class AssistantRagScheduledUpdater {
 
     private final AssistantRagIndexService ragIndexService;
     private final AssistantRagProperties ragProperties;
+    private final MetaspaceUsageLogger metaspaceUsageLogger;
 
     public AssistantRagScheduledUpdater(AssistantRagIndexService ragIndexService,
-                                        AssistantRagProperties ragProperties) {
+                                        AssistantRagProperties ragProperties,
+                                        MetaspaceUsageLogger metaspaceUsageLogger) {
         this.ragIndexService = ragIndexService;
         this.ragProperties = ragProperties;
+        this.metaspaceUsageLogger = metaspaceUsageLogger;
     }
 
     @Scheduled(cron = "${sc1hub.assistant.rag.autoUpdate.cron:0 0 5 * * *}",
@@ -23,6 +29,10 @@ public class AssistantRagScheduledUpdater {
     @SuppressWarnings("unused")
     public void autoUpdate() {
         if (ragProperties.getAutoUpdate() == null || !ragProperties.getAutoUpdate().isEnabled()) {
+            return;
+        }
+        if (metaspaceUsageLogger.shouldPauseAiWork()) {
+            log.warn("RAG 자동 업데이트 유예: JVM Metaspace 여유가 부족합니다.");
             return;
         }
 

@@ -1,6 +1,7 @@
 package com.sc1hub.assistant.service;
 
 import com.sc1hub.assistant.config.AssistantBotProperties;
+import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,11 +14,14 @@ public class AssistantBotScheduledPublisher {
 
     private final AssistantBotService assistantBotService;
     private final AssistantBotProperties botProperties;
+    private final MetaspaceUsageLogger metaspaceUsageLogger;
 
     public AssistantBotScheduledPublisher(AssistantBotService assistantBotService,
-                                         AssistantBotProperties botProperties) {
+                                          AssistantBotProperties botProperties,
+                                          MetaspaceUsageLogger metaspaceUsageLogger) {
         this.assistantBotService = assistantBotService;
         this.botProperties = botProperties;
+        this.metaspaceUsageLogger = metaspaceUsageLogger;
     }
 
     @Scheduled(cron = "${sc1hub.assistant.bot.autoPublishCron:0 * * * * *}",
@@ -25,6 +29,10 @@ public class AssistantBotScheduledPublisher {
     @SuppressWarnings("unused")
     public void autoPublish() {
         if (!botProperties.isEnabled() || !botProperties.isAutoPublishEnabled()) {
+            return;
+        }
+        if (metaspaceUsageLogger.shouldPauseAiWork()) {
+            log.debug("봇 자동 발행 유예: JVM Metaspace 여유가 부족합니다.");
             return;
         }
 
