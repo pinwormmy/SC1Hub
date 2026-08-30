@@ -31,8 +31,7 @@ public class AssistantBotScheduledPublisher {
         if (!botProperties.isEnabled() || !botProperties.isAutoPublishEnabled()) {
             return;
         }
-        if (metaspaceUsageLogger.shouldPauseAiWork()) {
-            log.debug("봇 자동 발행 유예: JVM Metaspace 여유가 부족합니다.");
+        if (metaspaceUsageLogger.shouldPauseBackgroundAiWork()) {
             return;
         }
 

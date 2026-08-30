@@ -54,7 +54,7 @@ class AssistantRagScheduledUpdaterTest {
 
     @Test
     void autoUpdate_skipsWhenMetaspaceHeadroomIsLow() {
-        when(metaspaceUsageLogger.shouldPauseAiWork()).thenReturn(true);
+        when(metaspaceUsageLogger.shouldPauseBackgroundAiWork()).thenReturn(true);
 
         updater.autoUpdate();
 

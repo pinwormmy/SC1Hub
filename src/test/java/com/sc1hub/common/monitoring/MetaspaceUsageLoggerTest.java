@@ -39,7 +39,22 @@ class MetaspaceUsageLoggerTest {
     }
 
     @Test
+    void backgroundWorkYieldsBeforeUserFacingAiWork() {
+        // 측정된 정상 구간(약 88%)에서는 어느 쪽도 멈추지 않는다.
+        assertFalse(MetaspaceUsageLogger.isAtOrAboveThreshold(57505, 65536, 92));
+        assertFalse(MetaspaceUsageLogger.isAtOrAboveThreshold(57505, 65536, 96));
+
+        // 92%에서는 예약 작업만 멈춘다.
+        assertTrue(MetaspaceUsageLogger.isAtOrAboveThreshold(60294, 65536, 92));
+        assertFalse(MetaspaceUsageLogger.isAtOrAboveThreshold(60294, 65536, 96));
+
+        // 96%부터 사용자 대면 AI까지 멈춘다.
+        assertTrue(MetaspaceUsageLogger.isAtOrAboveThreshold(62915, 65536, 92));
+        assertTrue(MetaspaceUsageLogger.isAtOrAboveThreshold(62915, 65536, 96));
+    }
+
+    @Test
     void samplingTheLiveJvmDoesNotThrow() {
-        new MetaspaceUsageLogger(85, 85).sampleMetaspaceUsage();
+        new MetaspaceUsageLogger(85, 92, 96).sampleMetaspaceUsage();
     }
 }

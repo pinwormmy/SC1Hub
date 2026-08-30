@@ -37,7 +37,7 @@ class AssistantBotScheduledPublisherTest {
 
     @Test
     void autoPublish_skipsBeforeBotWorkWhenMetaspaceHeadroomIsLow() {
-        when(metaspaceUsageLogger.shouldPauseAiWork()).thenReturn(true);
+        when(metaspaceUsageLogger.shouldPauseBackgroundAiWork()).thenReturn(true);
 
         publisher.autoPublish();
 

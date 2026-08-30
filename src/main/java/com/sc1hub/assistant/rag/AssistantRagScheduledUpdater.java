@@ -31,8 +31,7 @@ public class AssistantRagScheduledUpdater {
         if (ragProperties.getAutoUpdate() == null || !ragProperties.getAutoUpdate().isEnabled()) {
             return;
         }
-        if (metaspaceUsageLogger.shouldPauseAiWork()) {
-            log.warn("RAG 자동 업데이트 유예: JVM Metaspace 여유가 부족합니다.");
+        if (metaspaceUsageLogger.shouldPauseBackgroundAiWork()) {
             return;
         }
 
