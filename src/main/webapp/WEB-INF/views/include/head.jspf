@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#050818">
+<meta name="naver-site-verification" content="fb67e159c12b2dc169083d9b10dabc39bf8f9c4e" />
 <c:set var="scMetaTitle" value="${not empty pageTitle ? pageTitle : (not empty post ? post.title : (not empty koreanTitle ? koreanTitle : 'SC1Hub - 스타크래프트1 전문 공략 사이트'))}" />
 <c:set var="scMetaDescription" value="${not empty metaDescription ? metaDescription : '스타크래프트1 빌드오더, 종족별 운영법과 실전 전략을 공유하는 공략 커뮤니티'}" />
 <c:set var="scRobots" value="${not empty robots ? robots : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'}" />
