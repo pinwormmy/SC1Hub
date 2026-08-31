@@ -46,7 +46,7 @@ class AssistantBotApplicationPropertiesTest {
     }
 
     @Test
-    void packagedSearchUsesOpenAiLunaAtMaxReasoning() throws Exception {
+    void packagedSearchUsesOpenAiLunaAtMediumReasoning() throws Exception {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(
                 Paths.get("src/main/resources/application.properties"),
@@ -56,6 +56,6 @@ class AssistantBotApplicationPropertiesTest {
 
         assertEquals("openai", properties.getProperty("sc1hub.assistant.searchProvider"));
         assertEquals("gpt-5.6-luna", properties.getProperty("sc1hub.openai.searchModel"));
-        assertEquals("max", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
+        assertEquals("medium", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
     }
 }
