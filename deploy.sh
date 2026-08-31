@@ -40,6 +40,7 @@ REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
+ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
 
 echo "Building and verifying release WAR..."
 ./gradlew clean build </dev/null
@@ -87,6 +88,7 @@ ssh "$REMOTE" \
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
+   ROLLBACK_REQUIRES_LEGACY_RUNTIME='$ROLLBACK_REQUIRES_LEGACY_RUNTIME'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
    chmod 700 \"\$REMOTE_CONFIG_DIR\"
@@ -113,7 +115,7 @@ ssh "$REMOTE" \
      {
        echo ''
        echo '# SC1Hub reflection accessor limit'
-       echo '# Keep reflective calls native so generated accessor classes cannot consume the 64 MB Metaspace cap.'
+       echo '# Keep reflective calls native so generated accessor classes cannot consume the Metaspace cap.'
        echo 'export CATALINA_OPTS=\"\${CATALINA_OPTS:-} -Dsun.reflect.inflationThreshold=2147483647\"'
      } >> \"\$SETENV_SH\"
    fi
@@ -143,11 +145,18 @@ ssh "$REMOTE" \
    fi
    chmod 600 \"\$REMOTE_ONLINE_PROPS\"
    chmod +x '$REMOTE_CLEANUP_SCRIPT' \"\$REMOTE_OOM_RECOVERY_SCRIPT\"
+   RUNTIME_DETAILS=\$(\"\$REMOTE_TOMCAT_DIR/bin/version.sh\" 2>&1 || true)
+   if ! printf '%s' \"\$RUNTIME_DETAILS\" | grep -Eq 'Server version: Apache Tomcat/10\\.0\\.' \\
+      || ! printf '%s' \"\$RUNTIME_DETAILS\" | grep -Eq 'JVM Version: +17\\.'; then
+     echo 'Cafe24 must be running Tomcat 10.0.x and Java 17 before this WAR is installed.' >&2
+     echo \"Detected instead: \$RUNTIME_DETAILS\" >&2
+     exit 1
+   fi
    PROP=\"\$REMOTE_ONLINE_PROPS\"
    DB_URL=\$(grep '^spring.datasource.url=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_USER=\$(grep '^spring.datasource.username=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
    DB_PASS=\$(grep '^spring.datasource.password=' \"\$PROP\" | cut -d= -f2- | tr -d '\r')
-   DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:mysql://[^/]+/([^?]+).*#\\1#')
+   DB_NAME=\$(printf '%s' \"\$DB_URL\" | sed -E 's#^jdbc:(mysql|mariadb)://[^/]+/([^?]+).*#\\2#')
    if [ -z \"\$DB_USER\" ] || [ -z \"\$DB_PASS\" ] || ! printf '%s' \"\$DB_NAME\" | grep -Eq '^[A-Za-z0-9_]+$'; then
      echo 'Online database configuration is missing or invalid.' >&2
      exit 1
@@ -260,6 +269,10 @@ ssh "$REMOTE" \
        rm -f \"\$REMOTE_WAR_PATH\"
      fi
      rm -rf \"\$REMOTE_EXPLODED_DIR\"
+     if [ \"\$ROLLBACK_REQUIRES_LEGACY_RUNTIME\" = \"true\" ]; then
+       echo 'Legacy WAR and config restored. Change Cafe24 back to Tomcat 8.5 / JDK 8 before starting it.' >&2
+       return 1
+     fi
      if ! $REMOTE_START_CMD; then
        echo 'Rollback WAR was restored, but Tomcat restart failed.' >&2
        return 1
