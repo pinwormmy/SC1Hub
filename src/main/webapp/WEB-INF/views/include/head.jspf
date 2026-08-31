@@ -40,12 +40,23 @@
     <script type="application/ld+json"><c:out value="${structuredDataJson}" escapeXml="false" /></script>
 </c:if>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<%-- 내부 링크 프리렌더링: 호버/터치 시점에 다음 페이지를 백그라운드에서 미리 로드해
-     이동 직후 광고 스크립트 파싱으로 인한 입력·스크롤 랙을 상호작용 구간 밖으로 옮긴다.
-     /logout은 GET만으로 세션이 끊기므로 반드시 제외한다. 크로스오리진 iframe(광고)은
-     브라우저가 화면 전환 시점까지 지연시키므로 노출 집계는 이중으로 잡히지 않는다. --%>
+<%-- 내부 링크 2단 선로딩: 커서가 닿는 즉시 HTML만 프리페치(eager)하고, 200ms 이상
+     머물면 풀 프리렌더(moderate)로 광고 스크립트 파싱까지 백그라운드에서 끝낸다.
+     빠른 클릭은 프리페치가, 신중한 클릭은 프리렌더가 커버해 이동 직후 랙을 줄인다.
+     /logout은 GET만으로 세션이 끊기므로 두 단계 모두에서 반드시 제외한다.
+     크로스오리진 iframe(광고)은 브라우저가 화면 전환까지 지연시켜 노출 집계는 안전하다. --%>
 <script type="speculationrules">
 {
+    "prefetch": [{
+        "where": {
+            "and": [
+                { "href_matches": "/*" },
+                { "not": { "href_matches": "/logout" } },
+                { "not": { "href_matches": "/adminPage*" } }
+            ]
+        },
+        "eagerness": "eager"
+    }],
     "prerender": [{
         "where": {
             "and": [

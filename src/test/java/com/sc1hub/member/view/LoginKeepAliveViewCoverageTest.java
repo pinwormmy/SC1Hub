@@ -104,9 +104,16 @@ class LoginKeepAliveViewCoverageTest {
                 Files.readAllBytes(Paths.get("src/main/resources/static/js/sc-chat.js")), StandardCharsets.UTF_8);
 
         assertTrue(headSource.contains("<script type=\"speculationrules\">"));
+        // 2단 구성: 즉시 프리페치(eager) + 호버 프리렌더(moderate)
+        assertTrue(headSource.contains("\"prefetch\": [{"));
+        assertTrue(headSource.contains("\"eagerness\": \"eager\""));
+        assertTrue(headSource.contains("\"prerender\": [{"));
         assertTrue(headSource.contains("\"eagerness\": \"moderate\""));
-        // /logout은 GET만으로 세션이 끊기므로 프리렌더 제외가 반드시 유지돼야 한다.
-        assertTrue(headSource.contains("{ \"not\": { \"href_matches\": \"/logout\" } }"));
+        // /logout은 GET만으로 세션이 끊기므로 프리페치·프리렌더 양쪽 모두에서 제외돼야 한다.
+        String logoutExclusion = "{ \"not\": { \"href_matches\": \"/logout\" } }";
+        int firstLogoutExclusion = headSource.indexOf(logoutExclusion);
+        assertTrue(firstLogoutExclusion >= 0);
+        assertTrue(headSource.indexOf(logoutExclusion, firstLogoutExclusion + 1) > firstLogoutExclusion);
         assertTrue(headSource.contains("{ \"not\": { \"href_matches\": \"/adminPage*\" } }"));
         assertTrue(chatSource.contains("document.prerendering"));
         assertTrue(chatSource.contains("document.addEventListener('prerenderingchange', start, { once: true })"));
