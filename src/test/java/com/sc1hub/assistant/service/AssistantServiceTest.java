@@ -4,6 +4,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.assistant.search.AssistantQueryParseResult;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +43,8 @@ class AssistantServiceTest {
 
     @Mock
     private GeminiClient geminiClient;
+    @Mock
+    private OpenAiAssistantBotClient openAiAssistantBotClient;
 
     @Mock
     private AssistantRagSearchService ragSearchService;
@@ -66,9 +70,34 @@ class AssistantServiceTest {
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
         ObjectMapper objectMapper = new ObjectMapper();
-        assistantService = new AssistantService(boardMapper, geminiClient, assistantProperties, ragSearchService, ragProperties, queryParser, objectMapper);
+        assistantService = new AssistantService(boardMapper, geminiClient, openAiAssistantBotClient, assistantProperties, ragSearchService, ragProperties, queryParser, objectMapper);
         lenient().when(queryParser.parse(anyString()))
                 .thenAnswer(invocation -> buildParseResult(invocation.getArgument(0)));
+    }
+
+    @Test
+    void generateSearchLlmAnswer_routesToOpenAiWhenConfigured() {
+        assistantProperties.setSearchProvider("openai");
+        when(openAiAssistantBotClient.generateSearchAnswer("검색 프롬프트", 512))
+                .thenReturn("{\"answer\":\"ok\"}");
+
+        String result = ReflectionTestUtils.invokeMethod(
+                assistantService, "generateSearchLlmAnswer", "검색 프롬프트", 512);
+
+        assertEquals("{\"answer\":\"ok\"}", result);
+        verify(geminiClient, times(0)).generateSearchAnswer(anyString(), any());
+    }
+
+    @Test
+    void generateSearchLlmAnswer_defaultsToGemini() {
+        when(geminiClient.generateSearchAnswer("검색 프롬프트", 512))
+                .thenReturn("{\"answer\":\"gemini\"}");
+
+        String result = ReflectionTestUtils.invokeMethod(
+                assistantService, "generateSearchLlmAnswer", "검색 프롬프트", 512);
+
+        assertEquals("{\"answer\":\"gemini\"}", result);
+        verify(openAiAssistantBotClient, times(0)).generateSearchAnswer(anyString(), any());
     }
 
     @Test

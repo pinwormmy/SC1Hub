@@ -5,6 +5,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.assistant.search.AssistantQueryParseResult;
 import com.sc1hub.assistant.search.AssistantQueryParser;
@@ -34,6 +35,7 @@ class AssistantServiceRelatedPostsTest {
     void fillsUpToThreeRelatedPostsWhenWriterDuplicatesExist() throws Exception {
         BoardMapper boardMapper = mock(BoardMapper.class);
         GeminiClient geminiClient = mock(GeminiClient.class);
+        OpenAiAssistantBotClient openAiAssistantBotClient = mock(OpenAiAssistantBotClient.class);
         AssistantRagSearchService ragSearchService = mock(AssistantRagSearchService.class);
         AssistantQueryParser queryParser = mock(AssistantQueryParser.class);
 
@@ -50,6 +52,7 @@ class AssistantServiceRelatedPostsTest {
         AssistantService service = new AssistantService(
                 boardMapper,
                 geminiClient,
+                openAiAssistantBotClient,
                 assistantProperties,
                 ragSearchService,
                 ragProperties,

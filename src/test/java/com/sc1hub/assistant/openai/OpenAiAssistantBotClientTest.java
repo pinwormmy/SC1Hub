@@ -47,6 +47,25 @@ class OpenAiAssistantBotClientTest {
     }
 
     @Test
+    void generateSearchAnswer_usesSearchModelWithoutBotSchemaAndAddsReasoningHeadroom() {
+        server.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer test-openai-key"))
+                .andExpect(jsonPath("$.model").value("gpt-5.6-luna"))
+                .andExpect(jsonPath("$.reasoning.effort").value("max"))
+                // 요청 1024 + reasoning 여유분 6000
+                .andExpect(jsonPath("$.max_output_tokens").value(7024))
+                .andExpect(jsonPath("$.text.format").doesNotExist())
+                .andRespond(withSuccess(completedResponse("{\"answer\":\"질럿 먼저\",\"sources\":[]}"),
+                        MediaType.APPLICATION_JSON));
+
+        String result = client.generateSearchAnswer("검색 프롬프트", 1024);
+
+        assertEquals("{\"answer\":\"질럿 먼저\",\"sources\":[]}", result);
+        server.verify();
+    }
+
+    @Test
     void generateAnswer_sendsLunaHighStructuredRequestAndReturnsChatJson() {
         String chatJson = "{\"analysis\":{\"topic\":\"저그전\","
                 + "\"response_mode\":\"contextual_advice\",\"risk_notes\":[]},"

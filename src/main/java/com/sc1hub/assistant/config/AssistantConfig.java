@@ -20,7 +20,8 @@ public class AssistantConfig {
     public RestTemplate assistantRestTemplate() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(5000);
-        requestFactory.setReadTimeout(30000);
+        // AI 검색이 높은 reasoning effort 모델을 쓰면 30초를 넘길 수 있어 여유를 둔다.
+        requestFactory.setReadTimeout(120000);
         return new RestTemplate(requestFactory);
     }
 }

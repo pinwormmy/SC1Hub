@@ -38,8 +38,24 @@ class AssistantBotApplicationPropertiesTest {
         }
 
         assertNull(properties.getProperty("sc1hub.assistant.bot.personas[5].name"));
-        assertEquals("openai", properties.getProperty("sc1hub.assistant.bot.personas[4].provider"));
-        assertEquals("gpt-5.6-luna", properties.getProperty("sc1hub.assistant.bot.personas[4].model"));
+        assertNull(properties.getProperty("sc1hub.assistant.bot.personas[4].provider"));
+        assertEquals("gemini-3.7-flash", properties.getProperty("sc1hub.assistant.bot.personas[4].model"));
+        assertEquals("medium", properties.getProperty("sc1hub.assistant.bot.personas[4].reasoningEffort"));
+        assertEquals("2", properties.getProperty("sc1hub.assistant.bot.personas[4].autoPublishChatDailyLimit"));
         assertFalse(properties.containsValue("훈훈봇"));
+    }
+
+    @Test
+    void packagedSearchUsesOpenAiLunaAtMaxReasoning() throws Exception {
+        Properties properties = new Properties();
+        try (Reader reader = Files.newBufferedReader(
+                Paths.get("src/main/resources/application.properties"),
+                StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        }
+
+        assertEquals("openai", properties.getProperty("sc1hub.assistant.searchProvider"));
+        assertEquals("gpt-5.6-luna", properties.getProperty("sc1hub.openai.searchModel"));
+        assertEquals("max", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
     }
 }

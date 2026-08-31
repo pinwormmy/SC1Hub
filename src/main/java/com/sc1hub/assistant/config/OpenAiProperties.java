@@ -10,4 +10,6 @@ public class OpenAiProperties {
     private String apiKey = "";
     private String baseUrl = "https://api.openai.com/v1/responses";
     private boolean allowLiveCalls = false;
+    private String searchModel = "gpt-5.6-luna";
+    private String searchReasoningEffort = "max";
 }

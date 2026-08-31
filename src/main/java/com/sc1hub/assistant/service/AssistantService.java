@@ -6,6 +6,8 @@ import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.gemini.GeminiException;
+import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
+import com.sc1hub.assistant.openai.OpenAiAssistantBotException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
@@ -45,6 +47,7 @@ public class AssistantService {
 
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
+    private final OpenAiAssistantBotClient openAiAssistantBotClient;
     private final AssistantProperties assistantProperties;
     private final AssistantRagSearchService ragSearchService;
     private final AssistantRagProperties ragProperties;
@@ -65,6 +68,7 @@ public class AssistantService {
 
     public AssistantService(BoardMapper boardMapper,
                             GeminiClient geminiClient,
+                            OpenAiAssistantBotClient openAiAssistantBotClient,
                             AssistantProperties assistantProperties,
                             AssistantRagSearchService ragSearchService,
                             AssistantRagProperties ragProperties,
@@ -72,11 +76,37 @@ public class AssistantService {
                             ObjectMapper objectMapper) {
         this.boardMapper = boardMapper;
         this.geminiClient = geminiClient;
+        this.openAiAssistantBotClient = openAiAssistantBotClient;
         this.assistantProperties = assistantProperties;
         this.ragSearchService = ragSearchService;
         this.ragProperties = ragProperties;
         this.queryParser = queryParser;
         this.objectMapper = objectMapper;
+    }
+
+    private static final String SEARCH_PROVIDER_OPENAI = "openai";
+
+    /**
+     * AI 검색 계열 LLM 호출의 단일 진입점. searchProvider 설정에 따라
+     * Gemini(searchModel/searchThinkingLevel) 또는 OpenAI(searchModel/searchReasoningEffort)로 보낸다.
+     */
+    private String generateSearchLlmAnswer(String prompt) {
+        return generateSearchLlmAnswer(prompt, null);
+    }
+
+    private String generateSearchLlmAnswer(String prompt, Integer maxOutputTokens) {
+        if (usesOpenAiSearch()) {
+            return openAiAssistantBotClient.generateSearchAnswer(prompt, maxOutputTokens);
+        }
+        return maxOutputTokens == null
+                ? geminiClient.generateSearchAnswer(prompt)
+                : geminiClient.generateSearchAnswer(prompt, maxOutputTokens);
+    }
+
+    private boolean usesOpenAiSearch() {
+        String provider = assistantProperties.getSearchProvider();
+        return StringUtils.hasText(provider)
+                && SEARCH_PROVIDER_OPENAI.equals(provider.trim().toLowerCase(Locale.ROOT));
     }
 
     public AssistantChatResponseDTO chat(String message, MemberDTO member) {
@@ -157,8 +187,8 @@ public class AssistantService {
             }
             response.setAnswer(answer);
             response.setUsedPostIds(answerResult.getUsedPostIds());
-        } catch (GeminiException e) {
-            log.error("Gemini API 호출 실패", e);
+        } catch (GeminiException | OpenAiAssistantBotException e) {
+            log.error("AI 검색 LLM 호출 실패", e);
             response.setError("AI 설정 또는 API 호출에 실패했습니다. 관리자에게 문의해주세요.");
             return response;
         } catch (Exception e) {
@@ -184,7 +214,7 @@ public class AssistantService {
 
     private AssistantAnswerResult generateAnswerResult(String prompt, Set<String> allowedSourceIds) {
         int answerMaxOutputTokens = resolveAnswerMaxOutputTokens();
-        String rawAnswer = geminiClient.generateSearchAnswer(prompt, answerMaxOutputTokens);
+        String rawAnswer = generateSearchLlmAnswer(prompt, answerMaxOutputTokens);
         AssistantAnswerResult result = parseAnswerResult(rawAnswer, allowedSourceIds);
         if (StringUtils.hasText(result.getAnswer())) {
             return result;
@@ -197,7 +227,7 @@ public class AssistantService {
 
         log.warn("AI 검색 답변이 빈 값으로 반환되어 더 큰 출력 예산으로 1회 재시도합니다. firstMaxOutputTokens={}, retryMaxOutputTokens={}",
                 answerMaxOutputTokens, retryMaxOutputTokens);
-        String retryRawAnswer = geminiClient.generateSearchAnswer(prompt, retryMaxOutputTokens);
+        String retryRawAnswer = generateSearchLlmAnswer(prompt, retryMaxOutputTokens);
         return parseAnswerResult(retryRawAnswer, allowedSourceIds);
     }
 
@@ -564,7 +594,7 @@ public class AssistantService {
             return null;
         }
         String prompt = buildMatchupIntentPrompt(message);
-        String raw = geminiClient.generateSearchAnswer(prompt);
+        String raw = generateSearchLlmAnswer(prompt);
         return parseLlmMatchupIntent(raw);
     }
 
@@ -674,7 +704,7 @@ public class AssistantService {
             return Collections.emptyList();
         }
         String prompt = buildRerankPrompt(message, candidates);
-        String raw = geminiClient.generateSearchAnswer(prompt);
+        String raw = generateSearchLlmAnswer(prompt);
         return parseRerankOrder(raw, candidates.size());
     }
 
@@ -2400,7 +2430,7 @@ public class AssistantService {
         if (llmRelatedPostsRateLimiter.tryAcquire(rateLimitPerMinute)) {
             try {
                 String prompt = buildLlmRelatedPostsPrompt(query, answer, evidenceCandidates, topCandidates);
-                String raw = geminiClient.generateSearchAnswer(prompt);
+                String raw = generateSearchLlmAnswer(prompt);
                 LlmRelatedPostsSelection selection = parseLlmRelatedPostsSelection(raw);
                 selection = sanitizeLlmRelatedPostsSelection(selection, evidenceCandidates, topCandidates);
                 if (selection == null) {

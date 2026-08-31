@@ -6,6 +6,7 @@ import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AliasDictionaryDTO;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.mapper.AliasDictionaryMapper;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.assistant.search.AssistantQueryExpansion;
@@ -42,6 +43,8 @@ class AssistantAliasDictionaryScenarioTest {
 
     @Mock
     private GeminiClient geminiClient;
+    @Mock
+    private OpenAiAssistantBotClient openAiAssistantBotClient;
 
     @Mock
     private AssistantRagSearchService ragSearchService;
@@ -73,6 +76,7 @@ class AssistantAliasDictionaryScenarioTest {
         assistantService = new AssistantService(
                 boardMapper,
                 geminiClient,
+                openAiAssistantBotClient,
                 assistantProperties,
                 ragSearchService,
                 ragProperties,

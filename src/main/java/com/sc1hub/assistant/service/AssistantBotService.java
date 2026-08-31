@@ -238,7 +238,8 @@ public class AssistantBotService {
                 String rawJson = geminiClient.generateAnswer(
                         prompt,
                         Math.max(1, botProperties.getMaxOutputTokens()),
-                        resolveModel(persona)
+                        resolveModel(persona),
+                        resolveGeminiThinkingLevel(persona)
                 );
                 JsonNode result = parseJson(rawJson);
                 CandidateDraft candidate = validateCandidate(persona, mode, result, recentPosts, recentComments, recentHistory);
@@ -858,7 +859,8 @@ public class AssistantBotService {
                     resolveModel(persona),
                     resolveReasoningEffort(persona));
         }
-        return geminiClient.generateAnswer(prompt, maxOutputTokens, resolveModel(persona));
+        return geminiClient.generateAnswer(prompt, maxOutputTokens, resolveModel(persona),
+                resolveGeminiThinkingLevel(persona));
     }
 
     private int resolveMaxOutputTokens(PersonaProperties persona) {
@@ -2243,6 +2245,32 @@ public class AssistantBotService {
             return persona.getReasoningEffort();
         }
         return "high";
+    }
+
+    /**
+     * 페르소나의 reasoningEffort를 Gemini thinkingLevel로 매핑한다.
+     * 명시하지 않은 페르소나는 기존처럼 thinkingConfig 없이 호출해 비용/지연을 늘리지 않는다.
+     */
+    private String resolveGeminiThinkingLevel(PersonaProperties persona) {
+        if (persona == null || !StringUtils.hasText(persona.getReasoningEffort())) {
+            return null;
+        }
+        String normalized = persona.getReasoningEffort().trim().toLowerCase(Locale.ROOT);
+        switch (normalized) {
+            case "none":
+            case "minimal":
+                return "minimal";
+            case "low":
+                return "low";
+            case "medium":
+                return "medium";
+            case "high":
+            case "xhigh":
+            case "max":
+                return "high";
+            default:
+                return null;
+        }
     }
 
     private boolean isTooSimilar(String left, String right, double threshold) {

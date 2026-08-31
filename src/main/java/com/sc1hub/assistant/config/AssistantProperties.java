@@ -13,6 +13,8 @@ import java.util.List;
 public class AssistantProperties {
     private boolean enabled = true;
     private boolean requireLogin = false;
+    // AI 검색 LLM 프로바이더: gemini(searchModel/searchThinkingLevel) 또는 openai(searchModel/searchReasoningEffort)
+    private String searchProvider = "gemini";
     private int maxRelatedPosts = 3;
     private int contextPosts = 3;
     // Answer generation limits (prompt guidance + output token budget)

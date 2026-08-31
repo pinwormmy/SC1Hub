@@ -62,10 +62,10 @@ public class GeminiClient {
         );
     }
 
-    private String generateAnswer(String prompt,
-                                  Integer maxOutputTokens,
-                                  String modelOverride,
-                                  String thinkingLevel) {
+    public String generateAnswer(String prompt,
+                                 Integer maxOutputTokens,
+                                 String modelOverride,
+                                 String thinkingLevel) {
         if (!geminiProperties.isAllowLiveCalls()) {
             throw new GeminiException("Live Gemini API calls are disabled.");
         }

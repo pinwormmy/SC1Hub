@@ -18,6 +18,7 @@ class AssistantConfigTest {
 
         assertTrue(requestFactory instanceof SimpleClientHttpRequestFactory);
         assertEquals(5000, ReflectionTestUtils.getField(requestFactory, "connectTimeout"));
-        assertEquals(30000, ReflectionTestUtils.getField(requestFactory, "readTimeout"));
+        // 높은 reasoning effort의 AI 검색 호출이 30초를 넘길 수 있어 120초로 늘렸다.
+        assertEquals(120000, ReflectionTestUtils.getField(requestFactory, "readTimeout"));
     }
 }

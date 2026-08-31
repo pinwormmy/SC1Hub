@@ -369,7 +369,7 @@ class AssistantBotServiceTest {
                 .thenReturn(Arrays.asList(chatMessage("일반유저", "요즘 테란 밸런스 어떰?")));
         when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
                 .thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString(), any()))
                 .thenReturn(validChatDraftJson());
         AtomicReference<AssistantBotHistoryDTO> insertedHistory = new AtomicReference<>();
         doAnswer(invocation -> {
@@ -462,9 +462,69 @@ class AssistantBotServiceTest {
                 eq(3000),
                 eq("gpt-5.6-luna"),
                 eq("high"));
-        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString(), any());
         verify(chatRoomService).postBotMessage("고수봇",
                 "드라군만 쌓지 말고 옵저버로 길을 밝힌 뒤 질럿을 앞세워 교전해");
+    }
+
+    @Test
+    void autoPublishOnce_forGeminiGosuBotPassesMediumThinkingLevel() throws Exception {
+        AssistantBotProperties.PersonaProperties gosu = persona("고수봇");
+        gosu.setModel("gemini-3.7-flash");
+        gosu.setReasoningEffort("medium");
+        gosu.setMaxOutputTokens(3000);
+        botProperties.setPersonas(Collections.singletonList(gosu));
+
+        LocalDate date = LocalDate.of(2026, 3, 9);
+        List<Integer> chatSlots = botProperties.buildDailyAutoPublishSlots(
+                date, "chat", botProperties.getAutoPublishChatDailyLimit(), "funboard", "고수봇");
+        int chatSlot = chatSlots.get(0);
+        LocalTime slotTime = LocalTime.of(chatSlot / 60, chatSlot % 60);
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        AssistantBotService service = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                openAiAssistantBotClient,
+                new ObjectMapper(),
+                chatRoomService,
+                Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone)
+        );
+
+        LocalDateTime since = date.atStartOfDay();
+        LocalDateTime minuteStart = LocalDateTime.of(date, slotTime);
+        when(assistantBotMapper.countGeneratedSinceByMode("고수봇", "funboard", "chat", since))
+                .thenReturn(0);
+        when(assistantBotMapper.countGeneratedSinceByMode("고수봇", "funboard", "chat", minuteStart))
+                .thenReturn(0);
+        when(chatRoomService.getRecentMessagesAfterLatestNickname("고수봇", 3))
+                .thenReturn(Collections.singletonList(
+                        chatMessage("유저B", "저그전 드라군만 뽑으니 막히네")));
+        when(assistantBotMapper.selectRecentHistory("고수봇", "funboard",
+                botProperties.getRecentHistoryLimit())).thenReturn(Collections.emptyList());
+        when(geminiClient.generateAnswer(anyString(), eq(3000), eq("gemini-3.7-flash"), eq("medium")))
+                .thenReturn(validGosuChatDraftJson("contextual_advice",
+                        "드라군만 쌓지 말고 옵저버로 길을 밝힌 뒤 질럿을 앞세워 교전해"));
+        when(chatRoomService.postBotMessage(anyString(), anyString())).thenAnswer(invocation -> {
+            ChatMessageDTO message = new ChatMessageDTO();
+            message.setId(93L);
+            message.setContent(invocation.getArgument(1));
+            return message;
+        });
+        doAnswer(invocation -> {
+            AssistantBotHistoryDTO history = invocation.getArgument(0);
+            history.setId(94L);
+            return null;
+        }).when(assistantBotMapper).insertHistory(any(AssistantBotHistoryDTO.class));
+
+        AssistantBotService.AutoPublishResult result = service.autoPublishOnce("고수봇");
+
+        assertEquals("published", result.getOutcome());
+        verify(geminiClient).generateAnswer(anyString(), eq(3000), eq("gemini-3.7-flash"), eq("medium"));
+        verify(openAiAssistantBotClient, never()).generateAnswer(anyString(), anyInt(), anyString(), anyString());
     }
 
     @Test
@@ -542,7 +602,7 @@ class AssistantBotServiceTest {
         assertEquals("skipped", result.getOutcome());
         assertEquals("chat_min_gap_cooldown", result.getDetail());
         verify(chatRoomService, never()).postBotMessage(anyString(), anyString());
-        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString(), any());
     }
 
     @Test
@@ -578,7 +638,7 @@ class AssistantBotServiceTest {
                 .thenReturn(Collections.emptyList());
         when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
                 .thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString(), any()))
                 .thenReturn(validChatDraftJson());
         when(chatRoomService.postBotMessage(anyString(), anyString())).thenAnswer(invocation -> {
             ChatMessageDTO message = new ChatMessageDTO();
@@ -590,7 +650,7 @@ class AssistantBotServiceTest {
         AssistantBotService.AutoPublishResult result = service.autoPublishOnce("프징징봇");
 
         assertEquals("published", result.getOutcome());
-        verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient).generateAnswer(anyString(), anyInt(), anyString(), any());
         verify(chatRoomService).postBotMessage("프징징봇", "드라군이 벌처한테 또 녹았는데 이게 맞냐");
     }
 
@@ -628,7 +688,7 @@ class AssistantBotServiceTest {
 
         assertEquals("skipped", result.getOutcome());
         assertEquals("chat_retry_cooldown", result.getDetail());
-        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString(), any());
         verify(chatRoomService, never()).postBotMessage(anyString(), anyString());
     }
 
@@ -691,7 +751,7 @@ class AssistantBotServiceTest {
         assertEquals("published", result.getOutcome());
         verify(chatRoomService, never()).getRecentMessages(anyInt());
         verify(assistantBotMapper, never()).selectRecentHistory(eq("야옹봇"), eq("funboard"), anyInt());
-        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString(), any());
         verify(chatRoomService).postBotMessage(eq("야옹봇"),
                 argThat(body -> body != null && body.matches("야(?:~+)?옹(?:~+)?(?: 야(?:~+)?옹(?:~+)?)?")));
         verify(assistantBotMapper).insertHistory(argThat(history ->
@@ -1171,7 +1231,7 @@ class AssistantBotServiceTest {
         request.setBoardTitle("funboard");
         request.setMode("post");
 
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString(), any()))
                 .thenReturn(validMeowPostDraftJson());
 
         AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(request);
@@ -1327,7 +1387,7 @@ class AssistantBotServiceTest {
                 .thenReturn(Collections.emptyList());
         when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
                 .thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString(), any()))
                 .thenReturn(validPostDraftJson());
 
         AssistantBotDraftResponseDTO first = assistantBotService.generateDraft(request);
@@ -1335,7 +1395,7 @@ class AssistantBotServiceTest {
 
         assertEquals("draft", first.getStatus());
         assertTrue(second.getError().contains("일일 호출 한도"));
-        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString(), any());
     }
 
     @Test
@@ -1350,7 +1410,7 @@ class AssistantBotServiceTest {
                 .thenReturn(Collections.emptyList());
         when(assistantBotMapper.selectRecentHistory("프징징봇", "funboard", botProperties.getRecentHistoryLimit()))
                 .thenReturn(Collections.emptyList());
-        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString()))
+        when(geminiClient.generateAnswer(anyString(), anyInt(), anyString(), any()))
                 .thenReturn("{invalid json");
 
         AssistantBotDraftResponseDTO response = ReflectionTestUtils.invokeMethod(
@@ -1362,7 +1422,7 @@ class AssistantBotServiceTest {
         );
 
         assertTrue(response.getError().contains("초안 품질 기준"));
-        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString());
+        verify(geminiClient, times(1)).generateAnswer(anyString(), anyInt(), anyString(), any());
     }
 
     @Test

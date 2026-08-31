@@ -32,6 +32,11 @@ public class OpenAiAssistantBotClient {
     private static final String RESPONSES_API_PATH = "/v1/responses";
     private static final int MAX_OUTPUT_TOKENS = 6000;
     private static final int MAX_ERROR_DETAIL_CHARS = 300;
+    // Responses API에서는 reasoning 토큰이 max_output_tokens 예산을 함께 소모하므로,
+    // 높은 reasoning effort로 도는 검색 호출은 요청 예산 위에 여유분을 더해 보낸다.
+    private static final int SEARCH_REASONING_HEADROOM_TOKENS = 6000;
+    private static final int SEARCH_MAX_OUTPUT_TOKENS = 8000;
+    private static final int SEARCH_DEFAULT_ANSWER_TOKENS = 1024;
 
     private final RestTemplate restTemplate;
     private final OpenAiProperties properties;
@@ -53,6 +58,26 @@ public class OpenAiAssistantBotClient {
                                  Integer maxOutputTokens,
                                  String model,
                                  String reasoningEffort) {
+        return generate(prompt, resolveMaxOutputTokens(maxOutputTokens), model, reasoningEffort, true);
+    }
+
+    /**
+     * AI 검색용 자유 텍스트 생성. 봇 채팅 JSON 스키마를 강제하지 않고,
+     * 프롬프트가 요구하는 JSON을 output_text로 그대로 돌려받는다.
+     */
+    public String generateSearchAnswer(String prompt, Integer maxOutputTokens) {
+        int requested = maxOutputTokens == null || maxOutputTokens <= 0
+                ? SEARCH_DEFAULT_ANSWER_TOKENS : maxOutputTokens;
+        int budget = Math.min(SEARCH_MAX_OUTPUT_TOKENS, requested + SEARCH_REASONING_HEADROOM_TOKENS);
+        return generate(prompt, budget, properties.getSearchModel(),
+                properties.getSearchReasoningEffort(), false);
+    }
+
+    private String generate(String prompt,
+                            int maxOutputTokens,
+                            String model,
+                            String reasoningEffort,
+                            boolean botChatFormat) {
         if (!properties.isAllowLiveCalls()) {
             throw new OpenAiAssistantBotException("Live OpenAI API calls are disabled.");
         }
@@ -77,7 +102,7 @@ public class OpenAiAssistantBotClient {
                     apiUri,
                     HttpMethod.POST,
                     new HttpEntity<>(buildPayload(validPrompt, maxOutputTokens,
-                            validModel, reasoningEffort), headers),
+                            validModel, reasoningEffort, botChatFormat), headers),
                     String.class);
             return extractStructuredOutput(response.getBody());
         } catch (HttpStatusCodeException e) {
@@ -95,28 +120,30 @@ public class OpenAiAssistantBotClient {
     }
 
     private Map<String, Object> buildPayload(String prompt,
-                                             Integer maxOutputTokens,
+                                             int maxOutputTokens,
                                              String model,
-                                             String reasoningEffort) {
+                                             String reasoningEffort,
+                                             boolean botChatFormat) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("input", Collections.singletonList(inputMessage("system", prompt)));
         payload.put("store", false);
-        payload.put("max_output_tokens", resolveMaxOutputTokens(maxOutputTokens));
+        payload.put("max_output_tokens", maxOutputTokens);
 
         Map<String, Object> reasoning = new LinkedHashMap<>();
         reasoning.put("effort", resolveReasoningEffort(reasoningEffort));
         payload.put("reasoning", reasoning);
 
-        Map<String, Object> format = new LinkedHashMap<>();
-        format.put("type", "json_schema");
-        format.put("name", "assistant_bot_chat");
-        format.put("strict", true);
-        format.put("schema", buildResponseSchema());
-
         Map<String, Object> text = new LinkedHashMap<>();
         text.put("verbosity", "low");
-        text.put("format", format);
+        if (botChatFormat) {
+            Map<String, Object> format = new LinkedHashMap<>();
+            format.put("type", "json_schema");
+            format.put("name", "assistant_bot_chat");
+            format.put("strict", true);
+            format.put("schema", buildResponseSchema());
+            text.put("format", format);
+        }
         payload.put("text", text);
         return payload;
     }
