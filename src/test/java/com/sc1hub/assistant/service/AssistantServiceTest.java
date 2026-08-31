@@ -486,6 +486,71 @@ class AssistantServiceTest {
         verify(geminiClient, times(2)).generateSearchAnswer(anyString(), anyInt());
     }
 
+    @Test
+    void buildPerspectiveGuidance_describesAskedRaceAndFallback_forMatchup() {
+        AssistantQueryParseResult parseResult = new AssistantQueryParseResult();
+        parseResult.setPlayerRace("Z");
+        parseResult.setOpponentRace("P");
+        parseResult.setMatchup("ZvP");
+
+        String guidance = ReflectionTestUtils.invokeMethod(
+                assistantService, "buildPerspectiveGuidance", parseResult);
+
+        assertNotNull(guidance);
+        assertTrue(guidance.contains("Perspective rules:"));
+        assertTrue(guidance.contains("Zerg(저그)"));
+        assertTrue(guidance.contains("ZvP(저프전)"));
+        assertTrue(guidance.contains("zvspboard"));
+        assertTrue(guidance.contains("pvszboard"));
+        assertTrue(guidance.contains("저그 기준(저프전) 자료는 아직 없습니다. 관련 자료는 추후 업데이트될 예정입니다."));
+        assertTrue(guidance.contains("프로토스 기준(프저전)"));
+    }
+
+    @Test
+    void buildPerspectiveGuidance_describesAskedRace_forSingleRace() {
+        AssistantQueryParseResult parseResult = new AssistantQueryParseResult();
+        parseResult.setPlayerRace("Z");
+
+        String guidance = ReflectionTestUtils.invokeMethod(
+                assistantService, "buildPerspectiveGuidance", parseResult);
+
+        assertNotNull(guidance);
+        assertTrue(guidance.contains("Zerg(저그)"));
+        assertTrue(guidance.contains("저그 기준 자료는 아직 없습니다. 관련 자료는 추후 업데이트될 예정입니다."));
+    }
+
+    @Test
+    void buildPerspectiveGuidance_empty_whenNoRaceDetected() {
+        AssistantQueryParseResult parseResult = new AssistantQueryParseResult();
+
+        String guidance = ReflectionTestUtils.invokeMethod(
+                assistantService, "buildPerspectiveGuidance", parseResult);
+
+        assertEquals("", guidance);
+        assertEquals("", ReflectionTestUtils.invokeMethod(
+                assistantService, "buildPerspectiveGuidance", (AssistantQueryParseResult) null));
+    }
+
+    @Test
+    void buildRagPrompt_includesPerspectiveGuidance_whenMatchupDetected() {
+        AssistantQueryParseResult parseResult = new AssistantQueryParseResult();
+        parseResult.setPlayerRace("Z");
+        parseResult.setOpponentRace("P");
+        parseResult.setMatchup("ZvP");
+
+        String prompt = ReflectionTestUtils.invokeMethod(
+                assistantService,
+                "buildRagPrompt",
+                "저프전 지상유닛 공방업 업그레이드 순서 자세히 알려줘.",
+                parseResult,
+                Collections.emptyList(),
+                new java.util.LinkedHashSet<String>());
+
+        assertNotNull(prompt);
+        assertTrue(prompt.contains("Perspective rules:"));
+        assertTrue(prompt.contains("저그 기준(저프전) 자료는 아직 없습니다."));
+    }
+
     private AssistantQueryParseResult buildParseResult(String message) {
         AssistantQueryParseResult result = new AssistantQueryParseResult();
         if (message == null) {

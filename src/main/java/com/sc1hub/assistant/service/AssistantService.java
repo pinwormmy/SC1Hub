@@ -168,13 +168,13 @@ public class AssistantService {
         Set<String> allowedSourceIds = new LinkedHashSet<>();
         if (ragRetrieval != null) {
             if (!candidates.isEmpty()) {
-                prompt = buildHybridPrompt(normalizedMessage, ragRetrieval.matches, candidates, allowedSourceIds, contextLimit);
+                prompt = buildHybridPrompt(normalizedMessage, parseResult, ragRetrieval.matches, candidates, allowedSourceIds, contextLimit);
             } else {
-                prompt = buildRagPrompt(normalizedMessage, ragRetrieval.matches, allowedSourceIds);
+                prompt = buildRagPrompt(normalizedMessage, parseResult, ragRetrieval.matches, allowedSourceIds);
             }
         } else {
             List<CandidatePost> contextPosts = candidates.subList(0, Math.min(contextLimit, candidates.size()));
-            prompt = buildPrompt(normalizedMessage, contextPosts, allowedSourceIds);
+            prompt = buildPrompt(normalizedMessage, parseResult, contextPosts, allowedSourceIds);
         }
 
         AssistantAnswerResult answerResult;
@@ -874,6 +874,95 @@ public class AssistantService {
         return "";
     }
 
+    private String buildPerspectiveGuidance(AssistantQueryParseResult parseResult) {
+        if (parseResult == null) {
+            return "";
+        }
+        String playerRace = normalizeRaceToken(parseResult.getPlayerRace());
+        if (!StringUtils.hasText(playerRace)) {
+            return "";
+        }
+        String opponentRace = normalizeRaceToken(parseResult.getOpponentRace());
+        String playerKr = toKoreanRaceFullName(playerRace);
+        String playerEn = toEnglishRaceName(playerRace);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Perspective rules:\n");
+        if (StringUtils.hasText(opponentRace) && !playerRace.equals(opponentRace)) {
+            String opponentKr = toKoreanRaceFullName(opponentRace);
+            String opponentEn = toEnglishRaceName(opponentRace);
+            String matchup = playerRace + "v" + opponentRace;
+            String matchupKr = toKoreanMatchup(playerRace, opponentRace) + "전";
+            String reverseMatchupKr = toKoreanMatchup(opponentRace, playerRace) + "전";
+            String playerBoard = boardTitleForMatchup(playerRace, opponentRace);
+            String opponentBoard = boardTitleForMatchup(opponentRace, playerRace);
+            sb.append("- The user is asking from the ").append(playerEn).append("(").append(playerKr)
+                    .append(") player's point of view in the ").append(matchup).append("(").append(matchupKr)
+                    .append(") matchup.\n");
+            sb.append("- Board '").append(playerBoard).append("' contains guides written from the ").append(playerEn)
+                    .append(" point of view; board '").append(opponentBoard).append("' contains guides written from the ")
+                    .append(opponentEn).append("(").append(opponentKr).append(") point of view.\n");
+            sb.append("- Base the answer only on sources written from the ").append(playerEn)
+                    .append(" point of view. Never present ").append(opponentEn)
+                    .append(" build orders, upgrade orders, or unit choices as if they applied to ").append(playerKr).append(".\n");
+            sb.append("- If no source matches the ").append(playerEn).append(" point of view but ").append(opponentEn)
+                    .append("-perspective sources exist, do NOT answer '관련 글을 찾지 못했습니다.'. ")
+                    .append("Instead, start the answer with \"").append(playerKr).append(" 기준(").append(matchupKr)
+                    .append(") 자료는 아직 없습니다. 관련 자료는 추후 업데이트될 예정입니다.\" ")
+                    .append("and then, if the sources are relevant, add the available information clearly labeled as \"")
+                    .append(opponentKr).append(" 기준(").append(reverseMatchupKr)
+                    .append(")\" and cite those sources. This rule takes precedence over the insufficiency rule above, ")
+                    .append("and the notice sentences do not count toward the sentence limit.\n");
+        } else {
+            sb.append("- The user is asking about ").append(playerEn).append("(").append(playerKr).append(").\n");
+            sb.append("- Never present another race's build orders, upgrade orders, or unit choices as if they applied to ")
+                    .append(playerKr).append(".\n");
+            sb.append("- If no source covers ").append(playerKr)
+                    .append(" but related sources about another race exist, do NOT answer '관련 글을 찾지 못했습니다.'. ")
+                    .append("Instead, start the answer with \"").append(playerKr)
+                    .append(" 기준 자료는 아직 없습니다. 관련 자료는 추후 업데이트될 예정입니다.\" ")
+                    .append("and then, if the sources are relevant, add the available information clearly labeled with its own race, ")
+                    .append("citing those sources. This rule takes precedence over the insufficiency rule above, ")
+                    .append("and the notice sentences do not count toward the sentence limit.\n");
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
+    private static String toKoreanRaceFullName(String race) {
+        if (!StringUtils.hasText(race)) {
+            return "";
+        }
+        String normalized = race.trim().toUpperCase(Locale.ROOT);
+        if ("P".equals(normalized)) {
+            return "프로토스";
+        }
+        if ("T".equals(normalized)) {
+            return "테란";
+        }
+        if ("Z".equals(normalized)) {
+            return "저그";
+        }
+        return "";
+    }
+
+    private static String toEnglishRaceName(String race) {
+        if (!StringUtils.hasText(race)) {
+            return "";
+        }
+        String normalized = race.trim().toUpperCase(Locale.ROOT);
+        if ("P".equals(normalized)) {
+            return "Protoss";
+        }
+        if ("T".equals(normalized)) {
+            return "Terran";
+        }
+        if ("Z".equals(normalized)) {
+            return "Zerg";
+        }
+        return "";
+    }
+
     private static String normalizeRaceToken(String raw) {
         if (!StringUtils.hasText(raw)) {
             return "";
@@ -1131,7 +1220,7 @@ public class AssistantService {
         return Math.min(Math.max(value, 0.0), 1.0);
     }
 
-    private String buildRagPrompt(String message, List<AssistantRagSearchService.Match> matches, Set<String> allowedSourceIds) {
+    private String buildRagPrompt(String message, AssistantQueryParseResult parseResult, List<AssistantRagSearchService.Match> matches, Set<String> allowedSourceIds) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are the SC1Hub assistant.\n");
         sb.append("Answer in Korean.\n");
@@ -1149,6 +1238,7 @@ public class AssistantService {
         sb.append("If you used any snippet, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
+        sb.append(buildPerspectiveGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
@@ -1207,6 +1297,7 @@ public class AssistantService {
     }
 
     private String buildHybridPrompt(String message,
+                                     AssistantQueryParseResult parseResult,
                                      List<AssistantRagSearchService.Match> matches,
                                      List<CandidatePost> candidates,
                                      Set<String> allowedSourceIds,
@@ -1228,6 +1319,7 @@ public class AssistantService {
         sb.append("If you used any source, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
+        sb.append(buildPerspectiveGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
@@ -1709,7 +1801,7 @@ public class AssistantService {
         return score;
     }
 
-    private String buildPrompt(String message, List<CandidatePost> contextPosts, Set<String> allowedSourceIds) {
+    private String buildPrompt(String message, AssistantQueryParseResult parseResult, List<CandidatePost> contextPosts, Set<String> allowedSourceIds) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are the SC1Hub assistant.\n");
         sb.append("Answer in Korean.\n");
@@ -1727,6 +1819,7 @@ public class AssistantService {
         sb.append("If you used any post, include its sourceId in citations.\n");
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
+        sb.append(buildPerspectiveGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
