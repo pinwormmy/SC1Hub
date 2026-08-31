@@ -43,6 +43,22 @@ class VisitorCountInterceptorTest {
     }
 
     @Test
+    void preHandle_doesNotCountSpeculativePrefetchOrPrerender() {
+        VisitorCountService service = mock(VisitorCountService.class);
+        VisitorCountInterceptor interceptor = new VisitorCountInterceptor(service);
+
+        MockHttpServletRequest prerenderRequest = new MockHttpServletRequest("GET", "/boards/tipboard");
+        prerenderRequest.addHeader("Sec-Purpose", "prefetch;prerender");
+        interceptor.preHandle(prerenderRequest, new MockHttpServletResponse(), new Object());
+
+        MockHttpServletRequest legacyPrefetchRequest = new MockHttpServletRequest("GET", "/boards/tipboard");
+        legacyPrefetchRequest.addHeader("Purpose", "prefetch");
+        interceptor.preHandle(legacyPrefetchRequest, new MockHttpServletResponse(), new Object());
+
+        verify(service, never()).processVisitor(any(), any());
+    }
+
+    @Test
     void preHandle_doesNotCountPrivateOrEditingPages() {
         VisitorCountService service = mock(VisitorCountService.class);
         VisitorCountInterceptor interceptor = new VisitorCountInterceptor(service);

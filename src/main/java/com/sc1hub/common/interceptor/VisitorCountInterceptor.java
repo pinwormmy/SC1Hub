@@ -7,6 +7,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.util.Locale;
+
 @Component
 public class VisitorCountInterceptor implements HandlerInterceptor {
 
@@ -30,6 +32,9 @@ public class VisitorCountInterceptor implements HandlerInterceptor {
         if (!"GET".equalsIgnoreCase(request.getMethod())) {
             return false;
         }
+        if (isSpeculativeLoad(request)) {
+            return false;
+        }
 
         String requestUri = request.getRequestURI();
         String contextPath = request.getContextPath();
@@ -40,5 +45,14 @@ public class VisitorCountInterceptor implements HandlerInterceptor {
                 && !path.equals("/modifyMyInfo")
                 && !path.contains("/writePost")
                 && !path.contains("/modifyPost");
+    }
+
+    /** 프리페치/프리렌더 요청은 사용자가 실제로 열지 않을 수 있어 방문으로 세지 않는다. */
+    private boolean isSpeculativeLoad(HttpServletRequest request) {
+        String secPurpose = request.getHeader("Sec-Purpose");
+        if (secPurpose != null && secPurpose.toLowerCase(Locale.ROOT).contains("prefetch")) {
+            return true;
+        }
+        return "prefetch".equalsIgnoreCase(request.getHeader("Purpose"));
     }
 }

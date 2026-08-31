@@ -717,8 +717,13 @@
 
     function init() {
         // 모든 페이지에서 채팅창을 기본 표시하고 폴링을 시작한다.
+        // 프리렌더된 문서는 실제 화면 전환 후에만 폴링을 시작한다.
         openTerminal();
-        start();
+        if (document.prerendering) {
+            document.addEventListener('prerenderingchange', start, { once: true });
+        } else {
+            start();
+        }
     }
 
     document.addEventListener('visibilitychange', () => {

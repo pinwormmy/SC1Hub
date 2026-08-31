@@ -77,22 +77,39 @@ class LoginKeepAliveViewCoverageTest {
 
         assertTrue(headSource.contains("scriptEl.async = true"));
         assertTrue(headSource.contains("scriptEl.crossOrigin = 'anonymous'"));
-        assertTrue(headSource.contains("window.addEventListener('load', loadAdsense, { once: true })"));
+        assertTrue(headSource.contains("window.addEventListener('load', scheduleAdsense, { once: true })"));
+        assertTrue(headSource.contains("requestIdleCallback(loadAdsense, { timeout: 2000 })"));
+        assertTrue(headSource.contains("window.setTimeout(loadAdsense, 2000)"));
+        assertTrue(headSource.contains("if (document.prerendering) {"));
         assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
         assertTrue(headSource.contains("document.addEventListener('click', markActivatedInternalLink"));
         assertTrue(headSource.contains("DOMContentLoaded', markExistingInternalLinks, { once: true }"));
         assertTrue(headSource.contains("font-display: swap"));
-        assertFalse(headSource.contains("requestIdleCallback"));
         assertFalse(headSource.contains("cancelIdleCallback"));
         assertFalse(headSource.contains("ADSENSE_DELAY_MS"));
-        assertFalse(headSource.contains("window.setTimeout"));
         assertFalse(headSource.contains("document.addEventListener('pointerdown'"));
         assertFalse(headSource.contains("window.stop()"));
         assertFalse(headSource.contains("MutationObserver"));
         assertFalse(headSource.contains("data-sc-adsense"));
         assertFalse(footerSource.contains("jquery"));
+    }
+
+    @Test
+    void sharedPagePrerendersInternalLinksButExcludesLogoutAndDefersChatPolling() throws IOException {
+        String headSource = new String(
+                Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
+        String chatSource = new String(
+                Files.readAllBytes(Paths.get("src/main/resources/static/js/sc-chat.js")), StandardCharsets.UTF_8);
+
+        assertTrue(headSource.contains("<script type=\"speculationrules\">"));
+        assertTrue(headSource.contains("\"eagerness\": \"moderate\""));
+        // /logout은 GET만으로 세션이 끊기므로 프리렌더 제외가 반드시 유지돼야 한다.
+        assertTrue(headSource.contains("{ \"not\": { \"href_matches\": \"/logout\" } }"));
+        assertTrue(headSource.contains("{ \"not\": { \"href_matches\": \"/adminPage*\" } }"));
+        assertTrue(chatSource.contains("document.prerendering"));
+        assertTrue(chatSource.contains("document.addEventListener('prerenderingchange', start, { once: true })"));
     }
 
     @Test

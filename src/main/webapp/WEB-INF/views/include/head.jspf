@@ -40,6 +40,24 @@
     <script type="application/ld+json"><c:out value="${structuredDataJson}" escapeXml="false" /></script>
 </c:if>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
+<%-- 내부 링크 프리렌더링: 호버/터치 시점에 다음 페이지를 백그라운드에서 미리 로드해
+     이동 직후 광고 스크립트 파싱으로 인한 입력·스크롤 랙을 상호작용 구간 밖으로 옮긴다.
+     /logout은 GET만으로 세션이 끊기므로 반드시 제외한다. 크로스오리진 iframe(광고)은
+     브라우저가 화면 전환 시점까지 지연시키므로 노출 집계는 이중으로 잡히지 않는다. --%>
+<script type="speculationrules">
+{
+    "prerender": [{
+        "where": {
+            "and": [
+                { "href_matches": "/*" },
+                { "not": { "href_matches": "/logout" } },
+                { "not": { "href_matches": "/adminPage*" } }
+            ]
+        },
+        "eagerness": "moderate"
+    }]
+}
+</script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EHFD4FX3KD"></script>
 <script>
 window.dataLayer = window.dataLayer || [];
@@ -131,11 +149,23 @@ gtag('config', 'G-EHFD4FX3KD');
         markExistingInternalLinks();
     }
 
-    // 초기 화면과 페이지 전환 완료를 막지 않되, 별도 지연 없이 정상 속도로 광고를 시작한다.
+    // 프리렌더 중인 문서는 화면에 없으므로 즉시 로드해 무거운 파싱을 미리 끝내고,
+    // 일반 로드에서는 load 후 유휴 시점(최대 2초)으로 미뤄 첫 스크롤·입력과 겹치지 않게 한다.
+    const scheduleAdsense = () => {
+        if (document.prerendering) {
+            loadAdsense();
+            return;
+        }
+        if (typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(loadAdsense, { timeout: 2000 });
+        } else {
+            window.setTimeout(loadAdsense, 2000);
+        }
+    };
     if (document.readyState === 'complete') {
-        loadAdsense();
+        scheduleAdsense();
     } else {
-        window.addEventListener('load', loadAdsense, { once: true });
+        window.addEventListener('load', scheduleAdsense, { once: true });
     }
 })();
 </script>
