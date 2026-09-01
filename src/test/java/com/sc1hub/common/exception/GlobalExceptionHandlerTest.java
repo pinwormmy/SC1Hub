@@ -40,7 +40,7 @@ class GlobalExceptionHandlerTest {
         ExtendedModelMap model = new ExtendedModelMap();
 
         String view = handler.handleMethodNotSupported(
-                new HttpRequestMethodNotSupportedException("GET", new String[]{"POST"}),
+                new HttpRequestMethodNotSupportedException("GET", java.util.List.of("POST")),
                 model, response);
 
         assertEquals("alert", view);
@@ -61,6 +61,21 @@ class GlobalExceptionHandlerTest {
                 .andExpect(header().string("Allow", "POST"))
                 .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"))
                 .andExpect(view().name("alert"));
+    }
+
+    @Test
+    void missingParameter_returns400WithoutStackTrace() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = handler.handleMissingParameter(
+                new org.springframework.web.bind.MissingServletRequestParameterException("postNum", "int"),
+                model, response);
+
+        assertEquals("alert", view);
+        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatus());
+        assertEquals("noindex,nofollow,noarchive", response.getHeader("X-Robots-Tag"));
     }
 
     @RestController

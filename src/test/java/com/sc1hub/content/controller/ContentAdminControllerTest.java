@@ -64,7 +64,7 @@ class ContentAdminControllerTest {
 
         ResponseEntity<ContentPostResponse> response = controller.publishPost("tVsPBoard", payload, request);
 
-        assertEquals(201, response.getStatusCodeValue());
+        assertEquals(201, response.getStatusCode().value());
         assertEquals(42, response.getBody().getPostNum());
         assertEquals("/boards/tvspboard/readPost?postNum=42", response.getHeaders().getLocation().toString());
         verify(boardService).submitPost(eq("tvspboard"), any(BoardDTO.class));
@@ -132,7 +132,7 @@ class ContentAdminControllerTest {
         ResponseEntity<ContentPostResponse> response = controller.publishPostWithMedia(
                 "teamplayguideboard", form, image, new MockHttpServletRequest());
 
-        assertEquals(201, response.getStatusCodeValue());
+        assertEquals(201, response.getStatusCode().value());
         assertEquals(13, response.getBody().getPostNum());
     }
 
@@ -165,7 +165,7 @@ class ContentAdminControllerTest {
         ResponseEntity<ContentPostResponse> response = controller.updatePost(
                 "tVsPBoard", 12, payload, new MockHttpServletRequest());
 
-        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(200, response.getStatusCode().value());
         assertEquals(12, response.getBody().getPostNum());
         assertEquals("/boards/tvspboard/readPost?postNum=12",
                 response.getHeaders().getLocation().toString());
@@ -201,7 +201,7 @@ class ContentAdminControllerTest {
         ResponseEntity<ContentPostResponse> response = controller.updatePostWithMedia(
                 "pvstboard", 12, form, image, new MockHttpServletRequest());
 
-        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(200, response.getStatusCode().value());
         assertEquals(12, response.getBody().getPostNum());
     }
 
@@ -230,7 +230,7 @@ class ContentAdminControllerTest {
 
         ResponseEntity<Void> response = controller.deletePost("pvstboard", 12);
 
-        assertEquals(204, response.getStatusCodeValue());
+        assertEquals(204, response.getStatusCode().value());
         verify(boardService).deletePost("pvstboard", 12);
     }
 

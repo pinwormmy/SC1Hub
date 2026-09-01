@@ -38,6 +38,7 @@ REMOTE_OOM_RECOVERY_SCRIPT="$REMOTE_SCRIPT_DIR/restart-tomcat-after-oom.sh"
 REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
 REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_strategy_recommendation.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
+REMOTE_RESET_TOKEN_SQL="$REMOTE_SCRIPT_DIR/20260901_drop_member_reset_token.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
 ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
@@ -70,6 +71,7 @@ scp "$ROOT_DIR/scripts/restart-tomcat-after-oom.sh" "$REMOTE:$REMOTE_OOM_RECOVER
 scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260824_create_one_line_strategy_recommendation.sql" "$REMOTE:$REMOTE_STRATEGY_RECOMMENDATION_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260901_drop_member_reset_token.sql" "$REMOTE:$REMOTE_RESET_TOKEN_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
@@ -88,6 +90,7 @@ ssh "$REMOTE" \
    REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
    REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
+   REMOTE_RESET_TOKEN_SQL='$REMOTE_RESET_TOKEN_SQL'
    ROLLBACK_REQUIRES_LEGACY_RUNTIME='$ROLLBACK_REQUIRES_LEGACY_RUNTIME'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -163,6 +166,8 @@ ssh "$REMOTE" \
    fi
    echo 'Applying visitor count schema...'
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_VISITOR_COUNT_SQL\"
+   echo 'Dropping dead member.reset_token column (idempotent)...'
+   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_RESET_TOKEN_SQL\"
    ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
    if [ \"\$ONE_LINE_STRATEGY_TABLES\" != \"2\" ]; then
      echo 'Applying one-line strategy schema...'

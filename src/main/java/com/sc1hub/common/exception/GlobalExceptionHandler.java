@@ -3,6 +3,7 @@ package com.sc1hub.common.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ui.Model;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
@@ -54,6 +55,18 @@ public class GlobalExceptionHandler {
         log.warn("HttpRequestMethodNotSupportedException: method={}, supported={}",
                 e.getMethod(), supportedMethods);
         prepareErrorModel(model, "지원하지 않는 요청 방식입니다.", "/");
+        return "alert";
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public String handleMissingParameter(MissingServletRequestParameterException e, Model model,
+                                         HttpServletResponse response) {
+        // 크롤러가 postNum 등 필수 파라미터 없이 URL을 두드리는 일상적 요청이라
+        // 스택트레이스 있는 ERROR가 아니라 한 줄 WARN + 400으로 처리한다.
+        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        response.setHeader("X-Robots-Tag", ERROR_ROBOTS);
+        log.warn("MissingServletRequestParameterException: {}", e.getMessage());
+        prepareErrorModel(model, "필수 정보가 빠진 요청입니다.", "/");
         return "alert";
     }
 
