@@ -63,10 +63,6 @@
         where id=#{id}
     </update>
 
-    <select id="findByEmail" resultType="com.sc1hub.member.dto.MemberDTO">
-        select * from member
-        where email=#{email}
-    </select>
 
     <update id="updatePassword">
         update member

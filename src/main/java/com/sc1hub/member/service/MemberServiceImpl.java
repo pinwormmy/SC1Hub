@@ -136,25 +136,6 @@ public class MemberServiceImpl implements MemberService {
         memberMapper.submitModifyMemberByAdmin(memberDTO);
     }
 
-    public boolean findCredentials(String email) {
-        MemberDTO member = memberMapper.findByEmail(email);
-        if (member == null) {
-            return false;
-        }
-
-        // 임시 비밀번호 생성
-        issueTemporaryPassword(member);
-
-        // 이메일로 아이디 및 임시 비밀번호 보내기
-        try {
-            emailService.sendSimpleMessage(email);
-        } catch (Exception e) {
-            log.error("이메일 전송오류", e);
-        }
-
-        return true;
-    }
-
     @Override
     public String findIdByNameAndEmail(String userName, String email) {
         try {

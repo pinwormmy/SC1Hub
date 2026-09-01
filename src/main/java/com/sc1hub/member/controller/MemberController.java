@@ -1,10 +1,9 @@
 package com.sc1hub.member.controller;
 
 import com.sc1hub.common.dto.PageDTO;
-import com.sc1hub.member.dto.EmailDTO;
 import com.sc1hub.member.dto.MemberDTO;
-import com.sc1hub.member.dto.VerificationResponseDTO;
-import com.sc1hub.member.service.EmailService;
+import com.sc1hub.common.util.IpService;
+import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -16,7 +15,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
@@ -33,11 +31,11 @@ public class MemberController {
     private static final int LOGIN_SESSION_TIMEOUT_SECONDS = 30 * 60;
 
     private final MemberService memberService;
-    private final EmailService emailService;
+    private final LoginAttemptGuard loginAttemptGuard;
 
-    public MemberController(MemberService memberService, EmailService emailService) {
+    public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard) {
         this.memberService = memberService;
-        this.emailService = emailService;
+        this.loginAttemptGuard = loginAttemptGuard;
     }
 
     @GetMapping("/login")
@@ -75,12 +73,21 @@ public class MemberController {
     }
 
     @PostMapping("/submitLogin")
-    public String submitLogin(HttpSession session, MemberDTO memberDTO, Model model) throws Exception {
+    public String submitLogin(HttpServletRequest request, HttpSession session, MemberDTO memberDTO,
+                              Model model) throws Exception {
+        if (loginAttemptGuard.isBlocked(memberDTO.getId())) {
+            log.warn("로그인 시도 잠금 상태의 접근입니다. memberId={}, ip={}",
+                    memberDTO.getId(), IpService.getRemoteIP(request));
+            model.addAttribute("message", "로그인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.");
+            return "login";
+        }
         MemberDTO loginData = memberService.checkLoginData(memberDTO);
         if (loginData == null) {
+            loginAttemptGuard.recordFailure(memberDTO.getId());
             model.addAttribute("message", "아이디 또는 비밀번호가 일치하지 않습니다.");
             return "login";
         }
+        loginAttemptGuard.reset(memberDTO.getId());
         session.setAttribute("member", loginData);
         log.debug("로그인 확인: {}", memberDTO);
         Object returnPath = session.getAttribute("pageBeforeLogin");
@@ -119,23 +126,6 @@ public class MemberController {
     @GetMapping(value = "/modifyMember")
     public String modifyMember() {
         return "modifyMember";
-    }
-
-    @PostMapping("/sendVerificationMail")
-    @ResponseBody
-    public ResponseEntity<VerificationResponseDTO> sendVerificationMail(@RequestBody EmailDTO emailDTO) {
-        try {
-            String email = emailDTO.getEmail();
-            String verificationNumber = emailService.sendSimpleMessage(email);
-
-            VerificationResponseDTO response = new VerificationResponseDTO(true, verificationNumber);
-
-            return new ResponseEntity<>(response, HttpStatus.OK);
-        } catch (Exception e) {
-            log.error("인증 메일 발송 중 오류가 발생했습니다: ", e);
-            VerificationResponseDTO response = new VerificationResponseDTO(false, null);
-            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
-        }
     }
 
     @GetMapping("/checkUniqueId")

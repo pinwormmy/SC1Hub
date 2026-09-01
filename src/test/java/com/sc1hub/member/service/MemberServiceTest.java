@@ -44,40 +44,6 @@ class MemberServiceTest {
     }
 
     @Test
-    void findCredentials_returnsFalse_whenMemberNotFound() {
-        String email = "test@example.com";
-        when(memberMapper.findByEmail(email)).thenReturn(null);
-
-        boolean result = memberService.findCredentials(email);
-
-        assertFalse(result);
-        verify(memberMapper, never()).updatePassword(any(MemberDTO.class));
-        verifyNoInteractions(emailService);
-    }
-
-    @Test
-    void findCredentials_updatesPassword_andSendsMail() throws Exception {
-        String email = "test@example.com";
-        MemberDTO member = new MemberDTO();
-
-        when(memberMapper.findByEmail(email)).thenReturn(member);
-        doNothing().when(memberMapper).updatePassword(any(MemberDTO.class));
-        when(emailService.sendSimpleMessage(email)).thenReturn("ignored");
-
-        boolean result = memberService.findCredentials(email);
-
-        assertTrue(result);
-
-        ArgumentCaptor<MemberDTO> memberCaptor = ArgumentCaptor.forClass(MemberDTO.class);
-        verify(memberMapper).updatePassword(memberCaptor.capture());
-        assertNotNull(memberCaptor.getValue().getPw());
-        assertTrue(memberCaptor.getValue().getPw().startsWith("$2"),
-                "임시 비밀번호는 평문이 아니라 BCrypt로 저장돼야 한다");
-
-        verify(emailService).sendSimpleMessage(email);
-    }
-
-    @Test
     void findPassword_returnsMessage_whenMemberNotFound() {
         String userId = "user";
         String email = "test@example.com";

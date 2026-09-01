@@ -1,7 +1,7 @@
 package com.sc1hub.member.controller;
 
 import com.sc1hub.member.dto.MemberDTO;
-import com.sc1hub.member.service.EmailService;
+import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +28,7 @@ class MemberControllerTest {
     private MemberService memberService;
 
     @Mock
-    private EmailService emailService;
+    private LoginAttemptGuard loginAttemptGuard;
 
     @InjectMocks
     private MemberController controller;
@@ -63,10 +63,41 @@ class MemberControllerTest {
         when(memberService.checkLoginData(credentials)).thenReturn(loggedIn);
         MockHttpSession session = new MockHttpSession();
 
-        String view = controller.submitLogin(session, credentials, new ExtendedModelMap());
+        String view = controller.submitLogin(new MockHttpServletRequest(), session, credentials,
+                new ExtendedModelMap());
 
         assertEquals("redirect:/", view);
         assertEquals(loggedIn, session.getAttribute("member"));
+        verify(loginAttemptGuard).reset("user");
+    }
+
+    @Test
+    void submitLogin_recordsFailureOnWrongCredentials() throws Exception {
+        MemberDTO credentials = new MemberDTO();
+        credentials.setId("user");
+        when(memberService.checkLoginData(credentials)).thenReturn(null);
+
+        ExtendedModelMap model = new ExtendedModelMap();
+        String view = controller.submitLogin(new MockHttpServletRequest(), new MockHttpSession(),
+                credentials, model);
+
+        assertEquals("login", view);
+        verify(loginAttemptGuard).recordFailure("user");
+    }
+
+    @Test
+    void submitLogin_refusesLockedAccountWithoutCheckingCredentials() throws Exception {
+        MemberDTO credentials = new MemberDTO();
+        credentials.setId("user");
+        when(loginAttemptGuard.isBlocked("user")).thenReturn(true);
+
+        ExtendedModelMap model = new ExtendedModelMap();
+        String view = controller.submitLogin(new MockHttpServletRequest(), new MockHttpSession(),
+                credentials, model);
+
+        assertEquals("login", view);
+        assertEquals("로그인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.", model.getAttribute("message"));
+        verifyNoInteractions(memberService);
     }
 
     @Test

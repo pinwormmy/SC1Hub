@@ -29,7 +29,6 @@ public interface MemberMapper {
 
     void submitModifyMemberByAdmin(MemberDTO memberDTO);
 
-    MemberDTO findByEmail(String email);
 
     void updatePassword(MemberDTO member);
 

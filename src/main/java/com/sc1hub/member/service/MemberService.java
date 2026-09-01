@@ -27,7 +27,6 @@ public interface MemberService {
 
     void submitModifyMemberByAdmin(MemberDTO memberDTO);
 
-    boolean findCredentials(String email);
 
     String findIdByNameAndEmail(String userName, String email);
 
