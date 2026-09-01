@@ -999,12 +999,17 @@ public class AssistantBotService {
 
         sb.append("목표:\n");
         sb.append("- 공개채팅방에 페르소나 말투로 짧은 채팅 한 줄을 남긴다.\n");
-        sb.append("- 아래 최신 채팅을 읽고 자연스럽게 반응하거나, 이어갈 화제가 없으면 페르소나다운 혼잣말을 던진다.\n");
-        if (isRaceGamePersona(persona)) {
-            sb.append("- ").append(persona.getName()).append("은 스타크래프트 게임 이야기 관점을 유지한다. 채팅 화제가 게임이 아니어도 맞장구 대신 ")
-                    .append(resolveRaceLabel(persona)).append(" 시점의 게임 한마디로 반응한다.\n");
-        } else if (isHealthPersona(persona)) {
-            sb.append("- 건강봇은 채팅 흐름에 맞춰 실천할 수 있는 건강 상식 한 조각만 한 줄로 툭 건넨다. 줄바꿈·긴 설명·번호 나열 없이 짧게 쓴다.\n");
+        if (isHealthPersona(persona)) {
+            sb.append("- 건강봇은 채팅 흐름을 읽거나 이어받지 않는다. 대화 내용과 무관하게 오늘의 건강 팁 하나를 독립적으로 툭 던진다.\n");
+            sb.append("- 주제는 수면, 스트레칭/운동, 영양/식사, 수분 섭취, 허리/목 자세, 손목, 눈 피로, 두통, 혈압/혈당, 위생, 스트레스, 계절 질환, 건강검진 같은 축에서 고른다.\n");
+            sb.append("- 아래 최근 건강봇 채팅에서 이미 다룬 주제 축은 피하고, 매번 다른 축을 골라 다채롭게 순환한다.\n");
+            sb.append("- 뻔한 휴식 권유 대신 독자가 새로 배울 만한 구체적인 건강 상식 한 조각을 담는다. 줄바꿈·긴 설명·번호 나열 없이 짧게 쓴다.\n");
+        } else {
+            sb.append("- 아래 최신 채팅을 읽고 자연스럽게 반응하거나, 이어갈 화제가 없으면 페르소나다운 혼잣말을 던진다.\n");
+            if (isRaceGamePersona(persona)) {
+                sb.append("- ").append(persona.getName()).append("은 스타크래프트 게임 이야기 관점을 유지한다. 채팅 화제가 게임이 아니어도 맞장구 대신 ")
+                        .append(resolveRaceLabel(persona)).append(" 시점의 게임 한마디로 반응한다.\n");
+            }
         }
         sb.append("\n");
 
@@ -1033,19 +1038,25 @@ public class AssistantBotService {
             sb.append("- 이번 시도에서는 문장과 화제를 분명히 바꾼다.\n\n");
         }
 
-        sb.append("최신 채팅:\n");
-        List<ChatMessageDTO> safeChats = safeList(recentChats);
-        if (safeChats.isEmpty()) {
-            sb.append("- 없음 (조용한 채팅방이니 혼잣말로 시작한다)\n");
+        if (isHealthPersona(persona)) {
+            // 건강봇이 채팅 맥락(주로 모니터·게임 얘기)에 끌려가 눈 피로 같은 한 주제로
+            // 수렴하는 것을 막기 위해 최신 채팅 자체를 프롬프트에서 제외한다.
+            sb.append("최신 채팅: (건강봇은 채팅 맥락을 사용하지 않는다)\n");
         } else {
-            int index = 1;
-            for (ChatMessageDTO chat : safeChats) {
-                if (chat == null) {
-                    continue;
+            sb.append("최신 채팅:\n");
+            List<ChatMessageDTO> safeChats = safeList(recentChats);
+            if (safeChats.isEmpty()) {
+                sb.append("- 없음 (조용한 채팅방이니 혼잣말로 시작한다)\n");
+            } else {
+                int index = 1;
+                for (ChatMessageDTO chat : safeChats) {
+                    if (chat == null) {
+                        continue;
+                    }
+                    String nickname = StringUtils.hasText(chat.getNickname()) ? chat.getNickname() : "익명";
+                    appendLine(sb, index + ". [" + nickname + "] " + safeText(chat.getContent(), 120));
+                    index++;
                 }
-                String nickname = StringUtils.hasText(chat.getNickname()) ? chat.getNickname() : "익명";
-                appendLine(sb, index + ". [" + nickname + "] " + safeText(chat.getContent(), 120));
-                index++;
             }
         }
 

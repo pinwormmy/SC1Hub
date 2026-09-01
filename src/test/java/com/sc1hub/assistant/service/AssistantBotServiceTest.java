@@ -711,6 +711,26 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void buildChatPrompt_forHealthBotIgnoresChatContextAndRotatesTopics() {
+        String prompt = assistantBotService.buildChatPrompt(
+                persona("건강봇"),
+                Arrays.asList(chatMessage("일반유저", "모니터 오래 보면 눈 아프지 않냐"), chatMessage("Guest1234", "ㅇㅇ 눈 침침함")),
+                Collections.emptyList(),
+                null,
+                1,
+                1
+        );
+
+        // 채팅 맥락(주로 화면·게임 얘기)에 끌려가 눈 주제로만 수렴하던 회귀를 막는다.
+        assertFalse(prompt.contains("[일반유저]"), "건강봇 프롬프트에 최신 채팅 내용이 실리면 안 된다");
+        assertFalse(prompt.contains("눈 침침함"));
+        assertTrue(prompt.contains("채팅 흐름을 읽거나 이어받지 않는다"));
+        assertTrue(prompt.contains("매번 다른 축을 골라 다채롭게 순환한다"));
+        assertTrue(prompt.contains("최근 건강봇 채팅"), "주제 순환 근거인 자기 이력은 유지해야 한다");
+        assertTrue(prompt.contains("반드시 한 줄만 쓴다"));
+    }
+
+    @Test
     void autoPublishOnce_forMeowPersonaPublishesLocallyWithoutContextOrGemini() throws Exception {
         botProperties.setPersonas(Collections.singletonList(persona("야옹봇")));
         LocalDate date = LocalDate.of(2026, 3, 9);
