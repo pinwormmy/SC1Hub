@@ -2,12 +2,14 @@ package com.sc1hub.member.service;
 
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.mapper.MemberMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -32,8 +34,14 @@ class MemberServiceTest {
     @Mock
     private MemberMapper memberMapper;
 
-    @InjectMocks
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     private MemberServiceImpl memberService;
+
+    @BeforeEach
+    void setUp() {
+        memberService = new MemberServiceImpl(memberMapper, emailService, passwordEncoder);
+    }
 
     @Test
     void findCredentials_returnsFalse_whenMemberNotFound() {
@@ -63,7 +71,8 @@ class MemberServiceTest {
         ArgumentCaptor<MemberDTO> memberCaptor = ArgumentCaptor.forClass(MemberDTO.class);
         verify(memberMapper).updatePassword(memberCaptor.capture());
         assertNotNull(memberCaptor.getValue().getPw());
-        assertEquals(8, memberCaptor.getValue().getPw().length());
+        assertTrue(memberCaptor.getValue().getPw().startsWith("$2"),
+                "임시 비밀번호는 평문이 아니라 BCrypt로 저장돼야 한다");
 
         verify(emailService).sendSimpleMessage(email);
     }
@@ -97,11 +106,17 @@ class MemberServiceTest {
 
         ArgumentCaptor<MemberDTO> memberCaptor = ArgumentCaptor.forClass(MemberDTO.class);
         verify(memberMapper).updatePassword(memberCaptor.capture());
-        String tempPassword = memberCaptor.getValue().getPw();
-        assertNotNull(tempPassword);
-        assertEquals(8, tempPassword.length());
+        String storedPassword = memberCaptor.getValue().getPw();
+        assertNotNull(storedPassword);
+        assertTrue(storedPassword.startsWith("$2"),
+                "임시 비밀번호는 평문이 아니라 BCrypt로 저장돼야 한다");
 
-        verify(emailService).sendNewPasswordMessage(email, tempPassword);
+        ArgumentCaptor<String> mailCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService).sendNewPasswordMessage(eq(email), mailCaptor.capture());
+        String mailedPassword = mailCaptor.getValue();
+        assertEquals(12, mailedPassword.length());
+        assertTrue(passwordEncoder.matches(mailedPassword, storedPassword),
+                "메일로 보낸 임시 비밀번호가 저장된 해시와 일치해야 한다");
     }
 
     @Test

@@ -60,8 +60,8 @@ function checkSignupForm() {
     const pw = modifyMyInfoForm.pw.value;
     const pw2 = modifyMyInfoForm.pw2.value;
 
-    if (pw.length < 4 || pw.length > 16) {
-        alert("비밀번호는 4~16자리로 설정해주세요.");
+    if (pw.length < 8 || pw.length > 64) {
+        alert("비밀번호는 8~64자리로 설정해주세요.");
         modifyMyInfoForm.pw.focus();
         return false;
     }

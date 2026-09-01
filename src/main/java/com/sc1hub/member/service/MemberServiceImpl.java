@@ -6,8 +6,12 @@ import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.dto.VisitorsDTO;
 import com.sc1hub.member.mapper.MemberMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,14 +22,22 @@ public class MemberServiceImpl implements MemberService {
     private static final String DEFAULT_MEMBER_SEARCH_TYPE = "id";
     private static final int MEMBER_DISPLAY_POST_LIMIT = 10;
     private static final int DEFAULT_PAGESET_LIMIT = 10;
-    private static final int TEMP_PASSWORD_LENGTH = 8;
+    private static final int TEMP_PASSWORD_LENGTH = 12;
+    private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final int MAX_PASSWORD_LENGTH = 64;
+    // 기존 회원 행은 평문 pw를 담고 있다. 로그인 성공 시 BCrypt로 제자리 승격되며,
+    // 이 접두사로 저장 형식을 판별한다.
+    private static final String BCRYPT_PREFIX = "$2";
 
     private final MemberMapper memberMapper;
     private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
 
-    public MemberServiceImpl(MemberMapper memberMapper, EmailService emailService) {
+    public MemberServiceImpl(MemberMapper memberMapper, EmailService emailService,
+                             PasswordEncoder passwordEncoder) {
         this.memberMapper = memberMapper;
         this.emailService = emailService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -45,17 +57,52 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public void submitSignUp(MemberDTO memberDTO) throws Exception {
-        memberMapper.submitSignUp(memberDTO);
+        validateNewPassword(memberDTO.getPw());
+        // 호출자는 같은 DTO로 곧바로 로그인을 시도하므로 원본은 건드리지 않는다.
+        memberMapper.submitSignUp(copyWithHashedPassword(memberDTO));
     }
 
     @Override
     public MemberDTO checkLoginData(MemberDTO memberDTO) throws Exception {
-        return memberMapper.checkLoginData(memberDTO);
+        if (memberDTO == null || !StringUtils.hasText(memberDTO.getId())
+                || !StringUtils.hasText(memberDTO.getPw())) {
+            return null;
+        }
+        MemberDTO stored = memberMapper.getMemberInfo(memberDTO.getId());
+        if (stored == null || !StringUtils.hasText(stored.getPw())) {
+            return null;
+        }
+
+        String rawPassword = memberDTO.getPw();
+        String storedPassword = stored.getPw();
+        boolean authenticated;
+        if (storedPassword.startsWith(BCRYPT_PREFIX)) {
+            authenticated = passwordEncoder.matches(rawPassword, storedPassword);
+        } else {
+            authenticated = MessageDigest.isEqual(
+                    storedPassword.getBytes(StandardCharsets.UTF_8),
+                    rawPassword.getBytes(StandardCharsets.UTF_8));
+            if (authenticated) {
+                MemberDTO upgrade = new MemberDTO();
+                upgrade.setId(stored.getId());
+                upgrade.setPw(passwordEncoder.encode(rawPassword));
+                memberMapper.updatePassword(upgrade);
+                log.info("레거시 평문 비밀번호를 BCrypt로 승격했습니다. memberId={}", stored.getId());
+            }
+        }
+        if (!authenticated) {
+            return null;
+        }
+        // 세션에 올라가는 객체이므로 해시조차 밖으로 내보내지 않는다.
+        stored.setPw(null);
+        return stored;
     }
 
     @Override
     public void submitModifyMyInfo(MemberDTO member) throws Exception {
-        memberMapper.submitModifyMyInfo(member);
+        validateNewPassword(member.getPw());
+        // 호출자는 같은 DTO로 재로그인해 세션을 갱신하므로 원본은 건드리지 않는다.
+        memberMapper.submitModifyMyInfo(copyWithHashedPassword(member));
     }
 
     @Override
@@ -145,9 +192,33 @@ public class MemberServiceImpl implements MemberService {
 
     private String issueTemporaryPassword(MemberDTO member) {
         String tempPassword = UUID.randomUUID().toString().replace("-", "").substring(0, TEMP_PASSWORD_LENGTH);
-        member.setPw(tempPassword);
-        memberMapper.updatePassword(member);
+        MemberDTO update = new MemberDTO();
+        update.setId(member.getId());
+        update.setPw(passwordEncoder.encode(tempPassword));
+        memberMapper.updatePassword(update);
         return tempPassword;
+    }
+
+    private MemberDTO copyWithHashedPassword(MemberDTO source) {
+        MemberDTO copy = new MemberDTO();
+        copy.setId(source.getId());
+        copy.setPw(passwordEncoder.encode(source.getPw()));
+        copy.setNickName(source.getNickName());
+        copy.setRealName(source.getRealName());
+        copy.setEmail(source.getEmail());
+        copy.setPhone(source.getPhone());
+        copy.setGrade(source.getGrade());
+        copy.setRegDate(source.getRegDate());
+        return copy;
+    }
+
+    private void validateNewPassword(String rawPassword) {
+        if (!StringUtils.hasText(rawPassword)
+                || rawPassword.length() < MIN_PASSWORD_LENGTH
+                || rawPassword.length() > MAX_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException(
+                    "비밀번호는 " + MIN_PASSWORD_LENGTH + "~" + MAX_PASSWORD_LENGTH + "자여야 합니다.");
+        }
     }
 
 }

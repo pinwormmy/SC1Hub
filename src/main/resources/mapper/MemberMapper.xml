@@ -25,11 +25,6 @@
         values(#{id}, #{pw}, #{nickName}, #{realName}, #{email}, #{phone}, 1, now())
     </insert>
 
-    <select id="checkLoginData" resultType="com.sc1hub.member.dto.MemberDTO">
-        select * from member
-        where id=#{id} and pw=#{pw}
-    </select>
-
     <update id="submitModifyMyInfo">
         update member
         set pw=#{pw}, nickname=#{nickName}, email=#{email}

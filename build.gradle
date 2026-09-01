@@ -34,6 +34,9 @@ configurations {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// Password hashing only — the full Spring Security starter would register filters
+	// and auth machinery this session-based app does not use.
+	implementation 'org.springframework.security:spring-security-crypto'
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.jsoup:jsoup:1.23.1'

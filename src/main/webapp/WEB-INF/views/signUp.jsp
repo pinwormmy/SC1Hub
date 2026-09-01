@@ -28,7 +28,7 @@
                             </div>
                             <div>
                                 패스워드*>
-                                <input type="password" name="pw" id="pw" placeholder="4~16 자리">
+                                <input type="password" name="pw" id="pw" placeholder="8~64 자리">
                             </div>
                             <div>
                                 패스워드 재입력*>
@@ -139,7 +139,7 @@
     };
 
 	function checkSignupForm() {
-        let isPassword = /^.{4,16}$/;
+        let isPassword = /^.{8,64}$/;
 
         if (isUniqueIdValid == false) {
             alert("올바른 ID를 입력하세요!!");
