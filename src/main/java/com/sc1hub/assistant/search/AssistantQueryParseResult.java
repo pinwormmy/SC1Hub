@@ -24,4 +24,6 @@ public class AssistantQueryParseResult {
     private Map<String, Double> boardWeights = new LinkedHashMap<>();
     @JsonProperty("alias_matched")
     private boolean aliasMatched;
+    @JsonProperty("team_play_query")
+    private boolean teamPlayQuery;
 }

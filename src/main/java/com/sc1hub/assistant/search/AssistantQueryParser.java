@@ -33,9 +33,20 @@ public class AssistantQueryParser {
     private static final String BOARD_ZVT = "zvstboard";
     private static final String BOARD_ZVZ = "zvszboard";
 
+    public static final String BOARD_TEAM_PLAY = "teamplayguideboard";
+
     private static final double MATCHUP_WEIGHT = 1.6;
     private static final double ALIAS_BOARD_WEIGHT = 1.4;
+    private static final double TEAM_PLAY_BOARD_WEIGHT = 1.6;
+    private static final double TEAM_PLAY_BOARD_DEMOTION_WEIGHT = 0.6;
     private static final long ALIAS_CACHE_MILLIS = 60_000L;
+
+    /** 공백을 제거한 소문자 텍스트에서 팀플레이(빨무/헌터) 문맥을 가리키는 토큰. */
+    private static final List<String> TEAM_PLAY_TOKENS = Arrays.asList(
+            "빨무", "빨리무한", "무한맵", "헌터", "hunter",
+            "팀플", "팀플레이", "teamplay",
+            "2대2", "3대3", "4대4"
+    );
 
     private static final Set<String> STOPWORDS = new LinkedHashSet<>(Arrays.asList(
             "추천", "질문", "방법", "어떻게", "알려줘", "알려주세요", "알려", "해줘", "해주세요", "좀",
@@ -114,12 +125,49 @@ public class AssistantQueryParser {
         List<String> expandedTerms = queryExpansion.expand(keywords, matchedAliases, matchupInfo.matchupTag, matchupInfo.matchupKoreanTag);
         result.setExpandedTerms(expandedTerms);
 
+        boolean teamPlayQuery = mentionsTeamPlay(normalizedMessage)
+                || mentionsTeamPlay(String.join(" ", expandedTerms));
+        result.setTeamPlayQuery(teamPlayQuery);
+        applyTeamPlayBoardWeight(boardWeights, teamPlayQuery);
+
         if (confidence <= 0.0) {
             confidence = inferConfidence(normalizedMessage, matchupInfo, matchedAliases);
         }
         result.setConfidence(confidence);
 
         return result;
+    }
+
+    /**
+     * 질문에 팀플레이(빨무/헌터) 키워드가 없으면 팀플 게시판을 후순위로 내려
+     * 일반 1:1 종족전 자료가 먼저 잡히게 한다. 별칭 사전이 팀플 게시판을 명시적으로
+     * 부스트한 경우에는 관리자 설정을 그대로 존중한다.
+     */
+    private static void applyTeamPlayBoardWeight(Map<String, Double> boardWeights, boolean teamPlayQuery) {
+        if (boardWeights == null) {
+            return;
+        }
+        double current = boardWeights.getOrDefault(BOARD_TEAM_PLAY, 1.0);
+        if (teamPlayQuery) {
+            boardWeights.put(BOARD_TEAM_PLAY, Math.max(current, TEAM_PLAY_BOARD_WEIGHT));
+            return;
+        }
+        if (current > 1.0) {
+            return;
+        }
+        boardWeights.put(BOARD_TEAM_PLAY, TEAM_PLAY_BOARD_DEMOTION_WEIGHT);
+    }
+
+    /** 질문/본문이 팀플레이(빨무·헌터·팀플) 문맥인지 판정한다. */
+    public static boolean mentionsTeamPlay(String text) {
+        String normalized = safeLower(text);
+        if (!StringUtils.hasText(normalized)) {
+            return false;
+        }
+        if (containsAny(normalized, TEAM_PLAY_TOKENS)) {
+            return true;
+        }
+        return containsAny(normalized.replaceAll("\\s+", ""), TEAM_PLAY_TOKENS);
     }
 
     private String resolveIntent(String message) {
@@ -656,6 +704,21 @@ public class AssistantQueryParser {
             }
         }
         return result;
+    }
+
+    private static boolean containsAny(String text, List<String> tokens) {
+        if (!StringUtils.hasText(text) || tokens == null) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (!StringUtils.hasText(token)) {
+                continue;
+            }
+            if (text.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsAny(String text, String... tokens) {

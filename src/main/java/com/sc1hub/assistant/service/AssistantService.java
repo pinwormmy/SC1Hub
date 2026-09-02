@@ -42,6 +42,8 @@ public class AssistantService {
             "unit", "stats", "stat", "damage", "armor", "health", "shield", "range", "speed", "cooldown", "cost", "supply"
     ));
     private static final int FACT_BOARD_SCORE_BONUS = 2;
+    /** 팀플레이 질문이 아닐 때 팀플(빨무/헌터) 성격의 근거에 적용하는 감점 가중치. */
+    private static final double TEAM_PLAY_CONTENT_WEIGHT = 0.6;
     private static final int MIN_ANSWER_MAX_OUTPUT_TOKENS = 1024;
     private static final int EMPTY_ANSWER_RETRY_MAX_OUTPUT_TOKENS = 1536;
 
@@ -153,14 +155,15 @@ public class AssistantService {
         logParserResult(parseResult, expandedTerms);
         boolean factQuery = isFactQuery(normalizedMessage, keywords);
         boolean aliasMatched = parseResult.isAliasMatched();
+        boolean demoteTeamPlay = !parseResult.isTeamPlayQuery();
         int contextLimit = resolveContextLimit(aliasMatched);
         boolean includeExpandedTermsInRag = aliasMatched || StringUtils.hasText(parseResult.getMatchup());
         String ragQuery = buildRagQuery(normalizedMessage, expandedTerms, includeExpandedTermsInRag);
-        RagRetrieval ragRetrieval = tryRetrieveWithRag(ragQuery, expandedTerms, boardWeights, factQuery, aliasMatched);
+        RagRetrieval ragRetrieval = tryRetrieveWithRag(ragQuery, expandedTerms, boardWeights, factQuery, aliasMatched, demoteTeamPlay);
 
         List<CandidatePost> candidates = Collections.emptyList();
         if (shouldLoadKeywordCandidates(expandedTerms, ragRetrieval, aliasMatched)) {
-            candidates = findCandidates(expandedTerms, boardWeights, resolveCandidatePoolLimit(), factQuery);
+            candidates = findCandidates(expandedTerms, boardWeights, resolveCandidatePoolLimit(), factQuery, demoteTeamPlay);
             candidates = rerankCandidatesIfEnabled(normalizedMessage, candidates);
         }
 
@@ -929,6 +932,22 @@ public class AssistantService {
         return sb.toString();
     }
 
+    private String buildGameModeGuidance(AssistantQueryParseResult parseResult) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Game mode rules:\n");
+        if (parseResult != null && parseResult.isTeamPlayQuery()) {
+            sb.append("- The user is asking about team play (팀플: 빨무/빨리무한, 헌터).\n");
+            sb.append("- Prefer sources about team play. If you must use a 1:1 matchup source, label it clearly as \"1:1 종족전 기준\".\n");
+        } else {
+            sb.append("- The user is asking about standard 1:1 matchup play (일반 종족전), not team play.\n");
+            sb.append("- Sources about team play maps (빨무/빨리무한, 헌터, 팀플) are lower priority. ")
+                    .append("Base the answer on 1:1 matchup sources whenever they are available.\n");
+            sb.append("- Use a team play source only when no 1:1 source is relevant, and then label it clearly as \"팀플(빨무/헌터) 기준\".\n");
+        }
+        sb.append("\n");
+        return sb.toString();
+    }
+
     private static String toKoreanRaceFullName(String race) {
         if (!StringUtils.hasText(race)) {
             return "";
@@ -1071,7 +1090,8 @@ public class AssistantService {
                                             List<String> expandedTerms,
                                             Map<String, Double> boardWeights,
                                             boolean preferFactBoards,
-                                            boolean aliasMatched) {
+                                            boolean aliasMatched,
+                                            boolean demoteTeamPlayContent) {
         if (ragSearchService == null || ragProperties == null || !ragSearchService.isEnabled()) {
             return null;
         }
@@ -1090,7 +1110,7 @@ public class AssistantService {
                     return null;
                 }
             }
-            List<AssistantRagSearchService.Match> weightedMatches = applyBoardWeights(filtered, boardWeights);
+            List<AssistantRagSearchService.Match> weightedMatches = applyBoardWeights(filtered, boardWeights, demoteTeamPlayContent);
             logRagMatches(weightedMatches);
             return new RagRetrieval(weightedMatches);
         } catch (Exception e) {
@@ -1195,7 +1215,8 @@ public class AssistantService {
     }
 
     private List<AssistantRagSearchService.Match> applyBoardWeights(List<AssistantRagSearchService.Match> matches,
-                                                                    Map<String, Double> boardWeights) {
+                                                                    Map<String, Double> boardWeights,
+                                                                    boolean demoteTeamPlayContent) {
         if (matches == null || matches.isEmpty()) {
             return Collections.emptyList();
         }
@@ -1204,10 +1225,14 @@ public class AssistantService {
             if (match == null || match.getChunk() == null) {
                 continue;
             }
-            String boardTitle = normalizeBoardTitle(match.getChunk().getBoardTitle());
+            AssistantRagChunk chunk = match.getChunk();
+            String boardTitle = normalizeBoardTitle(chunk.getBoardTitle());
             double weight = resolveBoardWeight(boardTitle, boardWeights);
+            if (demoteTeamPlayContent && AssistantQueryParser.mentionsTeamPlay(chunk.getTitle() + " " + chunk.getText())) {
+                weight *= TEAM_PLAY_CONTENT_WEIGHT;
+            }
             double score = match.getScore() * weight;
-            weighted.add(AssistantRagSearchService.Match.of(match.getChunk(), score));
+            weighted.add(AssistantRagSearchService.Match.of(chunk, score));
         }
         weighted.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
         return weighted;
@@ -1239,6 +1264,7 @@ public class AssistantService {
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
         sb.append(buildPerspectiveGuidance(parseResult));
+        sb.append(buildGameModeGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
@@ -1320,6 +1346,7 @@ public class AssistantService {
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
         sb.append(buildPerspectiveGuidance(parseResult));
+        sb.append(buildGameModeGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
@@ -1611,14 +1638,15 @@ public class AssistantService {
     private List<CandidatePost> findCandidates(List<String> keywords,
                                                Map<String, Double> boardWeights,
                                                int maxResults,
-                                               boolean preferFactBoards) {
-        List<CandidatePost> primary = findCandidatesInternal(keywords, boardWeights, maxResults, preferFactBoards);
+                                               boolean preferFactBoards,
+                                               boolean demoteTeamPlayContent) {
+        List<CandidatePost> primary = findCandidatesInternal(keywords, boardWeights, maxResults, preferFactBoards, demoteTeamPlayContent);
         if (primary.isEmpty()) {
             return primary;
         }
         if (primary.size() < maxResults && hasBoostedBoards(boardWeights)) {
             Map<String, Double> relaxedWeights = relaxBoardWeights(boardWeights);
-            List<CandidatePost> relaxed = findCandidatesInternal(keywords, relaxedWeights, maxResults, preferFactBoards);
+            List<CandidatePost> relaxed = findCandidatesInternal(keywords, relaxedWeights, maxResults, preferFactBoards, demoteTeamPlayContent);
             primary = mergeCandidateResults(primary, relaxed, maxResults);
         }
         logKeywordCandidates(primary);
@@ -1628,7 +1656,8 @@ public class AssistantService {
     private List<CandidatePost> findCandidatesInternal(List<String> keywords,
                                                        Map<String, Double> boardWeights,
                                                        int maxResults,
-                                                       boolean preferFactBoards) {
+                                                       boolean preferFactBoards,
+                                                       boolean demoteTeamPlayContent) {
         if (maxResults <= 0 || keywords == null || keywords.isEmpty()) {
             return Collections.emptyList();
         }
@@ -1698,6 +1727,12 @@ public class AssistantService {
                         score += FACT_BOARD_SCORE_BONUS;
                     }
                     score *= boardWeight;
+                    // 본문 전체가 아니라 제목/검색어만 본다. 본문에 "헌터에서도" 같은 한 줄이
+                    // 섞인 일반 종족전 글까지 후순위로 밀리는 것을 막기 위함.
+                    if (demoteTeamPlayContent
+                            && AssistantQueryParser.mentionsTeamPlay(titleLower + " " + searchTermsLower)) {
+                        score *= TEAM_PLAY_CONTENT_WEIGHT;
+                    }
                     CandidatePost candidate = new CandidatePost(boardTitle, post, score);
                     if (heap.size() < maxResults) {
                         heap.add(candidate);
@@ -1820,6 +1855,7 @@ public class AssistantService {
         sb.append("citations must be a subset of the provided sourceId values.\n");
         sb.append("Do not output raw HTML.\n\n");
         sb.append(buildPerspectiveGuidance(parseResult));
+        sb.append(buildGameModeGuidance(parseResult));
         sb.append("Output schema:\n");
         sb.append("{\"answer\":\"...\",\"citations\":[\"board:postNum\"]}\n\n");
 
@@ -2882,6 +2918,8 @@ public class AssistantService {
         double weight = resolveBoardWeight(candidate, boardWeights);
         if (weight > 1.05) {
             bonus += Math.min(0.15, (weight - 1.0) * 0.10);
+        } else if (weight < 0.95) {
+            bonus -= Math.min(0.15, (1.0 - weight) * 0.10);
         }
         return bonus;
     }
