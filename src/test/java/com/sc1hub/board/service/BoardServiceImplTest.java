@@ -43,6 +43,9 @@ class BoardServiceImplTest {
     @Mock
     private PostContentSanitizer postContentSanitizer;
 
+    @Mock
+    private PostContentLazyLoadInjector postContentLazyLoadInjector;
+
     @InjectMocks
     private BoardServiceImpl boardService;
 

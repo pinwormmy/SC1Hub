@@ -40,35 +40,15 @@
     <script type="application/ld+json"><c:out value="${structuredDataJson}" escapeXml="false" /></script>
 </c:if>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
-<%-- 내부 링크 2단 선로딩: 커서가 닿는 즉시 HTML만 프리페치(eager)하고, 200ms 이상
-     머물면 풀 프리렌더(moderate)로 광고 스크립트 파싱까지 백그라운드에서 끝낸다.
-     빠른 클릭은 프리페치가, 신중한 클릭은 프리렌더가 커버해 이동 직후 랙을 줄인다.
-     /logout은 GET만으로 세션이 끊기므로 두 단계 모두에서 반드시 제외한다.
-     크로스오리진 iframe(광고)은 브라우저가 화면 전환까지 지연시켜 노출 집계는 안전하다. --%>
-<script type="speculationrules">
-{
-    "prefetch": [{
-        "where": {
-            "and": [
-                { "href_matches": "/*" },
-                { "not": { "href_matches": "/logout" } },
-                { "not": { "href_matches": "/adminPage*" } }
-            ]
-        },
-        "eagerness": "eager"
-    }],
-    "prerender": [{
-        "where": {
-            "and": [
-                { "href_matches": "/*" },
-                { "not": { "href_matches": "/logout" } },
-                { "not": { "href_matches": "/adminPage*" } }
-            ]
-        },
-        "eagerness": "moderate"
-    }]
-}
-</script>
+<%-- 내부 링크 선로딩 정책: 마우스가 있는 환경(hover: hover, pointer: fine)에서만
+     pointerdown 시점(conservative)에 HTML만 프리페치한다. 실제 클릭 직전에만 서버 왕복을
+     미리 시작하므로 낭비 요청이 없고 조회수도 실제 열람과 1:1로 맞는다.
+     이전의 hover 프리페치(eager)·프리렌더(moderate)는 목록 위로 마우스만 지나가도 글마다
+     전체 페이지 렌더와 광고 스크립트 로드를 백그라운드에서 돌려 전환 직후 CPU·서버 경쟁을
+     만들었고, 모바일에서는 스크롤이 멈출 때마다 뷰포트 안 링크를 프리렌더해 더 심했다.
+     터치 기기에는 규칙 자체를 넣지 않는다(뷰포트 기반 프리페치가 스크롤마다 발화).
+     규칙은 아래 인라인 스크립트(installSpeculationRules)가 조건부로 삽입한다.
+     /logout은 GET만으로 세션이 끊기므로 반드시 제외한다. --%>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EHFD4FX3KD"></script>
 <script>
 window.dataLayer = window.dataLayer || [];
@@ -95,6 +75,20 @@ gtag('config', 'G-EHFD4FX3KD');
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';
     const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9442860103048802';
+    // 광고 스크립트는 화면에 보인 뒤 최소 이 시간이 지나야 붙는다(전환 직후 구간 보호).
+    const ADSENSE_SETTLE_MS = 1500;
+    const SPECULATION_RULES = {
+        prefetch: [{
+            where: {
+                and: [
+                    { href_matches: '/*' },
+                    { not: { href_matches: '/logout' } },
+                    { not: { href_matches: '/adminPage*' } }
+                ]
+            },
+            eagerness: 'conservative'
+        }]
+    };
 
     const resolveInternalUrl = (linkEl) => {
         if (!(linkEl instanceof HTMLAnchorElement)) {
@@ -139,6 +133,20 @@ gtag('config', 'G-EHFD4FX3KD');
         }
     };
 
+    // 마우스 환경에서만 pointerdown 프리페치 규칙을 넣는다. 터치 기기는 규칙 없음.
+    const installSpeculationRules = () => {
+        const supportsRules = typeof HTMLScriptElement.supports === 'function'
+            && HTMLScriptElement.supports('speculationrules');
+        const hasFinePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+        if (!supportsRules || !hasFinePointer) {
+            return;
+        }
+        const rulesEl = document.createElement('script');
+        rulesEl.type = 'speculationrules';
+        rulesEl.textContent = JSON.stringify(SPECULATION_RULES);
+        document.head.appendChild(rulesEl);
+    };
+
     const loadAdsense = () => {
         if (Array.from(document.scripts).some((scriptEl) => scriptEl.src === ADSENSE_SRC)) {
             return;
@@ -159,24 +167,41 @@ gtag('config', 'G-EHFD4FX3KD');
     } else {
         markExistingInternalLinks();
     }
+    installSpeculationRules();
 
-    // 프리렌더 중인 문서는 화면에 없으므로 즉시 로드해 무거운 파싱을 미리 끝내고,
-    // 일반 로드에서는 load 후 유휴 시점(최대 2초)으로 미뤄 첫 스크롤·입력과 겹치지 않게 한다.
+    // 화면에 실제로 보인 시점(프리렌더였다면 활성화 시점)부터 지난 시간.
+    const elapsedSinceShown = () => {
+        const navigationEntry = performance.getEntriesByType('navigation')[0];
+        const activationStart = navigationEntry && navigationEntry.activationStart
+            ? navigationEntry.activationStart
+            : 0;
+        return performance.now() - activationStart;
+    };
+
+    // 광고 스크립트는 (1) load 이후 (2) 보인 뒤 최소 ADSENSE_SETTLE_MS 경과 (3) 유휴 시점(최대 2초 대기)에
+    // 붙인다. 전환 직후의 첫 페인트·첫 스크롤·첫 입력 구간에 광고 파싱과 DOM 스캔이 겹치지 않게 한다.
     const scheduleAdsense = () => {
-        if (document.prerendering) {
-            loadAdsense();
-            return;
-        }
-        if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(loadAdsense, { timeout: 2000 });
+        const loadWhenIdle = () => {
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(loadAdsense, { timeout: 2000 });
+            } else {
+                window.setTimeout(loadAdsense, 2000);
+            }
+        };
+        window.setTimeout(loadWhenIdle, Math.max(0, ADSENSE_SETTLE_MS - elapsedSinceShown()));
+    };
+    const scheduleAdsenseAfterLoad = () => {
+        if (document.readyState === 'complete') {
+            scheduleAdsense();
         } else {
-            window.setTimeout(loadAdsense, 2000);
+            window.addEventListener('load', scheduleAdsense, { once: true });
         }
     };
-    if (document.readyState === 'complete') {
-        scheduleAdsense();
+    // 브라우저가 자체 프리렌더한 문서라면 화면에 보이기 전에는 광고를 요청하지 않는다.
+    if (document.prerendering) {
+        document.addEventListener('prerenderingchange', scheduleAdsenseAfterLoad, { once: true });
     } else {
-        window.addEventListener('load', scheduleAdsense, { once: true });
+        scheduleAdsenseAfterLoad();
     }
 })();
 </script>

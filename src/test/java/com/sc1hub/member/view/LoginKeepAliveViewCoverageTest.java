@@ -80,7 +80,14 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(headSource.contains("window.addEventListener('load', scheduleAdsense, { once: true })"));
         assertTrue(headSource.contains("requestIdleCallback(loadAdsense, { timeout: 2000 })"));
         assertTrue(headSource.contains("window.setTimeout(loadAdsense, 2000)"));
+        // 광고 스크립트는 화면에 보인 뒤 최소 1.5초가 지나야 붙고, 브라우저 자체 프리렌더 문서에서는
+        // 활성화(prerenderingchange) 전에는 요청하지 않는다.
+        assertTrue(headSource.contains("ADSENSE_SETTLE_MS = 1500"));
+        assertTrue(headSource.contains("Math.max(0, ADSENSE_SETTLE_MS - elapsedSinceShown())"));
+        assertTrue(headSource.contains("navigationEntry.activationStart"));
         assertTrue(headSource.contains("if (document.prerendering) {"));
+        assertTrue(headSource.contains(
+                "document.addEventListener('prerenderingchange', scheduleAdsenseAfterLoad, { once: true })"));
         assertTrue(headSource.contains("document.head.appendChild(scriptEl)"));
         assertTrue(headSource.contains("data-google-vignette"));
         assertTrue(headSource.contains("url.origin === window.location.origin"));
@@ -97,24 +104,30 @@ class LoginKeepAliveViewCoverageTest {
     }
 
     @Test
-    void sharedPagePrerendersInternalLinksButExcludesLogoutAndDefersChatPolling() throws IOException {
+    void sharedPagePrefetchesOnlyOnPointerDownForMouseUsersAndNeverPrerenders() throws IOException {
         String headSource = new String(
                 Files.readAllBytes(VIEW_ROOT.resolve("include/head.jspf")), StandardCharsets.UTF_8);
         String chatSource = new String(
                 Files.readAllBytes(Paths.get("src/main/resources/static/js/sc-chat.js")), StandardCharsets.UTF_8);
 
-        assertTrue(headSource.contains("<script type=\"speculationrules\">"));
-        // 2단 구성: 즉시 프리페치(eager) + 호버 프리렌더(moderate)
-        assertTrue(headSource.contains("\"prefetch\": [{"));
-        assertTrue(headSource.contains("\"eagerness\": \"eager\""));
-        assertTrue(headSource.contains("\"prerender\": [{"));
-        assertTrue(headSource.contains("\"eagerness\": \"moderate\""));
-        // /logout은 GET만으로 세션이 끊기므로 프리페치·프리렌더 양쪽 모두에서 제외돼야 한다.
-        String logoutExclusion = "{ \"not\": { \"href_matches\": \"/logout\" } }";
-        int firstLogoutExclusion = headSource.indexOf(logoutExclusion);
-        assertTrue(firstLogoutExclusion >= 0);
-        assertTrue(headSource.indexOf(logoutExclusion, firstLogoutExclusion + 1) > firstLogoutExclusion);
-        assertTrue(headSource.contains("{ \"not\": { \"href_matches\": \"/adminPage*\" } }"));
+        // 규칙은 정적 태그가 아니라 마우스 환경에서만 스크립트로 삽입한다.
+        assertFalse(headSource.contains("<script type=\"speculationrules\">"));
+        assertTrue(headSource.contains("HTMLScriptElement.supports('speculationrules')"));
+        assertTrue(headSource.contains("window.matchMedia('(hover: hover) and (pointer: fine)').matches"));
+        assertTrue(headSource.contains("rulesEl.type = 'speculationrules'"));
+        assertTrue(headSource.contains("rulesEl.textContent = JSON.stringify(SPECULATION_RULES)"));
+        // pointerdown(conservative) HTML 프리페치만 허용한다. hover 프리페치·프리렌더는 목록 위 마우스 이동과
+        // 모바일 스크롤마다 전체 페이지+광고 로드를 백그라운드에서 돌려 전환 랙과 조회수 왜곡을 만들었다.
+        assertTrue(headSource.contains("prefetch: [{"));
+        assertTrue(headSource.contains("eagerness: 'conservative'"));
+        assertFalse(headSource.contains("prerender: ["));
+        assertFalse(headSource.contains("'immediate'"));
+        assertFalse(headSource.contains("'eager'"));
+        assertFalse(headSource.contains("'moderate'"));
+        // /logout은 GET만으로 세션이 끊기므로 프리페치에서 반드시 제외돼야 한다.
+        assertTrue(headSource.contains("{ not: { href_matches: '/logout' } }"));
+        assertTrue(headSource.contains("{ not: { href_matches: '/adminPage*' } }"));
+        // 브라우저 자체 프리렌더에 대비해 채팅 폴링은 화면 표시 후에만 시작한다.
         assertTrue(chatSource.contains("document.prerendering"));
         assertTrue(chatSource.contains("document.addEventListener('prerenderingchange', start, { once: true })"));
     }

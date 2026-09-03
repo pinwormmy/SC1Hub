@@ -40,14 +40,22 @@
     }
 
     function updateTitleSlideOverflow(rootEl = document) {
-        const slideEls = rootEl.querySelectorAll('.sc-title-slide');
-        slideEls.forEach((slideEl) => {
-            prepareTitleSlide(slideEl);
-            const containerEl = slideEl.closest('.sc-title-cell') || slideEl.closest('.title');
+        const slideEls = Array.from(rootEl.querySelectorAll('.sc-title-slide'));
+        if (slideEls.length === 0) {
+            return;
+        }
+        // 쓰기(마크업 준비) → 읽기(폭 측정) → 쓰기(클래스 토글)를 단계별로 모아,
+        // 제목 수만큼 강제 리플로우가 반복되던 것을 한 번으로 줄인다(초기화면 30여 개).
+        slideEls.forEach(prepareTitleSlide);
+        const measurements = slideEls.map((slideEl) => ({
+            slideEl,
+            containerEl: slideEl.closest('.sc-title-cell') || slideEl.closest('.title'),
+            isOverflowing: slideEl.scrollWidth > slideEl.clientWidth + 1,
+        }));
+        measurements.forEach(({ slideEl, containerEl, isOverflowing }) => {
             if (!containerEl) {
                 return;
             }
-            const isOverflowing = slideEl.scrollWidth > slideEl.clientWidth + 1;
             containerEl.classList.toggle('is-overflowing', isOverflowing);
             slideEl.classList.toggle('is-marquee', isOverflowing);
         });

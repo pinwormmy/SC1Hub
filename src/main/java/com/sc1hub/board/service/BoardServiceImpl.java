@@ -42,16 +42,19 @@ public class BoardServiceImpl implements BoardService {
     private final AssistantSearchTermsService searchTermsService;
     private final UploadedImageDimensionInjector uploadedImageDimensionInjector;
     private final PostContentSanitizer postContentSanitizer;
+    private final PostContentLazyLoadInjector postContentLazyLoadInjector;
 
     public BoardServiceImpl(
             BoardMapper boardMapper,
             AssistantSearchTermsService searchTermsService,
             UploadedImageDimensionInjector uploadedImageDimensionInjector,
-            PostContentSanitizer postContentSanitizer) {
+            PostContentSanitizer postContentSanitizer,
+            PostContentLazyLoadInjector postContentLazyLoadInjector) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
         this.uploadedImageDimensionInjector = uploadedImageDimensionInjector;
         this.postContentSanitizer = postContentSanitizer;
+        this.postContentLazyLoadInjector = postContentLazyLoadInjector;
     }
 
     @Override
@@ -306,7 +309,9 @@ public class BoardServiceImpl implements BoardService {
             return;
         }
 
-        post.setContent(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent()));
+        String content = uploadedImageDimensionInjector.injectMissingDimensions(post.getContent());
+        // 저장본은 그대로 두고 읽을 때만 embed/이미지 로딩 힌트를 보정한다(구 글의 유튜브 즉시 로딩 방지).
+        post.setContent(postContentLazyLoadInjector.injectLazyLoading(content));
     }
 
     @Override
