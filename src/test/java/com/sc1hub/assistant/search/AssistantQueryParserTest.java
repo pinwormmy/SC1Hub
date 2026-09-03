@@ -14,6 +14,7 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -116,6 +117,33 @@ class AssistantQueryParserTest {
         assertFalse(AssistantQueryParser.mentionsTeamPlay("저그 테란전 히드라 운영"));
         // "3:3업"은 팀플이 아니라 풀업그레이드를 가리키는 표현이다.
         assertFalse(AssistantQueryParser.mentionsTeamPlay("프테전 3:3업 타이밍"));
+    }
+
+    @Test
+    void parse_ordersRacesByMentionOrder_whenNoRolePhrase() {
+        AssistantQueryParseResult zvt = queryParser.parse("저그가 테란 상대로 앞마당을 먼저 가져가도 안전한 상황이 언제야?");
+        assertEquals("Z", zvt.getPlayerRace());
+        assertEquals("T", zvt.getOpponentRace());
+        assertEquals("ZvT", zvt.getMatchup());
+        assertTrue(zvt.getBoardWeights().get("zvstboard") > 1.0);
+        assertFalse(zvt.getBoardWeights().containsKey("tvszboard"));
+
+        AssistantQueryParseResult tvz = queryParser.parse("테란이 저그 앞마당을 어떻게 견제해?");
+        assertEquals("T", tvz.getPlayerRace());
+        assertEquals("Z", tvz.getOpponentRace());
+        assertEquals("TvZ", tvz.getMatchup());
+    }
+
+    @Test
+    void parse_usesMentionOrderForSingleAndThreeRaceQuestions() {
+        AssistantQueryParseResult single = queryParser.parse("프로토스 캐리어 운영 언제 가?");
+        assertEquals("P", single.getPlayerRace());
+        assertNull(single.getOpponentRace());
+
+        // 셋 다 언급되면 앞의 둘이 매치업이다.
+        AssistantQueryParseResult three = queryParser.parse("저그 입장에서 프로토스보다 테란이 어려운 이유");
+        assertEquals("Z", three.getPlayerRace());
+        assertEquals("P", three.getOpponentRace());
     }
 
     @Test

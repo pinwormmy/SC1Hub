@@ -212,11 +212,10 @@ public class AssistantQueryParser {
             return opponentBased;
         }
 
-        Set<String> races = detectRaceTokens(normalized, compact);
+        List<String> races = detectRaceTokens(compact);
         if (races.size() >= 2) {
-            List<String> list = new ArrayList<>(races);
-            String player = list.get(0);
-            String opponent = list.get(1);
+            String player = races.get(0);
+            String opponent = races.get(1);
             MatchupInfo info = matchupFromRaces(player, opponent);
             if (info != null) {
                 info.confidence = 0.6;
@@ -226,7 +225,7 @@ public class AssistantQueryParser {
 
         if (races.size() == 1) {
             MatchupInfo info = new MatchupInfo();
-            info.playerRace = races.iterator().next();
+            info.playerRace = races.get(0);
             info.confidence = 0.4;
             return info;
         }
@@ -451,27 +450,35 @@ public class AssistantQueryParser {
         return null;
     }
 
-    private Set<String> detectRaceTokens(String normalized, String compact) {
-        Set<String> races = new LinkedHashSet<>();
-        if (containsAny(normalized, "프로토스", "프토", "플토", "protoss", "토스")) {
-            races.add("P");
-        }
-        if (containsAny(normalized, "테란", "terran")) {
-            races.add("T");
-        }
-        if (containsAny(normalized, "저그", "zerg")) {
-            races.add("Z");
-        }
-        if (containsAny(compact, "프vs", "프대", "프상대")) {
-            races.add("P");
-        }
-        if (containsAny(compact, "테vs", "테대", "테상대")) {
-            races.add("T");
-        }
-        if (containsAny(compact, "저vs", "저대", "저상대")) {
-            races.add("Z");
-        }
+    /**
+     * 문장에 언급된 종족을 등장 순서대로 돌려준다. "저그가 테란 상대로"처럼 역할 조사가 없는 문장은
+     * 먼저 나온 종족이 화자(플레이어), 다음이 상대다. 고정 순서(P→T→Z)로 모으면 관점이 뒤집힌다.
+     */
+    private List<String> detectRaceTokens(String compact) {
+        Map<String, Integer> firstIndexByRace = new LinkedHashMap<>();
+        putFirstIndex(firstIndexByRace, "P", compact,
+                "프로토스", "프토", "플토", "protoss", "토스", "프vs", "프대", "프상대");
+        putFirstIndex(firstIndexByRace, "T", compact,
+                "테란", "terran", "테vs", "테대", "테상대");
+        putFirstIndex(firstIndexByRace, "Z", compact,
+                "저그", "zerg", "저vs", "저대", "저상대");
+
+        List<String> races = new ArrayList<>(firstIndexByRace.keySet());
+        races.sort((a, b) -> Integer.compare(firstIndexByRace.get(a), firstIndexByRace.get(b)));
         return races;
+    }
+
+    private static void putFirstIndex(Map<String, Integer> target, String race, String text, String... tokens) {
+        int best = -1;
+        for (String token : tokens) {
+            int index = text.indexOf(token);
+            if (index >= 0 && (best < 0 || index < best)) {
+                best = index;
+            }
+        }
+        if (best >= 0) {
+            target.put(race, best);
+        }
     }
 
     private String normalizeRaceToken(String token) {
