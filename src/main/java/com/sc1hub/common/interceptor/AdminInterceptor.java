@@ -1,21 +1,21 @@
 package com.sc1hub.common.interceptor;
 
 import com.sc1hub.member.dto.MemberDTO;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 
 @Component
 public class AdminInterceptor implements HandlerInterceptor {
 
-    @Value("${sc1hub.content-api.token:}")
-    private String contentApiToken = "";
+    private final ContentApiTokenAuthenticator tokenAuthenticator;
+
+    public AdminInterceptor(ContentApiTokenAuthenticator tokenAuthenticator) {
+        this.tokenAuthenticator = tokenAuthenticator;
+    }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -38,16 +38,9 @@ public class AdminInterceptor implements HandlerInterceptor {
     }
 
     private boolean hasValidContentApiToken(HttpServletRequest request) {
-        if (!request.getRequestURI().startsWith("/api/admin/content/")
-                || contentApiToken == null || contentApiToken.trim().isEmpty()) {
-            return false;
-        }
-        String authorization = request.getHeader("Authorization");
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return false;
-        }
-        byte[] expected = contentApiToken.trim().getBytes(StandardCharsets.UTF_8);
-        byte[] actual = authorization.substring("Bearer ".length()).trim().getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(expected, actual);
+        // 여기서 토큰을 직접 받는 건 콘텐츠 API뿐이다. 그 밖의 경로는 ContentApiAdminSessionFilter가
+        // 토큰 요청에 관리자 세션을 실어 주므로 위의 세션 검사로 통과한다.
+        return request.getRequestURI().startsWith("/api/admin/content/")
+                && tokenAuthenticator.hasValidToken(request);
     }
 }

@@ -5,6 +5,7 @@ import com.sc1hub.common.interceptor.CanonicalInterceptor;
 import com.sc1hub.common.interceptor.MemberLoginInterceptor;
 import com.sc1hub.common.interceptor.AdminInterceptor;
 import com.sc1hub.common.interceptor.BoardLvInterceptor;
+import com.sc1hub.common.interceptor.ContentApiTokenAuthenticator;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
 import com.sc1hub.seo.SeoUrlPolicy;
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
@@ -79,7 +80,7 @@ class UploadControllerWebMvcTest {
 
         @Bean
         AdminInterceptor adminInterceptor() {
-            return new AdminInterceptor();
+            return new AdminInterceptor(new ContentApiTokenAuthenticator(""));
         }
 
         @Bean

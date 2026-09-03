@@ -25,6 +25,7 @@ fi
 
 AUTH_HEADER="Authorization: Bearer $TOKEN"
 API_ROOT="$BASE_URL/api/admin/content"
+INDEX_ROOT="$BASE_URL/api/assistant/index"
 
 request() {
     curl --fail --silent --show-error -H "$AUTH_HEADER" "$@"
@@ -41,6 +42,9 @@ Usage:
   scripts/sc1hub-content-api.sh publish BOARD TITLE CONTENT_HTML_FILE [IMAGE_FILE] [YOUTUBE_URL]
   scripts/sc1hub-content-api.sh update BOARD POST_NUM TITLE CONTENT_HTML_FILE [IMAGE_FILE] [YOUTUBE_URL]
   scripts/sc1hub-content-api.sh delete BOARD POST_NUM --confirm
+  scripts/sc1hub-content-api.sh index-status
+  scripts/sc1hub-content-api.sh index-reindex
+  scripts/sc1hub-content-api.sh index-update
 
 Optional publish/update environment variables:
   SC1HUB_POST_IMAGE_ALT
@@ -137,6 +141,17 @@ case "$command" in
             exit 2
         fi
         request -X DELETE "$API_ROOT/boards/$board/posts/$post_num"
+        ;;
+    index-status)
+        request "$INDEX_ROOT/status"
+        ;;
+    index-reindex)
+        # RAG 전체 재구축(비동기) + search_terms 재인덱싱. 응답의 rag.complete가 false면 다시 실행해 이어서 만든다.
+        request -X POST "$INDEX_ROOT/reindex"
+        ;;
+    index-update)
+        # 기존 RAG 인덱스 증분 갱신 + search_terms 재인덱싱. 인덱스가 없거나 미완성이면 서버가 거부한다.
+        request -X POST "$INDEX_ROOT/update"
         ;;
     *)
         usage

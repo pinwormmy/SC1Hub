@@ -4,7 +4,6 @@ import com.sc1hub.member.dto.MemberDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -20,7 +19,7 @@ class AuthorizationInterceptorTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/adminPage");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        boolean proceed = new AdminInterceptor().preHandle(request, response, new Object());
+        boolean proceed = new AdminInterceptor(new ContentApiTokenAuthenticator("")).preHandle(request, response, new Object());
 
         assertFalse(proceed);
         assertEquals(HttpServletResponse.SC_FORBIDDEN, response.getStatus());
@@ -29,8 +28,7 @@ class AuthorizationInterceptorTest {
 
     @Test
     void adminInterceptor_allowsContentApiBearerTokenWithoutSession() throws Exception {
-        AdminInterceptor interceptor = new AdminInterceptor();
-        ReflectionTestUtils.setField(interceptor, "contentApiToken", "test-content-token");
+        AdminInterceptor interceptor = new AdminInterceptor(new ContentApiTokenAuthenticator("test-content-token"));
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/content/images");
         request.addHeader("Authorization", "Bearer test-content-token");
 
@@ -42,8 +40,7 @@ class AuthorizationInterceptorTest {
 
     @Test
     void adminInterceptor_doesNotAllowContentTokenForOtherAdminApis() throws Exception {
-        AdminInterceptor interceptor = new AdminInterceptor();
-        ReflectionTestUtils.setField(interceptor, "contentApiToken", "test-content-token");
+        AdminInterceptor interceptor = new AdminInterceptor(new ContentApiTokenAuthenticator("test-content-token"));
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/admin/chat/sanctions");
         request.addHeader("Authorization", "Bearer test-content-token");
         MockHttpServletResponse response = new MockHttpServletResponse();

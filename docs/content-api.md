@@ -10,7 +10,7 @@
 Authorization: Bearer <token>
 ```
 
-토큰은 `/api/admin/content/**`에만 사용할 수 있으며 다른 관리자 API 권한은 갖지 않는다. 로컬에서는 저장소에 커밋되지 않는 `.content-api.env`를 사용한다.
+토큰은 **관리자 로그인과 동등하다.** `/api/admin/content/**`는 토큰을 직접 검사하고, 그 밖의 경로는 서버가 토큰 요청에 관리자 회원(`sc1hub.assistant.adminId` 계정)을 그 요청 동안만 세션으로 실어 준다. 따라서 관리자 페이지, `/api/admin/**` 전부, AI 검색 인덱스 유지보수, 게시판 글쓰기·수정·삭제 등 관리자 세션이 필요한 모든 기능을 별도 로그인 없이 쓸 수 있다. 토큰이 곧 관리자 자격증명이므로 키체인/환경변수 밖으로 내보내지 않는다. 로컬에서는 저장소에 커밋되지 않는 `.content-api.env`를 사용한다.
 
 ```bash
 SC1HUB_CONTENT_API_BASE_URL=https://sc1hub.com
@@ -102,6 +102,26 @@ scripts/sc1hub-content-api.sh delete pvstboard 2 --confirm
 ```text
 DELETE /api/admin/content/boards/{boardTitle}/posts/{postNum}
 ```
+
+## AI 검색 인덱스 유지보수
+
+게시글을 올리거나 고친 뒤 AI 검색 인덱스를 같은 토큰으로 갱신한다.
+
+```bash
+scripts/sc1hub-content-api.sh index-status
+scripts/sc1hub-content-api.sh index-reindex
+scripts/sc1hub-content-api.sh index-update
+```
+
+```text
+GET  /api/assistant/index/status    RAG 인덱스 상태 (인증 불필요)
+POST /api/assistant/index/reindex   RAG 전체 재구축(비동기) + search_terms 재인덱싱
+POST /api/assistant/index/update    RAG 증분 갱신 + search_terms 재인덱싱
+```
+
+`reindex`는 바로 `accepted: true`를 돌려주고 백그라운드에서 돈다. `index-status`의 `rag.ready`·`rag.complete`·`rag.chunkCount`로 완료를 확인한다. 임베딩 예산이나 API 장애로 `complete: false`면 만든 만큼은 저장돼 있으니 `index-reindex`를 다시 실행하면 저장된 벡터를 재사용해 이어서 만든다(이 경우 쿨다운 없음). 인덱스가 없거나 미완성인 상태에서 `index-update`를 부르면 서버가 거부한다.
+
+같은 토큰으로 `/api/assistant/rag/**`, `/api/assistant/search-terms/**`의 개별 엔드포인트와 `/api/admin/**`의 다른 관리자 API도 호출할 수 있다.
 
 ## 게시글 CRUD 요약
 
