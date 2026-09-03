@@ -21,6 +21,8 @@ public class AssistantBotProperties {
     private String boardTitle = "funboard";
     private String personaName = "프징징봇";
     private String model = "gemini-3.5-flash-lite";
+    /** 페르소나가 따로 지정하지 않았을 때 물려받는 추론 강도. 비우면 기존처럼 페르소나별 설정만 쓴다. */
+    private String reasoningEffort;
     private int recentPostLimit = 12;
     private int recentCommentLimit = 24;
     private int recentHistoryLimit = 20;
@@ -202,8 +204,7 @@ public class AssistantBotProperties {
         normalized.setBoardTitle(StringUtils.hasText(persona.getBoardTitle()) ? persona.getBoardTitle().trim() : boardTitle);
         normalized.setModel(StringUtils.hasText(persona.getModel()) ? persona.getModel().trim() : model);
         normalized.setProvider(resolveProvider(persona.getProvider(), normalized.getModel()));
-        normalized.setReasoningEffort(StringUtils.hasText(persona.getReasoningEffort())
-                ? persona.getReasoningEffort().trim() : null);
+        normalized.setReasoningEffort(resolveReasoningEffort(persona.getReasoningEffort()));
         normalized.setMaxOutputTokens(persona.getMaxOutputTokens() != null
                 && persona.getMaxOutputTokens() > 0 ? persona.getMaxOutputTokens() : null);
         normalized.setAutoPublishChatDailyLimit(persona.getAutoPublishChatDailyLimit() != null
@@ -213,6 +214,13 @@ public class AssistantBotProperties {
                 && persona.getAutoPublishChatMaxAttemptsPerDay() > 0
                 ? persona.getAutoPublishChatMaxAttemptsPerDay() : null);
         return normalized;
+    }
+
+    private String resolveReasoningEffort(String configuredReasoningEffort) {
+        if (StringUtils.hasText(configuredReasoningEffort)) {
+            return configuredReasoningEffort.trim();
+        }
+        return StringUtils.hasText(reasoningEffort) ? reasoningEffort.trim() : null;
     }
 
     private String resolveProvider(String configuredProvider, String resolvedModel) {

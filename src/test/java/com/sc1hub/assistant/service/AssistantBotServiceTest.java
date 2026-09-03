@@ -190,6 +190,39 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void resolvePersona_inheritsBotLevelModelAndReasoningEffort() {
+        botProperties.setModel("gpt-5.6-luna");
+        botProperties.setReasoningEffort("max");
+        botProperties.setPersonas(Collections.singletonList(persona("프징징봇")));
+
+        AssistantBotProperties.PersonaProperties persona = botProperties.resolvePersona("프징징봇");
+
+        assertEquals("gpt-5.6-luna", persona.getModel());
+        assertEquals("max", persona.getReasoningEffort());
+        assertEquals("openai", persona.getProvider());
+    }
+
+    @Test
+    void resolvePersona_keepsPersonaReasoningEffortOverBotLevelDefault() {
+        botProperties.setModel("gpt-5.6-luna");
+        botProperties.setReasoningEffort("max");
+        AssistantBotProperties.PersonaProperties configured = persona("고수봇");
+        configured.setReasoningEffort("medium");
+        botProperties.setPersonas(Collections.singletonList(configured));
+
+        assertEquals("medium", botProperties.resolvePersona("고수봇").getReasoningEffort());
+    }
+
+    @Test
+    void resolvePersona_leavesReasoningEffortUnsetWhenBotLevelDefaultIsBlank() {
+        botProperties.setReasoningEffort(null);
+        botProperties.setPersonas(Collections.singletonList(persona("프징징봇")));
+
+        // 추론 강도를 비워두면 Gemini 호출에 thinkingConfig를 붙이지 않는 기존 동작을 유지한다.
+        assertNull(botProperties.resolvePersona("프징징봇").getReasoningEffort());
+    }
+
+    @Test
     void autoPublishOnce_checksEveryEnabledPersonaBeforeReturning() {
         Map<String, AssistantBotService.AutoPublishResult> resultsByPersona = new HashMap<>();
         resultsByPersona.put("프징징봇", AssistantBotService.AutoPublishResult.published("프징징봇", "post", 1L, 101, "/boards/funboard/readPost?postNum=101"));

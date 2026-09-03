@@ -81,7 +81,8 @@ class OpenAiAssistantBotClientTest {
                 .andExpect(jsonPath("$.tools").doesNotExist())
                 .andExpect(jsonPath("$.temperature").doesNotExist())
                 .andExpect(jsonPath("$.reasoning.effort").value("high"))
-                .andExpect(jsonPath("$.max_output_tokens").value(1400))
+                // 요청 1400 + reasoning 여유분 4000
+                .andExpect(jsonPath("$.max_output_tokens").value(5400))
                 .andExpect(jsonPath("$.text.verbosity").value("low"))
                 .andExpect(jsonPath("$.text.format.type").value("json_schema"))
                 .andExpect(jsonPath("$.text.format.name").value("assistant_bot_chat"))
@@ -99,6 +100,19 @@ class OpenAiAssistantBotClientTest {
                 "고수봇 규칙", 1400, "gpt-5.6-luna", "high");
 
         assertEquals(chatJson, result);
+        server.verify();
+    }
+
+    @Test
+    void generateAnswer_skipsReasoningHeadroomForLowEffort() {
+        server.expect(requestTo(API_URL))
+                .andExpect(jsonPath("$.reasoning.effort").value("low"))
+                .andExpect(jsonPath("$.max_output_tokens").value(1400))
+                .andRespond(withSuccess(completedResponse(validStandaloneJson()),
+                        MediaType.APPLICATION_JSON));
+
+        client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "low");
+
         server.verify();
     }
 

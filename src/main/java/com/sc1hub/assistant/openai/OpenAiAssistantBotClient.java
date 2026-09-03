@@ -36,6 +36,9 @@ public class OpenAiAssistantBotClient {
     // 높은 reasoning effort로 도는 검색 호출은 요청 예산 위에 여유분을 더해 보낸다.
     private static final int SEARCH_REASONING_HEADROOM_TOKENS = 6000;
     private static final int SEARCH_MAX_OUTPUT_TOKENS = 8000;
+    // 봇 채팅도 같은 이유로 여유분이 필요하다. 채팅 본문은 짧지만 reasoning이 예산을
+    // 통째로 먹으면 빈 응답이 돌아와 그날 생성 시도만 소모된다.
+    private static final int BOT_REASONING_HEADROOM_TOKENS = 4000;
     private static final int SEARCH_DEFAULT_ANSWER_TOKENS = 1024;
 
     private final RestTemplate restTemplate;
@@ -58,7 +61,17 @@ public class OpenAiAssistantBotClient {
                                  Integer maxOutputTokens,
                                  String model,
                                  String reasoningEffort) {
-        return generate(prompt, resolveMaxOutputTokens(maxOutputTokens), model, reasoningEffort, true);
+        String effort = resolveReasoningEffort(reasoningEffort);
+        return generate(prompt, addReasoningHeadroom(resolveMaxOutputTokens(maxOutputTokens), effort),
+                model, effort, true);
+    }
+
+    /** 추론을 많이 도는 강도에서만 답변 예산 위에 reasoning 여유분을 얹는다. */
+    private int addReasoningHeadroom(int maxOutputTokens, String reasoningEffort) {
+        if (!Arrays.asList("high", "xhigh", "max").contains(reasoningEffort)) {
+            return maxOutputTokens;
+        }
+        return Math.min(MAX_OUTPUT_TOKENS, maxOutputTokens + BOT_REASONING_HEADROOM_TOKENS);
     }
 
     /**
