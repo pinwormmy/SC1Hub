@@ -5,6 +5,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
+import com.sc1hub.assistant.gemini.GeminiException;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -109,6 +110,12 @@ public class AssistantRagIndexService {
         if (cooldownMinutes <= 0 || lastReindexFinishedAt == null) {
             return null;
         }
+        // 실패했거나 미완성으로 끝난 작업의 재실행은 같은 작업의 이어하기다. 저장된 벡터를
+        // 재사용하므로 API 부담이 작고, 쿨다운을 걸면 완성까지 며칠이 걸린다.
+        if (StringUtils.hasText(lastReindexError)
+                || (lastReindexResult != null && !lastReindexResult.isComplete())) {
+            return null;
+        }
         long elapsedMillis = System.currentTimeMillis() - lastReindexFinishedAt.getTime();
         long cooldownMillis = cooldownMinutes * 60L * 1000L;
         if (elapsedMillis >= cooldownMillis) {
@@ -154,9 +161,10 @@ public class AssistantRagIndexService {
         IndexingContext indexingContext = new IndexingContext(index);
         int indexedPosts = 0;
         int indexedChunks = 0;
+        int incompletePosts = 0;
         int chunkSize = ragProperties.getChunkSizeChars();
         int overlap = ragProperties.getChunkOverlapChars();
-        EmbeddingBudget embeddingBudget = EmbeddingBudget.limited(
+        EmbeddingBudget embeddingBudget = EmbeddingBudget.lenient(
                 ragProperties.getMaxEmbeddingCallsPerReindex(),
                 "RAG 재인덱싱"
         );
@@ -182,7 +190,11 @@ public class AssistantRagIndexService {
                     if (!result.hasSourceChunks()) {
                         continue;
                     }
-                    indexedPosts += 1;
+                    if (result.isTruncated()) {
+                        incompletePosts += 1;
+                    } else {
+                        indexedPosts += 1;
+                    }
                     if (!result.getChunks().isEmpty()) {
                         index.getChunks().addAll(result.getChunks());
                         indexedChunks += result.getChunks().size();
@@ -195,10 +207,24 @@ public class AssistantRagIndexService {
                 index, indexingContext, chunkSize, overlap, embeddingBudget, reusableEmbeddings);
         indexedPosts += strategyTips.posts;
         indexedChunks += strategyTips.chunks;
+        incompletePosts += strategyTips.incompletePosts;
 
+        // 예산이 바닥나거나 API가 실패해도 만든 만큼은 저장한다. 다음 reindex가 저장된 벡터를
+        // 재사용해 나머지만 임베딩하므로, 처음부터 다시 시작해 같은 자리에서 멈추는 일이 없다.
+        boolean complete = incompletePosts == 0;
+        index.setIncomplete(!complete);
         finalizeIndex(index, boards);
+
+        String message = null;
+        if (!complete) {
+            message = "미완성 인덱스로 저장했습니다. 남은 글 " + incompletePosts + "개. "
+                    + "reindex를 다시 실행하면 저장된 벡터를 재사용해 이어서 만듭니다. ("
+                    + embeddingBudget.getHaltReason() + ")";
+            log.warn("RAG 재인덱싱 미완성. indexedPosts={}, incompletePosts={}, embeddingCalls={}, reason={}",
+                    indexedPosts, incompletePosts, embeddingBudget.getEmbeddingCalls(), embeddingBudget.getHaltReason());
+        }
         return new ReindexResult(true, indexedPosts, indexedChunks, indexingContext.getDimension(), ragProperties.getIndexPath(),
-                embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks());
+                embeddingBudget.getEmbeddingCalls(), embeddingBudget.getReusedChunks(), complete, incompletePosts, message);
     }
 
     public synchronized UpdateResult update() throws IOException {
@@ -225,6 +251,12 @@ public class AssistantRagIndexService {
             throw new IllegalStateException("RAG index is empty.");
         }
         validateEmbeddingModel(index, embeddingModel);
+        if (index.isIncomplete()) {
+            // update는 게시판별 최대 post_num 이후만 보므로, 빠진 글이 있는 인덱스 위에서 돌리면
+            // 그 글들은 영영 안 잡힌다.
+            throw new IllegalStateException(
+                    "RAG 인덱스가 미완성 상태입니다. reindex를 다시 실행해 완성한 뒤 update를 사용하세요.");
+        }
 
         if (index.getChunks() == null) {
             index.setChunks(new ArrayList<>());
@@ -399,6 +431,7 @@ public class AssistantRagIndexService {
                                                 ReusableEmbeddingStore reusableEmbeddings) {
         int indexedPosts = 0;
         int indexedChunks = 0;
+        int incompletePosts = 0;
         for (StrategyTipDTO tip : loadStrategyTips()) {
             BoardDTO post = toStrategyTipPost(tip);
             PostChunkResult result = buildChunksForPost(
@@ -407,13 +440,17 @@ public class AssistantRagIndexService {
             if (!result.hasSourceChunks()) {
                 continue;
             }
-            indexedPosts += 1;
+            if (result.isTruncated()) {
+                incompletePosts += 1;
+            } else {
+                indexedPosts += 1;
+            }
             if (!result.getChunks().isEmpty()) {
                 index.getChunks().addAll(result.getChunks());
                 indexedChunks += result.getChunks().size();
             }
         }
-        return new SourceIndexResult(indexedPosts, indexedChunks);
+        return new SourceIndexResult(indexedPosts, indexedChunks, incompletePosts);
     }
 
     private SourceIndexResult synchronizeStrategyTips(AssistantRagIndex index,
@@ -471,7 +508,7 @@ public class AssistantRagIndexService {
                     index, AssistantRagSources.STRATEGY_TIP_BOARD, deletedTipId);
             updatedPosts += 1;
         }
-        return new SourceIndexResult(updatedPosts, updatedChunks);
+        return new SourceIndexResult(updatedPosts, updatedChunks, 0);
     }
 
     private static boolean sameStrategyTipChunks(List<AssistantRagChunk> existing,
@@ -554,6 +591,7 @@ public class AssistantRagIndexService {
         }
 
         List<AssistantRagChunk> newChunks = new ArrayList<>();
+        boolean truncated = false;
         int chunkIndex = 0;
         for (String chunk : chunks) {
             AssistantRagChunk reusableChunk = reusableEmbeddings == null
@@ -575,10 +613,23 @@ public class AssistantRagIndexService {
                 chunkIndex += 1;
                 continue;
             }
-            if (embeddingBudget != null) {
-                embeddingBudget.beforeEmbeddingCall();
+            if (embeddingBudget != null && !embeddingBudget.reserve()) {
+                truncated = true;
+                break;
             }
-            vector = embeddingClient.embedText(chunk);
+            try {
+                vector = embeddingClient.embedText(chunk);
+            } catch (GeminiException e) {
+                if (embeddingBudget == null || !embeddingBudget.isLenient()) {
+                    throw e;
+                }
+                // API 장애는 남은 글에서도 반복될 가능성이 커서 여기서 멈추고 지금까지 만든 것을 저장한다.
+                log.warn("RAG 임베딩 호출 실패. 이번 인덱싱은 여기까지 저장합니다. board={}, postNum={}",
+                        boardTitle, post.getPostNum(), e);
+                embeddingBudget.halt("임베딩 호출 실패: " + e.getMessage());
+                truncated = true;
+                break;
+            }
             if (!context.acceptVector(vector)) {
                 continue;
             }
@@ -589,7 +640,7 @@ public class AssistantRagIndexService {
             chunkIndex += 1;
         }
 
-        return new PostChunkResult(true, newChunks);
+        return new PostChunkResult(true, newChunks, truncated);
     }
 
     private static AssistantRagChunk buildChunk(String boardTitle,
@@ -820,27 +871,56 @@ public class AssistantRagIndexService {
     private static final class EmbeddingBudget {
         private final int maxCalls;
         private final String jobName;
+        private final boolean lenient;
         private int usedCalls;
         private int reusedChunks;
+        private String haltReason;
 
-        private EmbeddingBudget(int maxCalls, String jobName) {
+        private EmbeddingBudget(int maxCalls, String jobName, boolean lenient) {
             this.maxCalls = maxCalls;
             this.jobName = jobName;
+            this.lenient = lenient;
         }
 
+        /** 상한을 넘으면 예외. 기존 인덱스를 고치는 update 경로용. */
         private static EmbeddingBudget limited(int maxCalls, String jobName) {
-            return new EmbeddingBudget(Math.max(0, maxCalls), jobName);
+            return new EmbeddingBudget(Math.max(0, maxCalls), jobName, false);
         }
 
-        private void beforeEmbeddingCall() {
-            if (maxCalls <= 0) {
-                usedCalls += 1;
-                return;
+        /** 상한을 넘으면 예외 대신 이후 호출을 거절한다. 부분 결과를 저장하는 reindex 경로용. */
+        private static EmbeddingBudget lenient(int maxCalls, String jobName) {
+            return new EmbeddingBudget(Math.max(0, maxCalls), jobName, true);
+        }
+
+        /** 임베딩 호출 1건을 예약한다. 더 부를 수 없으면 관대 모드는 false, 엄격 모드는 예외. */
+        private boolean reserve() {
+            if (haltReason != null) {
+                return false;
             }
-            if (usedCalls >= maxCalls) {
-                throw new IllegalStateException(jobName + " 임베딩 호출 상한(" + maxCalls + "회)을 초과했습니다.");
+            if (maxCalls > 0 && usedCalls >= maxCalls) {
+                String reason = jobName + " 임베딩 호출 상한(" + maxCalls + "회)을 초과했습니다.";
+                if (!lenient) {
+                    throw new IllegalStateException(reason);
+                }
+                haltReason = reason;
+                return false;
             }
             usedCalls += 1;
+            return true;
+        }
+
+        private void halt(String reason) {
+            if (haltReason == null) {
+                haltReason = reason;
+            }
+        }
+
+        private boolean isLenient() {
+            return lenient;
+        }
+
+        private String getHaltReason() {
+            return haltReason;
         }
 
         private void markReused() {
@@ -913,18 +993,25 @@ public class AssistantRagIndexService {
     private static final class PostChunkResult {
         private final boolean hasSourceChunks;
         private final List<AssistantRagChunk> chunks;
+        /** 예산/호출 실패로 이 글의 청크 일부를 임베딩하지 못했다. */
+        private final boolean truncated;
 
-        private PostChunkResult(boolean hasSourceChunks, List<AssistantRagChunk> chunks) {
+        private PostChunkResult(boolean hasSourceChunks, List<AssistantRagChunk> chunks, boolean truncated) {
             this.hasSourceChunks = hasSourceChunks;
             this.chunks = chunks;
+            this.truncated = truncated;
         }
 
         private static PostChunkResult empty() {
-            return new PostChunkResult(false, new ArrayList<>());
+            return new PostChunkResult(false, new ArrayList<>(), false);
         }
 
         private boolean hasSourceChunks() {
             return hasSourceChunks;
+        }
+
+        private boolean isTruncated() {
+            return truncated;
         }
 
         private List<AssistantRagChunk> getChunks() {
@@ -935,10 +1022,12 @@ public class AssistantRagIndexService {
     private static final class SourceIndexResult {
         private final int posts;
         private final int chunks;
+        private final int incompletePosts;
 
-        private SourceIndexResult(int posts, int chunks) {
+        private SourceIndexResult(int posts, int chunks, int incompletePosts) {
             this.posts = posts;
             this.chunks = chunks;
+            this.incompletePosts = incompletePosts;
         }
     }
 
@@ -1098,9 +1187,13 @@ public class AssistantRagIndexService {
         private final String indexPath;
         private final int embeddingCalls;
         private final int reusedChunks;
+        /** false면 일부 글이 빠진 채 저장됐다. reindex를 다시 실행하면 이어서 만든다. */
+        private final boolean complete;
+        private final int incompletePosts;
+        private final String message;
 
         private ReindexResult(boolean enabled, int indexedPosts, int indexedChunks, int dimension, String indexPath,
-                              int embeddingCalls, int reusedChunks) {
+                              int embeddingCalls, int reusedChunks, boolean complete, int incompletePosts, String message) {
             this.enabled = enabled;
             this.indexedPosts = indexedPosts;
             this.indexedChunks = indexedChunks;
@@ -1108,10 +1201,13 @@ public class AssistantRagIndexService {
             this.indexPath = indexPath;
             this.embeddingCalls = embeddingCalls;
             this.reusedChunks = reusedChunks;
+            this.complete = complete;
+            this.incompletePosts = incompletePosts;
+            this.message = message;
         }
 
         public static ReindexResult disabled() {
-            return new ReindexResult(false, 0, 0, 0, null, 0, 0);
+            return new ReindexResult(false, 0, 0, 0, null, 0, 0, false, 0, null);
         }
     }
 

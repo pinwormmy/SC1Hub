@@ -91,6 +91,7 @@ public class AssistantRagSearchService {
                 index.index.getUpdatedAt(),
                 index.index.getChunks().size(),
                 index.index.getDimension(),
+                index.index.isIncomplete(),
                 index.signatureCheck
         );
     }
@@ -501,6 +502,8 @@ public class AssistantRagSearchService {
     public static final class Status {
         private final boolean enabled;
         private final boolean ready;
+        /** ready여도 false면 일부 글이 빠진 인덱스다. reindex를 다시 실행해야 한다. */
+        private final boolean complete;
         private final String indexPath;
         private final String embeddingModel;
         private final Date createdAt;
@@ -513,11 +516,13 @@ public class AssistantRagSearchService {
         private final List<String> signatureMismatchBoards;
         private final Date signatureCheckedAt;
 
-        private Status(boolean enabled, boolean ready, String indexPath, String embeddingModel, Date createdAt, Date updatedAt,
-                       int chunkCount, int dimension, boolean signatureAvailable, boolean signatureMismatch,
-                       int signatureMismatchCount, List<String> signatureMismatchBoards, Date signatureCheckedAt) {
+        private Status(boolean enabled, boolean ready, boolean complete, String indexPath, String embeddingModel,
+                       Date createdAt, Date updatedAt, int chunkCount, int dimension, boolean signatureAvailable,
+                       boolean signatureMismatch, int signatureMismatchCount, List<String> signatureMismatchBoards,
+                       Date signatureCheckedAt) {
             this.enabled = enabled;
             this.ready = ready;
+            this.complete = complete;
             this.indexPath = indexPath;
             this.embeddingModel = embeddingModel;
             this.createdAt = createdAt;
@@ -532,21 +537,21 @@ public class AssistantRagSearchService {
         }
 
         public static Status disabled(String indexPath) {
-            return new Status(false, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
+            return new Status(false, false, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
         }
 
         public static Status notReady(String indexPath) {
-            return new Status(true, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
+            return new Status(true, false, false, indexPath, null, null, null, 0, 0, false, false, 0, new ArrayList<>(), null);
         }
 
         private static Status ready(String indexPath, String embeddingModel, Date createdAt, Date updatedAt, int chunkCount,
-                                    int dimension, SignatureCheck signatureCheck) {
+                                    int dimension, boolean incomplete, SignatureCheck signatureCheck) {
             boolean signatureAvailable = signatureCheck != null && signatureCheck.available;
             boolean signatureMismatch = signatureCheck != null && signatureCheck.mismatch;
             int signatureMismatchCount = signatureCheck == null ? 0 : signatureCheck.mismatchCount;
             List<String> signatureMismatchBoards = signatureCheck == null ? new ArrayList<>() : signatureCheck.mismatchBoards;
             Date signatureCheckedAt = signatureCheck == null ? null : signatureCheck.checkedAt;
-            return new Status(true, true, indexPath, embeddingModel, createdAt, updatedAt, chunkCount, dimension,
+            return new Status(true, true, !incomplete, indexPath, embeddingModel, createdAt, updatedAt, chunkCount, dimension,
                     signatureAvailable, signatureMismatch, signatureMismatchCount, signatureMismatchBoards, signatureCheckedAt);
         }
     }

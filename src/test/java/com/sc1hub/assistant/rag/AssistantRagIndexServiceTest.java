@@ -5,6 +5,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
+import com.sc1hub.assistant.gemini.GeminiException;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -26,6 +27,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -101,6 +104,94 @@ class AssistantRagIndexServiceTest {
     }
 
     @Test
+    void reindex_persistsPartialIndexWhenEmbeddingBudgetRunsOut() throws Exception {
+        ragProperties.setMaxEmbeddingCallsPerReindex(1);
+        stubTwoPostBoard();
+        when(embeddingClient.embedText(anyString())).thenReturn(new float[]{0.3f, 0.4f});
+
+        AssistantRagIndexService.ReindexResult result = indexService.reindex();
+
+        assertFalse(result.isComplete());
+        assertEquals(1, result.getIndexedPosts());
+        assertEquals(1, result.getIncompletePosts());
+        assertEquals(1, result.getEmbeddingCalls());
+        assertTrue(result.getMessage().contains("상한(1회)"));
+        AssistantRagIndex saved = readIndex();
+        assertTrue(saved.isIncomplete());
+        assertEquals(1, saved.getChunks().size());
+        verify(embeddingClient).embedText(anyString());
+    }
+
+    @Test
+    void reindex_resumesFromPartialIndexOnNextRun() throws Exception {
+        ragProperties.setMaxEmbeddingCallsPerReindex(1);
+        stubTwoPostBoard();
+        when(embeddingClient.embedText(anyString())).thenReturn(new float[]{0.3f, 0.4f});
+        indexService.reindex();
+
+        AssistantRagIndexService.ReindexResult second = indexService.reindex();
+
+        assertTrue(second.isComplete());
+        assertEquals(2, second.getIndexedPosts());
+        assertEquals(0, second.getIncompletePosts());
+        assertEquals(1, second.getEmbeddingCalls());
+        assertEquals(1, second.getReusedChunks());
+        assertNull(second.getMessage());
+        AssistantRagIndex saved = readIndex();
+        assertFalse(saved.isIncomplete());
+        assertEquals(2, saved.getChunks().size());
+    }
+
+    @Test
+    void reindex_persistsProgressWhenEmbeddingCallFails() throws Exception {
+        stubTwoPostBoard();
+        when(embeddingClient.embedText(anyString()))
+                .thenReturn(new float[]{0.3f, 0.4f})
+                .thenThrow(new GeminiException("Gemini Embedding API request failed: 429"));
+
+        AssistantRagIndexService.ReindexResult result = indexService.reindex();
+
+        assertFalse(result.isComplete());
+        assertEquals(1, result.getIndexedPosts());
+        assertEquals(1, result.getIncompletePosts());
+        assertTrue(result.getMessage().contains("임베딩 호출 실패"));
+        assertTrue(result.getMessage().contains("429"));
+        assertEquals(1, readIndex().getChunks().size());
+    }
+
+    @Test
+    void requestReindex_skipsCooldownWhileIndexIsIncomplete() throws Exception {
+        ragProperties.setMinReindexIntervalMinutes(360);
+        ragProperties.setMaxEmbeddingCallsPerReindex(1);
+        stubTwoPostBoard();
+        when(embeddingClient.embedText(anyString())).thenReturn(new float[]{0.3f, 0.4f});
+
+        assertTrue(indexService.requestReindex().isAccepted());
+        // 미완성으로 끝났으니 바로 이어서 돌릴 수 있어야 한다.
+        AssistantRagIndexService.ReindexJobStatus resumed = indexService.requestReindex();
+        assertTrue(resumed.isAccepted());
+        assertTrue(resumed.getLastResult().isComplete());
+
+        // 완성된 뒤의 재실행은 쿨다운에 걸린다.
+        AssistantRagIndexService.ReindexJobStatus throttled = indexService.requestReindex();
+        assertFalse(throttled.isAccepted());
+        assertTrue(throttled.getLastError().contains("쿨다운"));
+    }
+
+    @Test
+    void update_refusesToRunOnIncompleteIndex() throws Exception {
+        writeExistingIndex(new Date(1_700_000_000_000L));
+        AssistantRagIndex index = readIndex();
+        index.setIncomplete(true);
+        objectMapper.writeValue(tempDir.resolve("rag-index.json").toFile(), index);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> indexService.update());
+
+        assertTrue(error.getMessage().contains("reindex"));
+        verify(embeddingClient, never()).embedText(anyString());
+    }
+
+    @Test
     void reindex_includesPublishedStrategyTipsAsRagChunks() throws Exception {
         StrategyTipDTO tip = strategyTip(7, "t_vs_z", "테저전",
                 "정찰 후 상대 진출 경로에 맞춰 수비 위치를 조정하세요.");
@@ -145,6 +236,25 @@ class AssistantRagIndexServiceTest {
         assertFalse(chunks.stream().anyMatch(chunk -> chunk.getPostNum() == 2));
         assertTrue(chunks.stream().allMatch(chunk ->
                 AssistantRagSources.STRATEGY_TIP_BOARD.equals(chunk.getBoardTitle())));
+    }
+
+    /** 서로 다른 본문을 가진 글 2개짜리 게시판. 임베딩 호출이 글당 1회 필요하다. */
+    private void stubTwoPostBoard() throws Exception {
+        BoardListDTO board = new BoardListDTO();
+        board.setBoardTitle("FreeBoard");
+        BoardDTO first = new BoardDTO();
+        first.setPostNum(1);
+        first.setTitle("first");
+        first.setContent("first body");
+        first.setRegDate(new Date(1_700_000_000_000L));
+        BoardDTO second = new BoardDTO();
+        second.setPostNum(2);
+        second.setTitle("second");
+        second.setContent("second body");
+        second.setRegDate(new Date(1_700_000_001_000L));
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(board));
+        when(boardMapper.selectPostsForRag("freeboard", ragProperties.getMaxPostsPerBoard()))
+                .thenReturn(Arrays.asList(first, second));
     }
 
     private void writeExistingIndex(Date regDate) throws Exception {

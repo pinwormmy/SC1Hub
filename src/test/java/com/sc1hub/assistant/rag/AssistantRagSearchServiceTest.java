@@ -72,6 +72,8 @@ class AssistantRagSearchServiceTest {
                 matches.get(0).getChunk().getUrl());
         assertTrue(status.isSignatureAvailable());
         assertFalse(status.isSignatureMismatch());
+        // incomplete 필드가 없는 구버전 인덱스 파일은 완성본으로 본다.
+        assertTrue(status.isComplete());
     }
 
     private void writeStrategyTipIndex(Path indexPath, Date regDate) throws Exception {

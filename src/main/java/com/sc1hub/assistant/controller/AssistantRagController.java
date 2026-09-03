@@ -64,6 +64,9 @@ public class AssistantRagController {
                     response.setIndexPath(lastResult.getIndexPath());
                     response.setEmbeddingCalls(lastResult.getEmbeddingCalls());
                     response.setReusedChunks(lastResult.getReusedChunks());
+                    response.setComplete(lastResult.isComplete());
+                    response.setIncompletePosts(lastResult.getIncompletePosts());
+                    response.setMessage(lastResult.getMessage());
                 }
 
                 if (!status.isEnabled()) {
@@ -89,6 +92,9 @@ public class AssistantRagController {
                 response.setIndexPath(result.getIndexPath());
                 response.setEmbeddingCalls(result.getEmbeddingCalls());
                 response.setReusedChunks(result.getReusedChunks());
+                response.setComplete(result.isComplete());
+                response.setIncompletePosts(result.getIncompletePosts());
+                response.setMessage(result.getMessage());
                 return ResponseEntity.ok(response);
             } catch (Exception e) {
                 log.error("RAG 인덱스 생성 실패", e);

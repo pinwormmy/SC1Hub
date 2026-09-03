@@ -17,6 +17,9 @@ public class AssistantRagReindexResponseDTO {
     private String indexPath;
     private int embeddingCalls;
     private int reusedChunks;
+    private boolean complete;
+    private int incompletePosts;
+    private String message;
     private String error;
     private String lastError;
 }

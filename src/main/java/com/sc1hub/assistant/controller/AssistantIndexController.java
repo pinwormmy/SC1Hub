@@ -75,6 +75,9 @@ public class AssistantIndexController {
                     ragResponse.setIndexPath(lastResult.getIndexPath());
                     ragResponse.setEmbeddingCalls(lastResult.getEmbeddingCalls());
                     ragResponse.setReusedChunks(lastResult.getReusedChunks());
+                    ragResponse.setComplete(lastResult.isComplete());
+                    ragResponse.setIncompletePosts(lastResult.getIncompletePosts());
+                    ragResponse.setMessage(lastResult.getMessage());
                 }
 
                 if (!status.isEnabled()) {
