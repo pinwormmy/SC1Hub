@@ -329,7 +329,7 @@
         lineEl.appendChild(nickEl);
         lineEl.appendChild(contentEl);
 
-        if (getMemberMeta().isAdmin && message.role !== 'AI') {
+        if (getMemberMeta().isAdmin) {
             const delEl = document.createElement('span');
             delEl.className = 'sc-chat__admin-del';
             delEl.textContent = '[X]';
