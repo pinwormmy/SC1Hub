@@ -93,7 +93,9 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(headSource.contains("url.origin === window.location.origin"));
         assertTrue(headSource.contains("document.addEventListener('click', markActivatedInternalLink"));
         assertTrue(headSource.contains("DOMContentLoaded', markExistingInternalLinks, { once: true }"));
-        assertTrue(headSource.contains("font-display: swap"));
+        // System fonts render immediately without the retired pixel webfont request.
+        assertFalse(headSource.contains("neodgm"));
+        assertFalse(headSource.contains("@font-face"));
         assertFalse(headSource.contains("cancelIdleCallback"));
         assertFalse(headSource.contains("ADSENSE_DELAY_MS"));
         assertFalse(headSource.contains("document.addEventListener('pointerdown'"));

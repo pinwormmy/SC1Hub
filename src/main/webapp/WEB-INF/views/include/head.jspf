@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#050818">
+<meta name="theme-color" content="#f3f4f0">
+<script src="/js/site-theme.js?v=${applicationScope.assetVersion}"></script>
 <meta name="naver-site-verification" content="fb67e159c12b2dc169083d9b10dabc39bf8f9c4e" />
 <c:set var="scMetaTitle" value="${not empty pageTitle ? pageTitle : (not empty post ? post.title : (not empty koreanTitle ? koreanTitle : 'SC1Hub - 스타크래프트1 전문 공략 사이트'))}" />
 <c:set var="scMetaDescription" value="${not empty metaDescription ? metaDescription : '스타크래프트1 빌드오더, 종족별 운영법과 실전 전략을 공유하는 공략 커뮤니티'}" />
@@ -58,19 +59,7 @@ gtag('config', 'G-EHFD4FX3KD');
 </script>
 <link rel="stylesheet" href="/css/sc1hub-layout.css?v=${applicationScope.assetVersion}">
 <link rel="stylesheet" href="/css/style.css?v=${applicationScope.assetVersion}">
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="preload"
-      href="https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2"
-      as="font" type="font/woff2" crossorigin>
-<style>
-@font-face {
-    font-family: "NeoDungGeunMo Pro";
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url("https://cdn.jsdelivr.net/gh/neodgm/neodgm-pro-webfont@latest/neodgm_pro/neodgm_pro.woff2") format("woff2");
-}
-</style>
+<link rel="stylesheet" href="/css/sc1hub-theme.css?v=${applicationScope.assetVersion}">
 <script>
 (() => {
     const VIGNETTE_ATTRIBUTE = 'data-google-vignette';

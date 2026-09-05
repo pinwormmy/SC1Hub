@@ -4,23 +4,39 @@
     <div class="container">
         <div class="this-header">
             <div class="title-container">
-                <span class="full-title"><a href="/">SC1Hub - 스타크래프트1 전문 공략 사이트</a></span>
-                <span class="short-title"><a href="/">SC1Hub</a></span>
+                <a class="sc-brand" href="/" aria-label="SC1Hub 홈">
+                    <img src="/favicon.ico?v=${applicationScope.assetVersion}" width="32" height="32" alt="">
+                    <span>SC1Hub</span>
+                </a>
+                <span class="sc-brand-context">스타크래프트 전략 커뮤니티</span>
             </div>
+            <div class="sc-header-actions">
+                <button type="button" id="scThemeToggle" class="sc-theme-toggle" role="switch" aria-checked="false" aria-label="다크 모드" title="다크 모드로 전환">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/></svg>
+                    <span>다크 모드</span><span class="sc-theme-toggle__track" aria-hidden="true"></span>
+                </button>
             <nav class="super-top-menu" aria-label="회원 메뉴">
                 <ul>
                     <c:if test="${member == null}">
-                        <li><a href="/login">[로그인]</a></li>
-                        <li><a href="/signAgreement">[회원가입]</a></li>
+                        <li><a href="/login">로그인</a></li>
+                        <li><a class="sc-signup-link" href="/signAgreement">회원가입</a></li>
                     </c:if>
                     <c:if test="${member != null}">
-                        <li class="login-status"><c:out value="${member.nickName}"/>님 로그인 중 :</li>
-                        <li class="login-action"><a href="/logout">[로그아웃]</a></li>
-                        <li class="login-action"><a href="/myPage">[회원정보]</a></li>
+                        <li class="login-status"><c:out value="${member.nickName}"/>님</li>
+                        <li class="login-action"><a href="/logout">로그아웃</a></li>
+                        <li class="login-action"><a href="/myPage">회원정보</a></li>
                     </c:if>
                 </ul>
             </nav>
+            </div>
         </div>
+        <nav class="sc-site-nav" aria-label="주요 메뉴">
+            <a href="/" data-nav-section="home">둘러보기</a>
+            <a href="/boards/tvszboard" data-nav-section="strategy">공략게시판</a>
+            <a href="/strategy-tips" data-nav-section="tips">한줄 공략</a>
+            <a href="/boards/funboard" data-nav-section="community">커뮤니티</a>
+            <a href="#scTerminal">공개채팅</a>
+        </nav>
     </div>
 </header>
 <script src="/js/site-header.js?v=${applicationScope.assetVersion}" defer></script>

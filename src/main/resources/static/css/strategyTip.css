@@ -3,7 +3,7 @@
     border-radius: var(--sc-radius, 12px);
     padding: 0.75rem;
     margin-bottom: 0.75rem;
-    background: rgba(2, 5, 30, 0.3);
+    background: var(--sc-bg-panel);
 }
 
 .strategy-tip-form__meta,
@@ -42,14 +42,14 @@
 }
 
 .strategy-tip-tab.is-active {
-    color: #241C00;
-    background-color: var(--sc-accent);
-    border-color: var(--sc-accent);
+    color: #ffffff;
+    background-color: var(--sc-emphasis-bg, var(--sc-accent));
+    border-color: var(--sc-emphasis-bg, var(--sc-accent));
 }
 .strategy-tip-tab.is-active:hover,
 .strategy-tip-tab.is-active:focus-visible {
-    color: #241C00;
-    background-color: var(--sc-accent);
+    color: #ffffff;
+    background-color: var(--sc-emphasis-bg, var(--sc-accent));
     box-shadow: none;
 }
 
@@ -87,7 +87,7 @@
     display: flex;
     gap: 0.55rem;
     margin-top: 0.25rem;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--sc-text-dim);
     font-size: 0.88rem;
 }
 
@@ -100,7 +100,7 @@
 .strategy-tip-like,
 .strategy-tip-delete {
     border: 1px solid var(--sc-line-soft);
-    background: rgba(0, 0, 0, 0.22);
+    background: var(--sc-bg-panel);
     color: inherit;
     padding: 0.25rem 0.45rem;
     white-space: nowrap;
@@ -109,7 +109,7 @@
 .strategy-tip-like:hover,
 .strategy-tip-delete:hover {
     color: var(--sc-accent);
-    border-color: var(--sc-accent);
+    border-color: var(--sc-emphasis-bg, var(--sc-accent));
 }
 
 .strategy-tip-empty {

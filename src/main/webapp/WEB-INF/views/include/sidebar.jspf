@@ -81,11 +81,11 @@
 <div class="sc-col-3">
     <div id="sidebar" class="sidebar">
         <fieldset id="basicMenu" class="basic-menu">
-            <legend class="menu-header" onclick="toggleMenu('basicMenuContent')">[ 지휘관회의실 ]</legend>
-            <p class="menu-toggle-hint">클릭시 펼치기↑</p>
+            <legend><button type="button" class="menu-header" aria-expanded="true" aria-controls="basicMenuContent" onclick="toggleMenu('basicMenuContent')">커뮤니티 <span aria-hidden="true">⌄</span></button></legend>
+            <p class="menu-toggle-hint">게시판 펼치기</p>
             <div id="basicMenuContent" class="menu-content" style="display: block;">
                 <ul>
-                    <li><a href="/" accesskey="n">0. 초기화면(N)</a></li>
+                    <li><a href="/" accesskey="n">0. 둘러보기(N)</a></li>
                     <li><a href="/boards/noticeboard">1. 공지사항</a></li>
                     <li><a href="/boards/videolinkboard">2. 영상자료실</a></li>
                     <li><a href="/boards/promotionboard">3. 추천 및 홍보</a></li>
@@ -94,8 +94,8 @@
             </div>
         </fieldset>
         <fieldset id="strategyMenu" class="menu-section">
-            <legend class="menu-header" onclick="toggleMenu('strategyMenuContent')">[ 공략게시판 ]</legend>
-            <p class="menu-toggle-hint">클릭시 펼치기↑</p>
+            <legend><button type="button" class="menu-header" aria-expanded="false" aria-controls="strategyMenuContent" onclick="toggleMenu('strategyMenuContent')">공략게시판 <span aria-hidden="true">⌄</span></button></legend>
+            <p class="menu-toggle-hint">게시판 펼치기</p>
             <div id="strategyMenuContent" class="menu-content">
                 <ul>
                     <li><a href="/boards/tvszboard" class="sc-menu-link sc-menu-link--terran">10. 테저전 게시판</a></li>
@@ -118,15 +118,14 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 지휘관회의실은 어디서든 기본으로 펼치고, 나머지는 화면 너비 기준으로 구분
-    var isHomePage = document.body.classList.contains('sc-home-page');
-    if(!isHomePage && window.innerWidth > 600) {
+    // 데스크톱은 두 메뉴를 펼치고 모바일은 커뮤니티만 펼친다.
+    if(window.innerWidth > 768) {
         document.getElementById('basicMenuContent').style.display = "block";
         document.querySelector('#basicMenu .menu-toggle-hint').style.display = "none";
         document.getElementById('strategyMenuContent').style.display = "block";
         document.querySelector('#strategyMenu .menu-toggle-hint').style.display = "none";
     } else {
-        // 모바일/초기화면: 지휘관회의실만 펼치고 나머지 메뉴는 닫은 상태로 설정
+        // 모바일에서는 공략게시판을 접어 본문 접근을 빠르게 한다.
         document.querySelectorAll('.menu-content').forEach(function(menu) {
             var isBasicMenu = menu.id === 'basicMenuContent';
             menu.style.display = isBasicMenu ? "block" : "none";
@@ -136,7 +135,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    syncMenuExpandedState();
 });
+
+function syncMenuExpandedState() {
+    document.querySelectorAll('.menu-header[aria-controls]').forEach(function(button) {
+        var menu = document.getElementById(button.getAttribute('aria-controls'));
+        button.setAttribute('aria-expanded', String(menu.style.display === 'block'));
+    });
+}
 
 function toggleMenu(menuId) {
     var menu = document.getElementById(menuId);
@@ -157,5 +164,6 @@ function toggleMenu(menuId) {
         menu.style.display = "none"; // 메뉴 숨기기
         hint.style.display = "block"; // 힌트 보이기
     }
+    syncMenuExpandedState();
 }
 </script>

@@ -1,6 +1,6 @@
 .sc-post-editor {
     --editor-accent: var(--sc-cyan, #6fe3f0);
-    --editor-surface: rgba(2, 5, 30, 0.72);
+    --editor-surface: var(--sc-bg-deep);
     display: grid;
     box-sizing: border-box;
     width: 100%;
@@ -153,7 +153,7 @@
     gap: 4px;
     padding: 8px 10px;
     border-bottom: 1px solid var(--sc-line-soft);
-    background: rgba(12, 18, 68, 0.66);
+    background: var(--sc-bg-panel);
 }
 
 .sc-post-editor__toolbar select,
@@ -264,7 +264,7 @@
 .sc-post-editor__source-wrap textarea {
     display: block;
     resize: vertical;
-    color: #dce7ff;
+    color: var(--sc-text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.88rem;
     line-height: 1.6;
