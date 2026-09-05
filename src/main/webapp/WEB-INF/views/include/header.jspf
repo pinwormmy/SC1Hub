@@ -35,7 +35,7 @@
             <a href="/boards/tvszboard" data-nav-section="strategy">공략게시판</a>
             <a href="/strategy-tips" data-nav-section="tips">한줄 공략</a>
             <a href="/boards/funboard" data-nav-section="community">커뮤니티</a>
-            <a href="#scTerminal">공개채팅</a>
+            <a href="#scTerminal" data-chat-open>공개채팅</a>
         </nav>
     </div>
 </header>

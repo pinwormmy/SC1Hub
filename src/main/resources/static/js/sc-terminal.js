@@ -218,18 +218,30 @@
 
     const FULLSCREEN_CLASS = 'sc-chat-fullscreen';
     const expandButtonEl = document.getElementById('scTerminalExpandBtn');
-    if (expandButtonEl) {
-        expandButtonEl.addEventListener('click', () => {
-            openTerminal();
-            const expanded = document.body.classList.toggle(FULLSCREEN_CLASS);
+    function setTerminalExpanded(expanded) {
+        openTerminal();
+        document.body.classList.toggle(FULLSCREEN_CLASS, expanded);
+        if (expandButtonEl) {
             expandButtonEl.textContent = expanded ? '채팅창 축소' : '채팅창 확장';
             expandButtonEl.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-            window.dispatchEvent(new CustomEvent('sc:chat-expanded', {
-                detail: { expanded },
-            }));
-            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+        window.dispatchEvent(new CustomEvent('sc:chat-expanded', {
+            detail: { expanded },
+        }));
+        outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    if (expandButtonEl) {
+        expandButtonEl.addEventListener('click', () => {
+            setTerminalExpanded(!document.body.classList.contains(FULLSCREEN_CLASS));
         });
     }
+    document.querySelectorAll('[data-chat-open]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            setTerminalExpanded(true);
+        });
+    });
 
     function scrollOutputToBottom() {
         outputEl.scrollTop = outputEl.scrollHeight;
