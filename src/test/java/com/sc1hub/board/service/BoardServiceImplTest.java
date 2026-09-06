@@ -131,6 +131,25 @@ class BoardServiceImplTest {
     }
 
     @Test
+    void deletePost_rejectsSameNicknameRegisteredAfterThePost() throws Exception {
+        int postNum = 123;
+        BoardDTO post = new BoardDTO();
+        post.setWriter("Alice");
+        post.setRegDate(new java.util.Date(1_700_000_000_000L));
+
+        MemberDTO latecomer = new MemberDTO();
+        latecomer.setId("newcomer");
+        latecomer.setNickName("Alice");
+        latecomer.setRegDate(new java.util.Date(1_800_000_000_000L));
+
+        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
+
+        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("FreeBoard", postNum, latecomer));
+
+        verify(boardMapper, never()).deletePost(anyString(), anyInt());
+    }
+
+    @Test
     void deletePost_allowsWriter() throws Exception {
         int postNum = 123;
 

@@ -30,13 +30,16 @@ class MemberServiceImplTest {
     @Mock
     private MemberMapper memberMapper;
 
+    @Mock
+    private WriterNicknameGuard writerNicknameGuard;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private MemberServiceImpl memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberServiceImpl(memberMapper, passwordEncoder);
+        memberService = new MemberServiceImpl(memberMapper, passwordEncoder, writerNicknameGuard);
     }
 
     private MemberDTO storedMember(String storedPw) {
@@ -168,6 +171,43 @@ class MemberServiceImplTest {
 
         assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
         verify(memberMapper, never()).submitSignUp(any());
+    }
+
+    @Test
+    void signUpRejectsNicknameUsedOnExistingMemberPosts() throws Exception {
+        MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+        signUp.setNickName("released-author");
+        when(memberMapper.isUniqueNickName("released-author")).thenReturn("0");
+        when(writerNicknameGuard.hasAuthoredPosts("released-author")).thenReturn(true);
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
+        verify(memberMapper, never()).submitSignUp(any());
+    }
+
+    @Test
+    void signUpRejectsNicknameAlreadyHeldByAnotherMember() throws Exception {
+        MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+        signUp.setNickName("taken");
+        when(memberMapper.isUniqueNickName("taken")).thenReturn("1");
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
+        verify(memberMapper, never()).submitSignUp(any());
+        verify(writerNicknameGuard, never()).hasAuthoredPosts(any());
+    }
+
+    @Test
+    void modifyMyInfoSkipsReservationCheckWhenNicknameIsUnchanged() throws Exception {
+        MemberDTO current = storedMember(passwordEncoder.encode(RAW_PASSWORD));
+        current.setNickName("tester");
+        when(memberMapper.getMemberInfo(MEMBER_ID)).thenReturn(current);
+        MemberDTO modify = loginAttempt(RAW_PASSWORD);
+        modify.setNickName("tester");
+
+        memberService.submitModifyMyInfo(modify);
+
+        verify(memberMapper).submitModifyMyInfo(any());
+        verify(memberMapper, never()).isUniqueNickName(any());
+        verify(writerNicknameGuard, never()).hasAuthoredPosts(any());
     }
 
     @Test

@@ -38,10 +38,13 @@ public class MemberServiceImpl implements MemberService {
 
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
+    private final WriterNicknameGuard writerNicknameGuard;
 
-    public MemberServiceImpl(MemberMapper memberMapper, PasswordEncoder passwordEncoder) {
+    public MemberServiceImpl(MemberMapper memberMapper, PasswordEncoder passwordEncoder,
+                             WriterNicknameGuard writerNicknameGuard) {
         this.memberMapper = memberMapper;
         this.passwordEncoder = passwordEncoder;
+        this.writerNicknameGuard = writerNicknameGuard;
     }
 
     @Override
@@ -63,6 +66,7 @@ public class MemberServiceImpl implements MemberService {
     public void submitSignUp(MemberDTO memberDTO) throws Exception {
         validateNewPassword(memberDTO.getPw());
         validateProfileFields(memberDTO, true);
+        ensureNicknameAvailable(null, memberDTO.getNickName());
         // 호출자는 같은 DTO로 곧바로 로그인을 시도하므로 원본은 건드리지 않는다.
         memberMapper.submitSignUp(copyWithHashedPassword(memberDTO));
     }
@@ -107,6 +111,7 @@ public class MemberServiceImpl implements MemberService {
     public void submitModifyMyInfo(MemberDTO member) throws Exception {
         validateNewPassword(member.getPw());
         validateProfileFields(member, true);
+        ensureNicknameAvailable(member.getId(), member.getNickName());
         // 호출자는 같은 DTO로 재로그인해 세션을 갱신하므로 원본은 건드리지 않는다.
         memberMapper.submitModifyMyInfo(copyWithHashedPassword(member));
     }
@@ -141,7 +146,33 @@ public class MemberServiceImpl implements MemberService {
     public void submitModifyMemberByAdmin(MemberDTO memberDTO) {
         validateProfileFields(memberDTO, true);
         validateGrade(memberDTO.getGrade());
+        ensureNicknameAvailable(memberDTO.getId(), memberDTO.getNickName());
         memberMapper.submitModifyMemberByAdmin(memberDTO);
+    }
+
+    /**
+     * 별명은 현재 회원 중 유일해야 하고, 다른 계정이 과거에 회원 게시글 작성에 쓴 별명은 새로 취득할 수
+     * 없다. 게시글 관리 권한이 작성자 별명 문자열로 판정되는 동안, 해제된 별명을 통한 과거 글 관리 권한
+     * 취득을 막는다. 같은 회원이 별명을 그대로 두는 수정은 검사하지 않는다.
+     */
+    private void ensureNicknameAvailable(String memberId, String nickName) {
+        if (!StringUtils.hasText(nickName)) {
+            return;
+        }
+        String requested = nickName.trim();
+        if (memberId != null) {
+            MemberDTO current = memberMapper.getMemberInfo(memberId);
+            if (current != null && requested.equals(current.getNickName())) {
+                return;
+            }
+        }
+        String duplicateCount = memberMapper.isUniqueNickName(requested);
+        if (duplicateCount != null && !"0".equals(duplicateCount.trim())) {
+            throw new IllegalArgumentException("이미 사용 중인 별명입니다.");
+        }
+        if (writerNicknameGuard.hasAuthoredPosts(requested)) {
+            throw new IllegalArgumentException("이전에 게시글 작성에 사용된 별명은 다시 등록할 수 없습니다.");
+        }
     }
 
     @Override

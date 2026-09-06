@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "sc1hub.assistant.bot.enabled=false",
         "sc1hub.assistant.bot.autoPublishEnabled=false",
         "sc1hub.assistant.rag.enabled=false",
-        "sc1hub.chat.enabled=false"
+        "sc1hub.chat.enabled=false",
+        "sc1hub.security.legacy-password-migration-enabled=false"
 })
 @ActiveProfiles("test")
 class PlatformContextIntegrationTest {

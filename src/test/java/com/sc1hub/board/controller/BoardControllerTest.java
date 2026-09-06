@@ -260,6 +260,33 @@ class BoardControllerTest {
     }
 
     @Test
+    void submitModifyPost_deniesSameNicknameRegisteredAfterThePost() throws Exception {
+        BoardDTO existingPost = new BoardDTO();
+        existingPost.setPostNum(3);
+        existingPost.setWriter("Alice");
+        existingPost.setRegDate(new java.util.Date(1_700_000_000_000L));
+
+        // 원래 작성자가 떠난 뒤 같은 별명으로 새로 가입한 계정
+        MemberDTO latecomer = new MemberDTO();
+        latecomer.setId("newcomer");
+        latecomer.setNickName("Alice");
+        latecomer.setRegDate(new java.util.Date(1_800_000_000_000L));
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", latecomer);
+        request.setSession(session);
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(3);
+        when(boardService.readPost("freeboard", 3)).thenReturn(existingPost);
+
+        String view = boardController.submitModifyPost("freeBoard", post, request, new ExtendedModelMap());
+
+        assertEquals("alert", view);
+        verify(boardService, never()).submitModifyPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
     void submitModifyPost_returnsAlert_whenMemberDoesNotMatchWriter() throws Exception {
         BoardDTO post = new BoardDTO();
         post.setPostNum(3);

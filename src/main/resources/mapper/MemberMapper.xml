@@ -70,6 +70,22 @@
         where id=#{id}
     </update>
 
+    <select id="selectLegacyPasswordMembers" resultType="com.sc1hub.member.dto.MemberDTO">
+        select id, pw from member
+        where pw is not null and pw != '' and pw not like '$2%'
+    </select>
+
+    <select id="countLegacyPasswordMembers" resultType="int">
+        select count(*) from member
+        where pw is not null and pw != '' and pw not like '$2%'
+    </select>
+
+    <update id="updatePasswordIfUnchanged">
+        update member
+        set pw=#{newPw}
+        where id=#{id} and pw=#{expectedPw}
+    </update>
+
     <delete id="deleteMember">
         delete from member
         where id=#{id}

@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import java.nio.file.AccessDeniedException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -94,11 +95,20 @@ public class BoardServiceImpl implements BoardService {
         if (postToDelete == null) {
             throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
         }
-        if (!postToDelete.getWriter().equals(requestingMember.getNickName())
-                && !requestingMember.getId().equals("admin")) {
+        if (!isPostOwner(postToDelete, requestingMember) && !"admin".equals(requestingMember.getId())) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");
         }
         deleteExistingPost(boardTitle, postNum);
+    }
+
+    /** 작성자 별명이 같아도 글보다 늦게 가입한 계정은 작성자가 아니다(해제된 별명 재취득 방어). */
+    private boolean isPostOwner(BoardDTO post, MemberDTO member) {
+        if (member == null || !Objects.equals(post.getWriter(), member.getNickName())) {
+            return false;
+        }
+        Date memberSince = member.getRegDate();
+        Date postDate = post.getRegDate();
+        return memberSince == null || postDate == null || !memberSince.after(postDate);
     }
 
     @Override

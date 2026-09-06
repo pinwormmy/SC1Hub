@@ -29,6 +29,9 @@ public interface BoardMapper {
 
         int countTotalPost(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page) throws Exception;
 
+        /** 해당 닉네임으로 작성된 회원 게시글 수(funboard 는 비회원 글 제외). 닉네임 재사용 차단용. */
+        int countMemberPostsByWriter(@Param("boardTitle") String boardTitle, @Param("writer") String writer);
+
         void addComment(@Param("boardTitle") String boardTitle, @Param("comment") CommentDTO comment) throws Exception;
 
         List<CommentDTO> showCommentList(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page)

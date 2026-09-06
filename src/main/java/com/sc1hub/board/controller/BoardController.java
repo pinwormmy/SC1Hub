@@ -34,6 +34,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.nio.file.AccessDeniedException;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -520,7 +521,7 @@ public class BoardController {
         if (isGuestPost(post)) {
             return isGuestWritableBoard(boardTitle) && isGuestPostAuthorized(session, boardTitle, post.getPostNum());
         }
-        return member != null && Objects.equals(post.getWriter(), member.getNickName());
+        return isPostOwner(post, member);
     }
 
     private boolean canDeletePost(String boardTitle, BoardDTO post, MemberDTO member, String guestPassword) {
@@ -533,7 +534,20 @@ public class BoardController {
         if (isGuestPost(post)) {
             return isGuestWritableBoard(boardTitle) && guestPasswordMatches(post, guestPassword);
         }
-        return member != null && Objects.equals(post.getWriter(), member.getNickName());
+        return isPostOwner(post, member);
+    }
+
+    /**
+     * 작성자 별명이 같아도 글보다 늦게 가입한 계정은 작성자로 보지 않는다. 변경·탈퇴로 해제된 별명을
+     * 새 계정이 취득해 과거 글의 관리 권한을 얻는 경로를 막는다(가입일이 없는 옛 계정은 기존대로 허용).
+     */
+    private boolean isPostOwner(BoardDTO post, MemberDTO member) {
+        if (member == null || !Objects.equals(post.getWriter(), member.getNickName())) {
+            return false;
+        }
+        Date memberSince = member.getRegDate();
+        Date postDate = post.getRegDate();
+        return memberSince == null || postDate == null || !memberSince.after(postDate);
     }
 
     private boolean guestPasswordMatches(BoardDTO post, String guestPassword) {
