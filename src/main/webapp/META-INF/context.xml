@@ -2,7 +2,8 @@
 <Context>
     <!-- Discard sessions across a restart so old privileges cannot survive a security release. -->
     <Manager pathname="" />
-    <!-- Stamp SameSite=Lax on every cookie (incl. JSESSIONID) regardless of proxy timing;
-         Secure/HttpOnly on the session cookie come from server.servlet.session.cookie.* . -->
+    <!-- Stamp SameSite=Lax on every cookie (incl. JSESSIONID) regardless of proxy timing.
+         Secure/HttpOnly on the session cookie are set by ServerConfig's SessionCookieConfig
+         initializer: Boot's server.servlet.session.cookie.* does not reach this external Tomcat. -->
     <CookieProcessor sameSiteCookies="lax" />
 </Context>

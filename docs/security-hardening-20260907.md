@@ -27,9 +27,12 @@ WAR 풋프린트 검증 통과). 임시 쓰기 제한(`sc1hub.security.public-wr
   관리자·회원 전용 페이지에는 `Cache-Control: no-store`.
   - CSP는 인라인 스크립트와 애드센스·유튜브 임베드를 쓰는 사이트라 `script-src`를 걸지 않았다.
     nonce 기반 CSP로 스크립트까지 잠그는 것은 후속 과제.
-- 세션 쿠키: `server.servlet.session.cookie.secure=true` 추가, `META-INF/context.xml`에
-  `<CookieProcessor sameSiteCookies="lax"/>`로 JSESSIONID 포함 전 쿠키에 SameSite 적용.
-  방문자·게시글 조회 쿠키에도 `Secure`/`HttpOnly`를 적용했다.
+- 세션 쿠키: `META-INF/context.xml`의 `<CookieProcessor sameSiteCookies="lax"/>`로 JSESSIONID 포함
+  전 쿠키에 SameSite를 적용하고, `Secure`/`HttpOnly`는 `ServerConfig`의 `SessionCookieConfig`
+  초기화로 컨테이너 수준에서 지정한다. `server.servlet.session.cookie.*` Boot 프로퍼티는 내장 Tomcat
+  전용이라 카페24 외부 Tomcat 응답에는 반영되지 않는 것이 1차 배포에서 확인됐다(프로퍼티는
+  로컬 평문 HTTP 에서 Secure 를 끄는 스위치로만 쓴다). 방문자·게시글 조회 쿠키에도
+  `Secure`/`HttpOnly`를 적용했다.
 - 로컬(평문 HTTP 8082)에서 로그인이 유지되도록 `run-local.sh`에서만 secure=false로 덮어쓴다.
 
 ### F04(일부) — BCrypt 72바이트 절단 (CVE-2025-22228) 완화
