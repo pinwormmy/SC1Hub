@@ -13,7 +13,6 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 @Slf4j
@@ -22,21 +21,26 @@ public class MemberServiceImpl implements MemberService {
     private static final String DEFAULT_MEMBER_SEARCH_TYPE = "id";
     private static final int MEMBER_DISPLAY_POST_LIMIT = 10;
     private static final int DEFAULT_PAGESET_LIMIT = 10;
-    private static final int TEMP_PASSWORD_LENGTH = 12;
     private static final int MIN_PASSWORD_LENGTH = 8;
     private static final int MAX_PASSWORD_LENGTH = 64;
+    // BCrypt는 72바이트를 넘는 입력의 뒷부분을 무시한다(CVE-2025-22228). 새/변경 비밀번호를
+    // UTF-8 72바이트 이내로 제한해 서로 다른 긴 비밀번호가 같은 것으로 처리되는 문제를 차단한다.
+    private static final int MAX_PASSWORD_BYTES = 72;
+    private static final int MAX_NICKNAME_LENGTH = 50;
+    private static final int MAX_REALNAME_LENGTH = 30;
+    private static final int MAX_EMAIL_LENGTH = 100;
+    private static final int MAX_PHONE_LENGTH = 50;
+    private static final int MIN_GRADE = 1;
+    private static final int MAX_GRADE = 3;
     // 기존 회원 행은 평문 pw를 담고 있다. 로그인 성공 시 BCrypt로 제자리 승격되며,
     // 이 접두사로 저장 형식을 판별한다.
     private static final String BCRYPT_PREFIX = "$2";
 
     private final MemberMapper memberMapper;
-    private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
 
-    public MemberServiceImpl(MemberMapper memberMapper, EmailService emailService,
-                             PasswordEncoder passwordEncoder) {
+    public MemberServiceImpl(MemberMapper memberMapper, PasswordEncoder passwordEncoder) {
         this.memberMapper = memberMapper;
-        this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -58,6 +62,7 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public void submitSignUp(MemberDTO memberDTO) throws Exception {
         validateNewPassword(memberDTO.getPw());
+        validateProfileFields(memberDTO, true);
         // 호출자는 같은 DTO로 곧바로 로그인을 시도하므로 원본은 건드리지 않는다.
         memberMapper.submitSignUp(copyWithHashedPassword(memberDTO));
     }
@@ -101,6 +106,7 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public void submitModifyMyInfo(MemberDTO member) throws Exception {
         validateNewPassword(member.getPw());
+        validateProfileFields(member, true);
         // 호출자는 같은 DTO로 재로그인해 세션을 갱신하므로 원본은 건드리지 않는다.
         memberMapper.submitModifyMyInfo(copyWithHashedPassword(member));
     }
@@ -133,51 +139,14 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public void submitModifyMemberByAdmin(MemberDTO memberDTO) {
+        validateProfileFields(memberDTO, true);
+        validateGrade(memberDTO.getGrade());
         memberMapper.submitModifyMemberByAdmin(memberDTO);
-    }
-
-    @Override
-    public String findIdByNameAndEmail(String userName, String email) {
-        try {
-            return memberMapper.getIdByNameAndEmail(userName, email);
-        } catch (Exception e) {
-            log.error("이름과 이메일로 아이디를 찾는 중 오류가 발생했습니다.", e);
-            return null;
-        }
-    }
-
-    @Override
-    public String findPassword(String userId, String email) {
-        MemberDTO member = memberMapper.findByUserIdAndEmail(userId, email);
-        if (member == null) {
-            return "입력하신 ID와 이메일로 등록된 회원을 찾을 수 없습니다.";
-        }
-
-        // 임시 비밀번호 생성
-        String tempPassword = issueTemporaryPassword(member);
-
-        // 이메일로 임시 비밀번호 전송
-        try {
-            emailService.sendNewPasswordMessage(email, tempPassword);
-            return "success";
-        } catch (Exception e) {
-            log.error("임시 비밀번호 이메일 전송 중 오류 발생", e);
-            return "비밀번호 찾기 중 문제가 발생했습니다. 다시 시도해 주세요.";
-        }
     }
 
     @Override
     public void deleteMember(String id) {
         memberMapper.deleteMember(id);
-    }
-
-    private String issueTemporaryPassword(MemberDTO member) {
-        String tempPassword = UUID.randomUUID().toString().replace("-", "").substring(0, TEMP_PASSWORD_LENGTH);
-        MemberDTO update = new MemberDTO();
-        update.setId(member.getId());
-        update.setPw(passwordEncoder.encode(tempPassword));
-        memberMapper.updatePassword(update);
-        return tempPassword;
     }
 
     private MemberDTO copyWithHashedPassword(MemberDTO source) {
@@ -199,6 +168,52 @@ public class MemberServiceImpl implements MemberService {
                 || rawPassword.length() > MAX_PASSWORD_LENGTH) {
             throw new IllegalArgumentException(
                     "비밀번호는 " + MIN_PASSWORD_LENGTH + "~" + MAX_PASSWORD_LENGTH + "자여야 합니다.");
+        }
+        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            // 한글 등 멀티바이트 문자가 많으면 글자 수는 64자 이내여도 72바이트를 넘을 수 있다.
+            throw new IllegalArgumentException("비밀번호가 너무 깁니다. 더 짧게 설정해주세요.");
+        }
+    }
+
+    /**
+     * 회원정보 필드의 길이와 마크업 삽입을 서버측에서 검증한다. 출력단 이스케이프와 함께 저장형 XSS를
+     * 이중으로 막는다({@code <}, {@code >}, 제어문자 금지).
+     */
+    private void validateProfileFields(MemberDTO member, boolean requireNickname) {
+        if (member == null) {
+            throw new IllegalArgumentException("회원 정보를 확인해주세요.");
+        }
+        String nickName = member.getNickName();
+        if (requireNickname && !StringUtils.hasText(nickName)) {
+            throw new IllegalArgumentException("별명을 입력해주세요.");
+        }
+        validateSafeText(nickName, "별명", MAX_NICKNAME_LENGTH);
+        validateSafeText(member.getRealName(), "이름", MAX_REALNAME_LENGTH);
+        validateSafeText(member.getEmail(), "이메일", MAX_EMAIL_LENGTH);
+        validateSafeText(member.getPhone(), "연락처", MAX_PHONE_LENGTH);
+    }
+
+    private void validateSafeText(String value, String fieldLabel, int maxLength) {
+        if (value == null || value.isEmpty()) {
+            return;
+        }
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(fieldLabel + "은(는) " + maxLength + "자 이내여야 합니다.");
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '<' || c == '>') {
+                throw new IllegalArgumentException(fieldLabel + "에 사용할 수 없는 문자가 포함되어 있습니다.");
+            }
+            if (Character.isISOControl(c) && c != '\t') {
+                throw new IllegalArgumentException(fieldLabel + "에 사용할 수 없는 문자가 포함되어 있습니다.");
+            }
+        }
+    }
+
+    private void validateGrade(int grade) {
+        if (grade < MIN_GRADE || grade > MAX_GRADE) {
+            throw new IllegalArgumentException("회원 등급은 " + MIN_GRADE + "~" + MAX_GRADE + " 사이여야 합니다.");
         }
     }
 

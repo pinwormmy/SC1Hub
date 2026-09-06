@@ -30,16 +30,13 @@ class MemberServiceImplTest {
     @Mock
     private MemberMapper memberMapper;
 
-    @Mock
-    private EmailService emailService;
-
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private MemberServiceImpl memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberServiceImpl(memberMapper, emailService, passwordEncoder);
+        memberService = new MemberServiceImpl(memberMapper, passwordEncoder);
     }
 
     private MemberDTO storedMember(String storedPw) {
@@ -109,6 +106,7 @@ class MemberServiceImplTest {
     @Test
     void signUpStoresBcryptButKeepsRawPasswordOnTheDtoForAutoLogin() throws Exception {
         MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+        signUp.setNickName("tester");
 
         memberService.submitSignUp(signUp);
 
@@ -121,6 +119,7 @@ class MemberServiceImplTest {
     @Test
     void modifyMyInfoStoresBcryptButKeepsRawPasswordForSessionRefresh() throws Exception {
         MemberDTO modify = loginAttempt(RAW_PASSWORD);
+        modify.setNickName("tester");
 
         memberService.submitModifyMyInfo(modify);
 
@@ -143,16 +142,42 @@ class MemberServiceImplTest {
     }
 
     @Test
-    void temporaryPasswordIsStoredHashedButEmailedInPlaintextOnce() {
-        MemberDTO member = storedMember("old-password");
-        when(memberMapper.findByUserIdAndEmail(MEMBER_ID, "user@example.com")).thenReturn(member);
+    void signUpRejectsNicknameContainingMarkup() throws Exception {
+        MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+        signUp.setNickName("<img src=x onerror=alert(1)>");
 
-        String result = memberService.findPassword(MEMBER_ID, "user@example.com");
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
+        verify(memberMapper, never()).submitSignUp(any());
+    }
 
-        assertEquals("success", result);
-        ArgumentCaptor<MemberDTO> captor = ArgumentCaptor.forClass(MemberDTO.class);
-        verify(memberMapper).updatePassword(captor.capture());
-        String storedPw = captor.getValue().getPw();
-        assertTrue(storedPw.startsWith("$2"), "임시 비밀번호도 해시로 저장돼야 한다");
+    @Test
+    void modifyMyInfoRejectsEmailContainingAngleBrackets() throws Exception {
+        MemberDTO modify = loginAttempt(RAW_PASSWORD);
+        modify.setNickName("tester");
+        modify.setEmail("a@b.com<script>");
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitModifyMyInfo(modify));
+        verify(memberMapper, never()).submitModifyMyInfo(any());
+    }
+
+    @Test
+    void newPasswordExceedingSeventyTwoUtf8BytesIsRejected() throws Exception {
+        // 한글 25자는 64자 이내지만 UTF-8 로 75바이트라 BCrypt 72바이트 절단 구간에 들어간다.
+        MemberDTO signUp = loginAttempt("가".repeat(25));
+        signUp.setNickName("tester");
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
+        verify(memberMapper, never()).submitSignUp(any());
+    }
+
+    @Test
+    void adminEditRejectsOutOfRangeGrade() {
+        MemberDTO edit = new MemberDTO();
+        edit.setId(MEMBER_ID);
+        edit.setNickName("tester");
+        edit.setGrade(9);
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitModifyMemberByAdmin(edit));
+        verify(memberMapper, never()).submitModifyMemberByAdmin(any());
     }
 }

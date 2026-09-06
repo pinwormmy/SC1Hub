@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
@@ -29,6 +30,7 @@ import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class PostImageService {
@@ -37,7 +39,15 @@ public class PostImageService {
     static final int MAX_WIDTH = 700;
     static final int MAX_HEIGHT = 2000;
     static final long TARGET_OUTPUT_BYTES = 400L * 1024L;
-    private static final long MAX_PIXELS = 40_000_000L;
+    // 헤더 단계에서 비정상적으로 큰 소스를 거부하는 상한(압축 폭탄 방어). 실제 디코딩 메모리는
+    // 아래 서브샘플링으로 별도 제한한다.
+    private static final long MAX_PIXELS = 24_000_000L;
+    // 디코딩된 이미지가 최종 크기(700x2000)의 약 2배를 넘지 않도록 서브샘플링한다. 128MB 힙에서
+    // 전체 해상도 디코딩이 힙을 소진하지 않게 막는다.
+    private static final int DECODE_MAX_WIDTH = MAX_WIDTH * 2;
+    private static final int DECODE_MAX_HEIGHT = MAX_HEIGHT * 2;
+    // 작은 힙을 보호하기 위해 동시 디코딩 수를 제한한다.
+    private static final Semaphore DECODE_PERMITS = new Semaphore(2);
 
     private final String uploadPath;
     private final String imageUploadPath;
@@ -58,9 +68,21 @@ public class PostImageService {
             throw new IllegalArgumentException("이미지는 10MB 이하만 업로드할 수 있습니다.");
         }
 
-        DecodedImage decoded = decode(upload.getBytes());
-        BufferedImage resized = resizeToBounds(decoded.image);
-        EncodedImage encoded = encodeWithinTarget(resized, decoded.format);
+        byte[] uploadBytes = upload.getBytes();
+        EncodedImage encoded;
+        try {
+            DECODE_PERMITS.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("이미지 처리가 중단되었습니다.", e);
+        }
+        try {
+            DecodedImage decoded = decode(uploadBytes);
+            BufferedImage resized = resizeToBounds(decoded.image);
+            encoded = encodeWithinTarget(resized, decoded.format);
+        } finally {
+            DECODE_PERMITS.release();
+        }
         Path basePath = resolvePrimaryUploadPath();
         if (basePath == null) {
             throw new IllegalStateException("업로드 경로가 설정되어 있지 않습니다.");
@@ -102,7 +124,13 @@ public class PostImageService {
                 if (width < 1 || height < 1 || (long) width * height > MAX_PIXELS) {
                     throw new IllegalArgumentException("이미지 크기가 너무 큽니다.");
                 }
-                BufferedImage image = reader.read(0);
+                ImageReadParam param = reader.getDefaultReadParam();
+                int subsampling = computeSubsampling(width, height);
+                if (subsampling > 1) {
+                    // 전체 해상도를 메모리에 올리지 않고 축소된 픽셀만 읽는다.
+                    param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+                }
+                BufferedImage image = reader.read(0, param);
                 if (image == null) {
                     throw new IllegalArgumentException("이미지 파일을 읽을 수 없습니다.");
                 }
@@ -111,6 +139,12 @@ public class PostImageService {
                 reader.dispose();
             }
         }
+    }
+
+    private int computeSubsampling(int width, int height) {
+        int horizontal = (int) Math.ceil(width / (double) DECODE_MAX_WIDTH);
+        int vertical = (int) Math.ceil(height / (double) DECODE_MAX_HEIGHT);
+        return Math.max(1, Math.max(horizontal, vertical));
     }
 
     private BufferedImage resizeToBounds(BufferedImage source) {

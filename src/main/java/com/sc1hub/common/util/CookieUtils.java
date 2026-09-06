@@ -23,6 +23,8 @@ public class CookieUtils {
         Cookie cookie = new Cookie(cookieName, "viewed");
         cookie.setMaxAge(5 * 60); // 5분
         cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
         return cookie;
     }
 }

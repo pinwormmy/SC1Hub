@@ -184,13 +184,13 @@
                         </div>
 
                         <c:if test="${not empty message}">
-                            <div class="alias-message">${message}</div>
+                            <div class="alias-message"><c:out value="${message}"/></div>
                         </c:if>
 
                         <form action="/adminPage/aliasDictionary" method="get" class="admin-search-form">
                             <label class="admin-search-label" for="aliasKeyword">검색</label>
                             <div class="admin-search-row">
-                                <input class="admin-input" id="aliasKeyword" type="text" name="keyword" value="${keyword}" placeholder="alias, canonical_terms, 대상 게시판">
+                                <input class="admin-input" id="aliasKeyword" type="text" name="keyword" value="<c:out value='${keyword}'/>" placeholder="alias, canonical_terms, 대상 게시판">
                                 <button type="submit" class="admin-btn">검색</button>
                                 <c:if test="${not empty keyword}">
                                     <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary'">검색취소</button>
@@ -204,10 +204,10 @@
                         <form action="/adminPage/aliasDictionary/create" method="post" class="alias-form">
                             <div class="alias-grid">
                                 <label class="alias-label" for="createAlias">alias *</label>
-                                <input class="alias-input" id="createAlias" type="text" name="alias" value="${createForm.alias}" placeholder="커공발">
+                                <input class="alias-input" id="createAlias" type="text" name="alias" value="<c:out value='${createForm.alias}'/>" placeholder="커공발">
 
                                 <label class="alias-label" for="createCanonical">canonical_terms *</label>
-                                <textarea class="alias-textarea" id="createCanonical" name="canonicalTerms" placeholder="줄바꿈 또는 콤마로 구분">${createForm.canonicalTerms}</textarea>
+                                <textarea class="alias-textarea" id="createCanonical" name="canonicalTerms" placeholder="줄바꿈 또는 콤마로 구분"><c:out value="${createForm.canonicalTerms}"/></textarea>
                                 <div class="alias-help">예) 커피공장, 커피공장 빌드, 커피공장 운영</div>
 
                                 <label class="alias-label">대상 게시판</label>
@@ -270,7 +270,7 @@
                                 </div>
                                 <div class="alias-help">VS 게시판은 개별 선택 가능하며, 하나만 선택하거나 여러 개를 함께 선택할 수 있습니다.</div>
                             </div>
-                            <input type="hidden" name="keyword" value="${keyword}">
+                            <input type="hidden" name="keyword" value="<c:out value='${keyword}'/>">
                             <div class="alias-actions">
                                 <button type="submit" class="admin-btn">등록</button>
                             </div>
@@ -283,10 +283,10 @@
                                 <input type="hidden" name="id" value="${editForm.id}">
                                 <div class="alias-grid">
                                     <label class="alias-label" for="editAlias">alias *</label>
-                                    <input class="alias-input" id="editAlias" type="text" name="alias" value="${editForm.alias}">
+                                    <input class="alias-input" id="editAlias" type="text" name="alias" value="<c:out value='${editForm.alias}'/>">
 
                                     <label class="alias-label" for="editCanonical">canonical_terms *</label>
-                                    <textarea class="alias-textarea" id="editCanonical" name="canonicalTerms">${editForm.canonicalTerms}</textarea>
+                                    <textarea class="alias-textarea" id="editCanonical" name="canonicalTerms"><c:out value="${editForm.canonicalTerms}"/></textarea>
                                     <div class="alias-help">줄바꿈 또는 콤마로 구분</div>
 
                                     <label class="alias-label">대상 게시판</label>
@@ -349,10 +349,10 @@
                                     </div>
                                     <div class="alias-help">VS 게시판은 개별 선택 가능하며, 하나만 선택하거나 여러 개를 함께 선택할 수 있습니다.</div>
                                 </div>
-                                <input type="hidden" name="keyword" value="${keyword}">
+                                <input type="hidden" name="keyword" value="<c:out value='${keyword}'/>">
                                 <div class="alias-actions">
                                     <button type="submit" class="admin-btn">수정</button>
-                                    <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary?keyword=${keyword}'">수정취소</button>
+                                    <button type="button" class="admin-btn admin-btn--ghost" data-alias-nav data-keyword="<c:out value='${keyword}'/>">수정취소</button>
                                 </div>
                             </form>
                         </c:if>
@@ -375,19 +375,19 @@
                                     <c:forEach items="${aliasList}" var="alias">
                                         <tr>
                                             <td>${alias.id}</td>
-                                            <td>${alias.alias}</td>
+                                            <td><c:out value="${alias.alias}"/></td>
                                             <td>
-                                                <div>${canonicalDisplay[alias.id]}</div>
+                                                <div><c:out value="${canonicalDisplay[alias.id]}"/></div>
                                             </td>
                                             <td>
-                                                <div>${boardTargetDisplay[alias.id]}</div>
+                                                <div><c:out value="${boardTargetDisplay[alias.id]}"/></div>
                                             </td>
                                             <td>
                                                 <div class="alias-actions">
-                                                    <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/aliasDictionary?editId=${alias.id}&keyword=${keyword}'">수정</button>
+                                                    <button type="button" class="admin-btn admin-btn--ghost" data-alias-nav data-edit-id="${alias.id}" data-keyword="<c:out value='${keyword}'/>">수정</button>
                                                     <form action="/adminPage/aliasDictionary/delete" method="post" onsubmit="return confirm('삭제하시겠습니까?');">
                                                         <input type="hidden" name="id" value="${alias.id}">
-                                                        <input type="hidden" name="keyword" value="${keyword}">
+                                                        <input type="hidden" name="keyword" value="<c:out value='${keyword}'/>">
                                                         <button type="submit" class="admin-btn admin-btn--danger">삭제</button>
                                                     </form>
                                                 </div>
@@ -408,6 +408,26 @@
         </div>
     </div>
 </div>
+<script>
+// 검색어(keyword)를 인라인 핸들러 대신 data 속성으로 넘겨 스크립트 삽입 경로를 없앤다.
+document.addEventListener('click', function (event) {
+    var target = event.target instanceof Element ? event.target.closest('[data-alias-nav]') : null;
+    if (!target) {
+        return;
+    }
+    var url = '/adminPage/aliasDictionary';
+    var params = [];
+    var editId = target.getAttribute('data-edit-id');
+    if (editId) {
+        params.push('editId=' + encodeURIComponent(editId));
+    }
+    var keyword = target.getAttribute('data-keyword') || '';
+    if (keyword) {
+        params.push('keyword=' + encodeURIComponent(keyword));
+    }
+    location.href = params.length ? url + '?' + params.join('&') : url;
+});
+</script>
 <%@ include file="/WEB-INF/views/include/footer.jspf" %>
 </body>
 </html>

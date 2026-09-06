@@ -52,7 +52,8 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
         String action = path.substring(path.lastIndexOf('/') + 1);
         boolean contentWrite = (path.startsWith("/boards/") && !BOARD_READ_ACTIONS.contains(action))
                 || path.startsWith("/api/chat/") || path.startsWith("/strategy-tips")
-                || path.equals("/imageUpload") || path.equals("/submitSignUp");
+                || path.equals("/imageUpload") || path.equals("/submitSignUp")
+                || path.equals("/submitModifyMyInfo");
         if (!contentWrite || (member != null && member.getGrade() == 3)) {
             return true;
         }

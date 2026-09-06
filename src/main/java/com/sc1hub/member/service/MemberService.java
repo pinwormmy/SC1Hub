@@ -27,11 +27,6 @@ public interface MemberService {
 
     void submitModifyMemberByAdmin(MemberDTO memberDTO);
 
-
-    String findIdByNameAndEmail(String userName, String email);
-
-    String findPassword(String userId, String email);
-
     void deleteMember(String id);
 
     String isUniqueNickName(String nickName);

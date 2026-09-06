@@ -328,7 +328,7 @@
                             <form action="/adminPage" method="get" class="admin-search-form">
                                 <label class="admin-search-label" for="adminKeyword">회원 검색</label>
                                 <div class="admin-search-row">
-                                    <input class="admin-input" id="adminKeyword" type="text" name="keyword" value="${pageInfo.keyword}" placeholder="ID, 별명, 이름">
+                                    <input class="admin-input" id="adminKeyword" type="text" name="keyword" value="<c:out value='${pageInfo.keyword}'/>" placeholder="ID, 별명, 이름">
                                     <button type="submit" class="admin-btn">검색</button>
                                     <c:if test="${pageInfo.keyword != ''}">
                                         <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage'" accesskey="c">검색취소(C)</button>
@@ -350,15 +350,15 @@
                                     <tbody>
                                         <c:forEach items="${memberList}" var="member">
                                             <tr>
-                                                <td data-label="ID">${member.id}</td>
-                                                <td data-label="별명">${member.nickName}</td>
-                                                <td data-label="이메일">${member.email}</td>
+                                                <td data-label="ID"><c:out value="${member.id}"/></td>
+                                                <td data-label="별명"><c:out value="${member.nickName}"/></td>
+                                                <td data-label="이메일"><c:out value="${member.email}"/></td>
                                                 <td data-label="등급">${member.grade}</td>
                                                 <td data-label="가입일"><fmt:formatDate value="${member.regDate}" pattern="yy.MM.dd"/></td>
                                                 <td data-label="관리">
                                                     <div class="admin-actions">
-                                                        <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/modifyMemberByAdmin?id=${member.id}'">수정</button>
-                                                        <button type="button" class="admin-btn admin-btn--danger" onclick="confirmDelete('${member.id}')">탈퇴</button>
+                                                        <button type="button" class="admin-btn admin-btn--ghost" data-member-edit data-member-id="<c:out value='${member.id}'/>">수정</button>
+                                                        <button type="button" class="admin-btn admin-btn--danger" data-member-delete data-member-id="<c:out value='${member.id}'/>">탈퇴</button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -375,7 +375,7 @@
                                 <ul class="page-list">
                                     <c:if test="${pageInfo.prevPageSetPoint != 0}">
                                         <li class="page-item">
-                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.prevPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Previous">
+                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.prevPageSetPoint}&searchType=<c:out value='${pageInfo.searchType}'/>&keyword=<c:out value='${pageInfo.keyword}'/>" aria-label="Previous">
                                                 <span aria-hidden="true">&laquo;</span>
                                             </a>
                                         </li>
@@ -383,16 +383,16 @@
                                     <c:forEach var="i" begin="${pageInfo.pageBeginPoint}" end="${pageInfo.pageEndPoint}">
                                         <c:choose>
                                             <c:when test="${i == pageInfo.recentPage}">
-                                                <li><a class="page-link active" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
+                                                <li><a class="page-link active" href="/adminPage?recentPage=${i}&searchType=<c:out value='${pageInfo.searchType}'/>&keyword=<c:out value='${pageInfo.keyword}'/>">${i}</a></li>
                                             </c:when>
                                             <c:otherwise>
-                                                <li><a class="page-link" href="/adminPage?recentPage=${i}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}">${i}</a></li>
+                                                <li><a class="page-link" href="/adminPage?recentPage=${i}&searchType=<c:out value='${pageInfo.searchType}'/>&keyword=<c:out value='${pageInfo.keyword}'/>">${i}</a></li>
                                             </c:otherwise>
                                         </c:choose>
                                     </c:forEach>
                                     <c:if test="${pageInfo.nextPageSetPoint <= pageInfo.totalPage}">
                                         <li class="page-item">
-                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.nextPageSetPoint}&searchType=${pageInfo.searchType}&keyword=${pageInfo.keyword}" aria-label="Next">
+                                            <a class="page-link" href="/adminPage?recentPage=${pageInfo.nextPageSetPoint}&searchType=<c:out value='${pageInfo.searchType}'/>&keyword=<c:out value='${pageInfo.keyword}'/>" aria-label="Next">
                                                 <span aria-hidden="true">&raquo;</span>
                                             </a>
                                         </li>
@@ -450,6 +450,20 @@
 <%@ include file="/WEB-INF/views/include/footer.jspf" %>
 
 <script>
+// 회원 ID를 인라인 핸들러 대신 data 속성으로 넘겨받아 스크립트 삽입 경로를 없앤다.
+document.addEventListener('click', function (event) {
+    var target = event.target instanceof Element ? event.target.closest('[data-member-id]') : null;
+    if (!target) {
+        return;
+    }
+    var id = target.getAttribute('data-member-id') || '';
+    if (target.hasAttribute('data-member-edit')) {
+        location.href = '/modifyMemberByAdmin?id=' + encodeURIComponent(id);
+    } else if (target.hasAttribute('data-member-delete')) {
+        confirmDelete(id);
+    }
+});
+
 async function confirmDelete(id) {
     if(confirm("정말로 탈퇴시키겠습니까?")) {
         try {

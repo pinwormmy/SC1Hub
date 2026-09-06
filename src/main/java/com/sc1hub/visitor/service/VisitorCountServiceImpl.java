@@ -104,6 +104,7 @@ public class VisitorCountServiceImpl implements VisitorCountService {
         visitorCookie.setMaxAge(secondsUntilTomorrow());
         visitorCookie.setPath(ROOT_PATH);
         visitorCookie.setHttpOnly(true);
+        visitorCookie.setSecure(true);
         response.addCookie(visitorCookie);
     }
 

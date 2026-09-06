@@ -117,10 +117,10 @@ function getGuestPostPassword() {
 }
 
 function goGuestPostModify(boardTitle, postNum) {
-    verifyAndRunGuestPostAction(boardTitle, postNum, function (guestPassword) {
+    // 비밀번호 검증(POST)이 서버 세션에 수정 권한을 부여하므로, 이동 URL에는 비밀번호를 싣지 않는다.
+    verifyAndRunGuestPostAction(boardTitle, postNum, function () {
         location.href = '/boards/' + encodeURIComponent(boardTitle)
-            + '/modifyPost?postNum=' + encodeURIComponent(postNum)
-            + '&guestPassword=' + encodeURIComponent(guestPassword);
+            + '/modifyPost?postNum=' + encodeURIComponent(postNum);
     });
     return false;
 }

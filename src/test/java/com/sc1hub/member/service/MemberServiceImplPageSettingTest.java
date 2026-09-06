@@ -18,9 +18,6 @@ import static org.mockito.Mockito.when;
 class MemberServiceImplPageSettingTest {
 
     @Mock
-    private EmailService emailService;
-
-    @Mock
     private MemberMapper memberMapper;
 
     @InjectMocks

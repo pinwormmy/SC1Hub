@@ -1,5 +1,6 @@
 package com.sc1hub.assistant.rag;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
@@ -504,6 +505,8 @@ public class AssistantRagSearchService {
         private final boolean ready;
         /** ready여도 false면 일부 글이 빠진 인덱스다. reindex를 다시 실행해야 한다. */
         private final boolean complete;
+        // 내부 절대 경로는 비로그인 상태 API 응답으로 노출하지 않는다(정보 노출 축소).
+        @JsonIgnore
         private final String indexPath;
         private final String embeddingModel;
         private final Date createdAt;

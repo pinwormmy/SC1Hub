@@ -2,10 +2,13 @@ package com.sc1hub.member.service;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.test.util.ReflectionTestUtils;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -79,5 +82,27 @@ class LoginAttemptGuardTest {
             guard.recordFailure("tester");
         }
         assertFalse(guard.isBlocked("someoneElse"));
+    }
+
+    @Test
+    void trackedAccountsStayWithinTheHardCap() {
+        for (int i = 0; i < LoginAttemptGuard.MAX_TRACKED_ACCOUNTS + 50; i++) {
+            guard.recordFailure("synthetic-" + i);
+        }
+        Object attempts = ReflectionTestUtils.getField(guard, "attempts");
+        assertTrue(attempts instanceof Map);
+        assertTrue(((Map<?, ?>) attempts).size() <= LoginAttemptGuard.MAX_TRACKED_ACCOUNTS,
+                "실패 기록은 선언된 상한을 넘지 않아야 한다");
+    }
+
+    @Test
+    void overlongMemberIdIsTruncatedSoItCannotBalloonMemory() {
+        String longId = "a".repeat(500);
+        for (int i = 0; i < LoginAttemptGuard.MAX_FAILURES; i++) {
+            guard.recordFailure(longId);
+        }
+        assertTrue(guard.isBlocked(longId));
+        // 100자로 잘린 키와 동일하게 취급된다.
+        assertTrue(guard.isBlocked("a".repeat(100)));
     }
 }

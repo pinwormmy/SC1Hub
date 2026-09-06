@@ -57,6 +57,8 @@ sc1hub.assistant.rag.enabled=false
 sc1hub.assistant.rag.autoUpdate.enabled=false
 sc1hub.strategy-tip.ai.enabled=false
 sc1hub.http-redirect.enabled=false
+# 로컬은 평문 HTTP(8082)로 접속하므로 Secure 세션 쿠키를 끄지 않으면 로그인이 유지되지 않는다.
+server.servlet.session.cookie.secure=false
 EOF
 
 echo "Starting SC1Hub locally on http://localhost:8082"

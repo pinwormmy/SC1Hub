@@ -209,7 +209,7 @@ public class BoardController {
     @PostMapping("/{boardTitle}/verifyGuestPostPassword")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> verifyGuestPostPassword(@PathVariable String boardTitle,
-            @RequestParam int postNum, @RequestParam String guestPassword) throws Exception {
+            @RequestParam int postNum, @RequestParam String guestPassword, HttpSession session) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         Map<String, Object> response = new HashMap<>();
         BoardDTO post = boardService.readPost(boardTitle, postNum);
@@ -221,7 +221,11 @@ public class BoardController {
 
         boolean valid = guestPasswordMatches(post, guestPassword);
         response.put("valid", valid);
-        if (!valid) {
+        if (valid) {
+            // 성공한 검증만 서버 세션에 수정 권한을 부여한다. 이후 수정 화면은 URL 비밀번호가 아니라
+            // 이 세션 권한으로만 접근하므로 GET 으로 비밀번호를 시험하는 경로가 사라진다.
+            authorizeGuestPost(session, boardTitle, postNum);
+        } else {
             response.put("message", "비밀번호가 일치하지 않습니다.");
         }
         return new ResponseEntity<>(response, HttpStatus.OK);
@@ -229,7 +233,7 @@ public class BoardController {
 
     @GetMapping(value = "/{boardTitle}/modifyPost")
     public String modifyPost(@PathVariable String boardTitle, Model model, int postNum,
-            @RequestParam(required = false) String guestPassword, HttpSession session) throws Exception {
+            HttpSession session) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         BoardDTO post = boardService.readPost(boardTitle, postNum);
         if (post == null) {
@@ -237,8 +241,6 @@ public class BoardController {
             model.addAttribute("url", "/boards/" + boardTitle);
             return "alert";
         }
-
-        authorizeGuestPostIfValid(boardTitle, post, guestPassword, session);
 
         MemberDTO member = getMember(session);
         if (hasManagePermission(boardTitle, post, member, session)) {
@@ -534,15 +536,6 @@ public class BoardController {
         return member != null && Objects.equals(post.getWriter(), member.getNickName());
     }
 
-    private void authorizeGuestPostIfValid(String boardTitle, BoardDTO post, String guestPassword, HttpSession session) {
-        if (!isGuestPost(post) || !isGuestWritableBoard(boardTitle) || session == null) {
-            return;
-        }
-        if (guestPasswordMatches(post, guestPassword)) {
-            authorizeGuestPost(session, boardTitle, post.getPostNum());
-        }
-    }
-
     private boolean guestPasswordMatches(BoardDTO post, String guestPassword) {
         return Objects.equals(post.getGuestPassword(), trimToNull(guestPassword));
     }
@@ -591,6 +584,9 @@ public class BoardController {
     }
 
     private void authorizeGuestPost(HttpSession session, String boardTitle, int postNum) {
+        if (session == null) {
+            return;
+        }
         getAuthorizedGuestPostKeys(session).add(buildGuestPostAuthKey(boardTitle, postNum));
     }
 

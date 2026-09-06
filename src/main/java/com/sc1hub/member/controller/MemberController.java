@@ -5,6 +5,7 @@ import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
+import com.sc1hub.member.service.MemberSessionRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -32,10 +33,13 @@ public class MemberController {
 
     private final MemberService memberService;
     private final LoginAttemptGuard loginAttemptGuard;
+    private final MemberSessionRegistry sessionRegistry;
 
-    public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard) {
+    public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard,
+                            MemberSessionRegistry sessionRegistry) {
         this.memberService = memberService;
         this.loginAttemptGuard = loginAttemptGuard;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @GetMapping("/login")
@@ -65,10 +69,14 @@ public class MemberController {
     }
 
     @PostMapping("/submitSignUp")
-    public String submitSignUp(MemberDTO memberDTO, HttpSession httpSession) throws Exception {
+    public String submitSignUp(HttpServletRequest request, MemberDTO memberDTO, HttpSession httpSession)
+            throws Exception {
         memberService.submitSignUp(memberDTO);
-        httpSession.setAttribute("member", memberService.checkLoginData(memberDTO)); // 로그인도 해줌
-        log.debug("회원가입 확인: {}", memberDTO);
+        MemberDTO loginData = memberService.checkLoginData(memberDTO); // 로그인도 해줌
+        rotateSession(request); // 세션 고정 공격 방지: 인증 후 세션 ID 교체
+        httpSession.setAttribute("member", loginData);
+        registerSession(loginData, httpSession);
+        log.debug("회원가입 확인: {}", memberDTO.getId());
         return "redirect:/";
     }
 
@@ -88,9 +96,11 @@ public class MemberController {
             return "login";
         }
         loginAttemptGuard.reset(memberDTO.getId());
-        session.setAttribute("member", loginData);
-        log.debug("로그인 확인: {}", memberDTO);
         Object returnPath = session.getAttribute("pageBeforeLogin");
+        rotateSession(request); // 세션 고정 공격 방지: 인증 후 세션 ID 교체
+        session.setAttribute("member", loginData);
+        registerSession(loginData, session);
+        log.debug("로그인 확인: {}", memberDTO.getId());
         String target = returnPath instanceof String ? (String) returnPath : "/";
         return "redirect:" + target;
     }
@@ -119,7 +129,11 @@ public class MemberController {
         }
         member.setId(authenticatedMember.getId());
         memberService.submitModifyMyInfo(member);
-        session.setAttribute("member", memberService.checkLoginData(member)); // 재로그인해서 회원정보갱신
+        MemberDTO refreshed = memberService.checkLoginData(member); // 재로그인해서 회원정보갱신
+        session.setAttribute("member", refreshed);
+        registerSession(refreshed, session);
+        // 비밀번호가 바뀌었을 수 있으므로 다른 기기의 기존 세션은 회수한다.
+        sessionRegistry.invalidateMemberExcept(authenticatedMember.getId(), session);
         return "myPage";
     }
 
@@ -183,6 +197,8 @@ public class MemberController {
     public String submitModifyMemberByAdmin(MemberDTO memberDTO) {
         log.info("관리자의 회원수정 제출");
         memberService.submitModifyMemberByAdmin(memberDTO);
+        // 등급 변경 등으로 세션 정보가 낡았으므로 대상 회원의 기존 세션을 회수한다.
+        sessionRegistry.invalidateMember(memberDTO.getId());
         return "redirect:/adminPage";
     }
 
@@ -192,37 +208,9 @@ public class MemberController {
         return "findId";
     }
 
-    @PostMapping("/findId")
-    public String findIdByNameAndEmail(String userName, String email, Model model) {
-        String userId = memberService.findIdByNameAndEmail(userName, email);
-        if (userId != null && !userId.isEmpty()) {
-            model.addAttribute("message", "당신의 아이디는 " + userId + "입니다.");
-        } else {
-            model.addAttribute("message", "입력하신 이름과 이메일로 등록된 아이디를 찾을 수 없습니다.");
-        }
-        return "findId";
-    }
-
     @GetMapping(value = "/findPassword")
     public String findPassword() {
         log.info("패스워드 찾기 페이지");
-        return "findPassword";
-    }
-
-    @PostMapping("/findPassword")
-    public String findPassword(String userId, String email, Model model) {
-        try {
-            String result = memberService.findPassword(userId, email);
-
-            if (result.equals("success")) {
-                model.addAttribute("message", "임시 패스워드가 이메일로 전송되었습니다.");
-            } else {
-                model.addAttribute("message", result);
-            }
-        } catch (Exception e) {
-            log.error("비밀번호 찾기 중 에러 발생", e);
-            model.addAttribute("message", "비밀번호 찾기 중 문제가 발생했습니다. 다시 시도해 주세요.");
-        }
         return "findPassword";
     }
 
@@ -232,6 +220,7 @@ public class MemberController {
         Map<String, Boolean> response = new HashMap<>();
         try {
             memberService.deleteMember(id);
+            sessionRegistry.invalidateMember(id); // 탈퇴 처리된 회원의 기존 세션을 즉시 종료한다.
             response.put("success", true);
             return new ResponseEntity<>(response, HttpStatus.OK);
         } catch (DataAccessException dae) {
@@ -257,8 +246,16 @@ public class MemberController {
             userId = member.getId(); // userId 변수를 초기화합니다.
 
             memberService.deleteMember(userId);
-
-            request.getSession().invalidate();
+            // 현재 세션과 다른 기기의 세션을 모두 종료한다.
+            sessionRegistry.invalidateMember(userId);
+            HttpSession current = request.getSession(false);
+            if (current != null) {
+                try {
+                    current.invalidate();
+                } catch (IllegalStateException alreadyInvalidated) {
+                    // 레지스트리가 이미 무효화한 세션
+                }
+            }
             return "{\"success\": true}";
         } catch (DataAccessException dae) {
             // 데이터베이스 관련 예외 처리
@@ -283,6 +280,27 @@ public class MemberController {
         session.setMaxInactiveInterval(LOGIN_SESSION_TIMEOUT_SECONDS);
         log.debug("로그인 시간을 연장합니다. memberId={}", member.getId());
         return ResponseEntity.noContent().build();
+    }
+
+    /** 인증 성공 시 세션 ID를 교체해 세션 고정(fixation) 공격을 무력화한다. */
+    private void rotateSession(HttpServletRequest request) {
+        if (request == null) {
+            return;
+        }
+        if (request.getSession(false) == null) {
+            request.getSession(true);
+        }
+        try {
+            request.changeSessionId();
+        } catch (IllegalStateException noSession) {
+            // 세션이 없으면 교체할 것도 없다.
+        }
+    }
+
+    private void registerSession(MemberDTO member, HttpSession session) {
+        if (member != null && session != null) {
+            sessionRegistry.register(member.getId(), session);
+        }
     }
 
     private String resolveSafeReturnPath(String referer) {

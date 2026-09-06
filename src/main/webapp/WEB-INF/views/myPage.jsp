@@ -15,11 +15,11 @@
                 <div class="media">
                     <div class="media-body">
                         <div class="member-info" style="font-size: 20px; line-height: 50px;">
-                            <span>ID : ${member.id}</span><br>
-                            <span>실명 : ${member.realName}</span><br>
-                            <span>별명 : ${member.nickName}</span><br>
-                            <span>연락처 : ${member.phone}</span><br>
-                            <span>이메일 : ${member.email}</span><br>
+                            <span>ID : <c:out value="${member.id}"/></span><br>
+                            <span>실명 : <c:out value="${member.realName}"/></span><br>
+                            <span>별명 : <c:out value="${member.nickName}"/></span><br>
+                            <span>연락처 : <c:out value="${member.phone}"/></span><br>
+                            <span>이메일 : <c:out value="${member.email}"/></span><br>
                             <hr>
                         </div>
                     </div>

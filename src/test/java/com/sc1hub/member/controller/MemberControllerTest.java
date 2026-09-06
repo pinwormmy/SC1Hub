@@ -3,6 +3,7 @@ package com.sc1hub.member.controller;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
+import com.sc1hub.member.service.MemberSessionRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,6 +16,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.ui.ExtendedModelMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -29,6 +31,9 @@ class MemberControllerTest {
 
     @Mock
     private LoginAttemptGuard loginAttemptGuard;
+
+    @Mock
+    private MemberSessionRegistry sessionRegistry;
 
     @InjectMocks
     private MemberController controller;
@@ -69,6 +74,24 @@ class MemberControllerTest {
         assertEquals("redirect:/", view);
         assertEquals(loggedIn, session.getAttribute("member"));
         verify(loginAttemptGuard).reset("user");
+    }
+
+    @Test
+    void submitLogin_rotatesSessionIdAndRegistersSession() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        request.setSession(session);
+        String beforeId = session.getId();
+        MemberDTO credentials = new MemberDTO();
+        credentials.setId("user");
+        MemberDTO loggedIn = new MemberDTO();
+        loggedIn.setId("user");
+        when(memberService.checkLoginData(credentials)).thenReturn(loggedIn);
+
+        controller.submitLogin(request, session, credentials, new ExtendedModelMap());
+
+        assertNotEquals(beforeId, request.getSession().getId(), "세션 고정 방지를 위해 로그인 시 세션 ID를 교체해야 한다");
+        verify(sessionRegistry).register("user", session);
     }
 
     @Test

@@ -19,11 +19,11 @@
                                 <table>
                                     <tr>
                                         <td>ID> </td>
-                                        <td>${member.id}<input type="hidden" name="id" value="${member.id}"></td>
+                                        <td><c:out value="${member.id}"/><input type="hidden" name="id" value="<c:out value='${member.id}'/>"></td>
                                     </tr>
                                     <tr>
                                         <td>별명> </td>
-                                        <td><input type="text" name="nickName" value="${member.nickName}"></td>
+                                        <td><input type="text" name="nickName" value="<c:out value='${member.nickName}'/>"></td>
                                     </tr>
                                     <tr>
                                         <td>비밀번호></td>
@@ -35,7 +35,7 @@
                                     </tr>
                                     <tr>
                                         <td>이메일> </td>
-                                        <td><input type="email" name="email" value="${member.email}"></td>
+                                        <td><input type="email" name="email" value="<c:out value='${member.email}'/>"></td>
                                     </tr>
                                 </table>
                                 <div style="margin-top: 20px;">

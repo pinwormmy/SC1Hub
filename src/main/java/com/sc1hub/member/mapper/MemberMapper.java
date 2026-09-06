@@ -4,7 +4,6 @@ import com.sc1hub.member.dto.VisitorsDTO;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.member.dto.MemberDTO;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -31,10 +30,6 @@ public interface MemberMapper {
 
 
     void updatePassword(MemberDTO member);
-
-    String getIdByNameAndEmail(@Param("userName") String userName, @Param("email") String email);
-
-    MemberDTO findByUserIdAndEmail(@Param("userId") String userId, @Param("email") String email);
 
     void deleteMember(String id);
 

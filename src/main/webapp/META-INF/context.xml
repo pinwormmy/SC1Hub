@@ -2,4 +2,7 @@
 <Context>
     <!-- Discard sessions across a restart so old privileges cannot survive a security release. -->
     <Manager pathname="" />
+    <!-- Stamp SameSite=Lax on every cookie (incl. JSESSIONID) regardless of proxy timing;
+         Secure/HttpOnly on the session cookie come from server.servlet.session.cookie.* . -->
+    <CookieProcessor sameSiteCookies="lax" />
 </Context>

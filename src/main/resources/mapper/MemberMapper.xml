@@ -70,16 +70,6 @@
         where id=#{id}
     </update>
 
-    <select id="getIdByNameAndEmail" resultType="String">
-        select id from member
-        where realname=#{userName} and email=#{email}
-    </select>
-
-    <select id="findByUserIdAndEmail" resultType="com.sc1hub.member.dto.MemberDTO">
-        select * from member
-        where id=#{userId} and email=#{email}
-    </select>
-
     <delete id="deleteMember">
         delete from member
         where id=#{id}

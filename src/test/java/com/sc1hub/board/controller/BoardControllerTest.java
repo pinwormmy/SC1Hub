@@ -148,7 +148,29 @@ class BoardControllerTest {
     }
 
     @Test
-    void modifyPost_allowsGuestAccess_whenPasswordMatches() throws Exception {
+    void modifyPost_allowsGuestAccess_whenSessionAuthorized() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(7);
+        post.setWriter("비회원작성자");
+        post.setGuestPassword("1234");
+
+        MockHttpSession session = new MockHttpSession();
+        Set<String> authorized = new HashSet<>();
+        authorized.add("funboard:7");
+        session.setAttribute("authorizedGuestPostKeys", authorized);
+        Model model = new ExtendedModelMap();
+
+        when(boardService.readPost("funboard", 7)).thenReturn(post);
+        when(boardService.getKoreanTitle("funboard")).thenReturn("꿀잼놀이터");
+
+        String view = boardController.modifyPost("funBoard", model, 7, session);
+
+        assertEquals("board/modifyPost", view);
+        assertEquals(post, model.asMap().get("post"));
+    }
+
+    @Test
+    void modifyPost_deniesGuestWithoutSessionAuthorization() throws Exception {
         BoardDTO post = new BoardDTO();
         post.setPostNum(7);
         post.setWriter("비회원작성자");
@@ -156,14 +178,32 @@ class BoardControllerTest {
 
         MockHttpSession session = new MockHttpSession();
         Model model = new ExtendedModelMap();
-
         when(boardService.readPost("funboard", 7)).thenReturn(post);
+
+        // GET 수정 화면은 더 이상 비밀번호 쿼리로 권한을 시험하지 않는다. 세션 권한이 없으면 거부.
+        String view = boardController.modifyPost("funBoard", model, 7, session);
+
+        assertEquals("alert", view);
+    }
+
+    @Test
+    void verifyGuestPostPassword_authorizesSessionOnValidPassword() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(7);
+        post.setGuestPassword("1234");
+
+        MockHttpSession session = new MockHttpSession();
+        when(boardService.readPost("funboard", 7)).thenReturn(post);
+
+        ResponseEntity<Map<String, Object>> response =
+                boardController.verifyGuestPostPassword("funBoard", 7, "1234", session);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(Boolean.TRUE, response.getBody().get("valid"));
+
+        // 검증 성공이 세션에 수정 권한을 부여했으므로 이후 GET 수정 화면이 열린다.
         when(boardService.getKoreanTitle("funboard")).thenReturn("꿀잼놀이터");
-
-        String view = boardController.modifyPost("funBoard", model, 7, "1234", session);
-
-        assertEquals("board/modifyPost", view);
-        assertEquals(post, model.asMap().get("post"));
+        assertEquals("board/modifyPost",
+                boardController.modifyPost("funBoard", new ExtendedModelMap(), 7, session));
     }
 
     @Test

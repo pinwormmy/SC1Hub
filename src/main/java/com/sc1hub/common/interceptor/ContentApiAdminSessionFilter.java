@@ -56,25 +56,22 @@ public class ContentApiAdminSessionFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        HttpSession existing = request.getSession(false);
-        if (existing != null && existing.getAttribute(MEMBER_ATTRIBUTE) != null) {
+        // 토큰 권한을 기존(브라우저·공유) 세션에 절대 싣지 않는다. 그렇지 않으면 같은 세션을
+        // 공유하는 동시 요청이 토큰 없이 관리자 권한을 볼 수 있다. 토큰 호출은 쿠키 없이 오므로
+        // 이 요청만을 위한 임시 세션을 새로 만들어 권한을 담고, 요청이 끝나면 폐기한다.
+        if (request.getSession(false) != null) {
             filterChain.doFilter(request, response);
             return;
         }
 
         MemberDTO admin = loadAdmin();
         HttpSession session = request.getSession(true);
-        boolean created = existing == null;
         session.setAttribute(MEMBER_ATTRIBUTE, admin);
         try {
             filterChain.doFilter(request, response);
         } finally {
             try {
-                if (created) {
-                    session.invalidate();
-                } else {
-                    session.removeAttribute(MEMBER_ATTRIBUTE);
-                }
+                session.invalidate();
             } catch (IllegalStateException ignored) {
                 // 처리 중 이미 무효화된 세션
             }
