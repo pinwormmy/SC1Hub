@@ -7,7 +7,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -46,7 +48,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
                 || (member != null && origin == null && referer == null)) {
             return reject(response, 403, "요청 출처를 확인할 수 없습니다. 사이트에서 다시 시도해주세요.");
         }
-        String path = request.getRequestURI().substring(request.getContextPath().length());
+        String path = resolveMappedPath(request);
         String action = path.substring(path.lastIndexOf('/') + 1);
         boolean contentWrite = (path.startsWith("/boards/") && !BOARD_READ_ACTIONS.contains(action))
                 || path.startsWith("/api/chat/") || path.startsWith("/strategy-tips")
@@ -69,6 +71,16 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
             return reject(response, 429, "작성 횟수가 너무 많습니다. 잠시 후 다시 시도해주세요.");
         }
         return true;
+    }
+
+    private String resolveMappedPath(HttpServletRequest request) {
+        // Classify the route Spring actually matched. Raw request URIs may contain
+        // matrix parameters or escaped characters that the router normalizes.
+        Object matchedPattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (matchedPattern instanceof String pattern && !pattern.isBlank()) {
+            return pattern;
+        }
+        return UrlPathHelper.defaultInstance.getPathWithinApplication(request);
     }
 
     private boolean sameOrigin(String value, HttpServletRequest request) {
