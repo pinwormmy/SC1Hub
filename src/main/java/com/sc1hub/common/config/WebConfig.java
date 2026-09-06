@@ -70,9 +70,10 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/boards/funBoard/**", "/boards/funboard/**");
         registry.addInterceptor(memberLoginInterceptor)
                 .addPathPatterns("/myPage", "/modifyMyInfo", "/submitModifyMyInfo", "/deleteMyAccount");
+        registry.addInterceptor(adminInterceptor).addPathPatterns("/boards/*/movePost");
         registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/deleteMember",
-                        "/**/writePost", "/**/modifyPost/**", "/**/deletePost/**",
+                .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/submitModifyMemberByAdmin", "/deleteMember",
+                        "/**/writePost", "/**/submitPost", "/**/submitModifyPost", "/**/modifyPost/**", "/**/deletePost/**",
                         "/**/movePost", "/migrate/**",
                         "/api/admin/alias-dictionary/**", "/api/admin/assistant-bot/**", "/api/admin/chat/**",
                         "/api/admin/content/**")

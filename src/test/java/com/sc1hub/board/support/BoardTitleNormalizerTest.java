@@ -13,6 +13,12 @@ class BoardTitleNormalizerTest {
     }
 
     @Test
+    void requireValidRejectsNonBoardDatabaseTables() {
+        assertThrows(IllegalArgumentException.class, () -> BoardTitleNormalizer.requireValid("member"));
+        assertThrows(IllegalArgumentException.class, () -> BoardTitleNormalizer.requireValid("chatmessage"));
+    }
+
+    @Test
     void requireValid_rejectsDynamicSqlCharacters() {
         assertThrows(IllegalArgumentException.class,
                 () -> BoardTitleNormalizer.requireValid("tipboard; drop table member"));

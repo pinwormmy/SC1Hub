@@ -492,6 +492,9 @@ public class BoardController {
             return false;
         }
         if (member != null) {
+            if (!boardService.canWrite(boardTitle, member)) {
+                return false;
+            }
             post.setWriter(member.getNickName());
             post.setGuestPassword(null);
             return true;

@@ -61,6 +61,19 @@ class BoardControllerTest {
     private BoardController boardController;
 
     @Test
+    void submitPostRejectsMemberWithoutBoardPermission() throws Exception {
+        MemberDTO member = new MemberDTO();
+        member.setId("ordinary");
+        member.setGrade(1);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession().setAttribute("member", member);
+        BoardDTO post = new BoardDTO();
+        post.setTitle("Unauthorized notice");
+        assertEquals("alert", boardController.submitPost("noticeboard", post, request, new ExtendedModelMap()));
+        verify(boardService, never()).submitPost(anyString(), any());
+    }
+
+    @Test
     void submitPost_returnsAlert_whenMemberMissing() throws Exception {
         BoardDTO post = new BoardDTO();
         post.setWriter("Alice");
