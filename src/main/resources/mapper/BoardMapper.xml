@@ -197,7 +197,6 @@
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvspboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvspboard' from pvspboard p
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvstboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvstboard' from pvstboard p
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from pvszboard_comment c where c.post_num=p.post_num), p.reg_date)), 'pvszboard' from pvszboard p
-                union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from supportboard_comment c where c.post_num=p.post_num), p.reg_date)), 'supportboard' from supportboard p
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from teamplayguideboard_comment c where c.post_num=p.post_num), p.reg_date)), 'teamplayguideboard' from teamplayguideboard p
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tipboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tipboard' from tipboard p
                 union all select p.post_num, p.title, greatest(p.reg_date, coalesce((select max(c.reg_date) from tvspboard_comment c where c.post_num=p.post_num), p.reg_date)), 'tvspboard' from tvspboard p

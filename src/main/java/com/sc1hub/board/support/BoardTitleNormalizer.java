@@ -9,8 +9,7 @@ public final class BoardTitleNormalizer {
     private static final Set<String> BOARDS = Set.of(
             "tvstboard", "tvszboard", "tvspboard", "zvstboard", "zvszboard", "zvspboard",
             "pvstboard", "pvszboard", "pvspboard", "teamplayguideboard", "noticeboard", "tipboard",
-            "supportboard", "videolinkboard", "promotionboard", "funboard",
-            "freeboard", "beginnerboard", "userguideboard");
+            "videolinkboard", "promotionboard", "funboard");
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("[a-z][a-z0-9]{0,63}");
 
     private BoardTitleNormalizer() {

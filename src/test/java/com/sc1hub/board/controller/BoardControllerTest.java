@@ -203,7 +203,7 @@ class BoardControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         Model model = new ExtendedModelMap();
 
-        String view = boardController.submitPost("freeBoard", post, request, model);
+        String view = boardController.submitPost("promotionBoard", post, request, model);
 
         assertEquals("alert", view);
         assertNotNull(model.asMap().get("msg"));
@@ -400,9 +400,9 @@ class BoardControllerTest {
         request.setSession(session);
         BoardDTO post = new BoardDTO();
         post.setPostNum(3);
-        when(boardService.readPost("freeboard", 3)).thenReturn(existingPost);
+        when(boardService.readPost("promotionboard", 3)).thenReturn(existingPost);
 
-        String view = boardController.submitModifyPost("freeBoard", post, request, new ExtendedModelMap());
+        String view = boardController.submitModifyPost("promotionBoard", post, request, new ExtendedModelMap());
 
         assertEquals("alert", view);
         verify(boardService, never()).submitModifyPost(anyString(), any(BoardDTO.class));
@@ -428,9 +428,9 @@ class BoardControllerTest {
         request.setSession(session);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("freeboard", 3)).thenReturn(existingPost);
+        when(boardService.readPost("promotionboard", 3)).thenReturn(existingPost);
 
-        String view = boardController.submitModifyPost("freeBoard", post, request, model);
+        String view = boardController.submitModifyPost("promotionBoard", post, request, model);
 
         assertEquals("alert", view);
         assertNotNull(model.asMap().get("msg"));

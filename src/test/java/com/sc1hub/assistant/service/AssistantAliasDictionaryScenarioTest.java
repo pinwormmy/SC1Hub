@@ -103,7 +103,7 @@ class AssistantAliasDictionaryScenarioTest {
         pvz.setBoardTitle("pVsZBoard");
 
         BoardListDTO free = new BoardListDTO();
-        free.setBoardTitle("FreeBoard");
+        free.setBoardTitle("PromotionBoard");
 
         BoardListDTO tip = new BoardListDTO();
         tip.setBoardTitle("TipBoard");
@@ -135,7 +135,7 @@ class AssistantAliasDictionaryScenarioTest {
                 .searchPostsByKeywords(eq("pvszboard"), anyList(), anyInt());
         doReturn(freePosts)
                 .when(boardMapper)
-                .searchPostsByKeywords(eq("freeboard"), anyList(), anyInt());
+                .searchPostsByKeywords(eq("promotionboard"), anyList(), anyInt());
         doReturn(tipPosts)
                 .when(boardMapper)
                 .searchPostsByKeywords(eq("tipboard"), anyList(), anyInt());

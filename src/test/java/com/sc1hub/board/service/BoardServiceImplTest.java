@@ -51,7 +51,7 @@ class BoardServiceImplTest {
 
     @Test
     void canWrite_returnsFalse_whenMemberNull() {
-        assertFalse(boardService.canWrite("freeBoard", null));
+        assertFalse(boardService.canWrite("promotionBoard", null));
     }
 
     @Test
@@ -71,7 +71,7 @@ class BoardServiceImplTest {
         MemberDTO user = new MemberDTO();
         user.setGrade(0);
 
-        assertTrue(boardService.canWrite("freeBoard", user));
+        assertTrue(boardService.canWrite("promotionBoard", user));
     }
 
     @Test
@@ -82,11 +82,11 @@ class BoardServiceImplTest {
         member.setId("user");
         member.setNickName("Nick");
 
-        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(null);
+        when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(null);
 
         IllegalArgumentException ex = assertThrows(
                 IllegalArgumentException.class,
-                () -> boardService.deletePost("FreeBoard", postNum, member)
+                () -> boardService.deletePost("PromotionBoard", postNum, member)
         );
         assertTrue(ex.getMessage().contains("존재하지"));
 
@@ -104,9 +104,9 @@ class BoardServiceImplTest {
         member.setId("user");
         member.setNickName("Bob");
 
-        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(post);
 
-        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("FreeBoard", postNum, member));
+        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("PromotionBoard", postNum, member));
 
         verify(boardMapper, never()).deletePost(anyString(), anyInt());
     }
@@ -122,12 +122,12 @@ class BoardServiceImplTest {
         admin.setId("admin");
         admin.setNickName("Someone");
 
-        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
-        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(1);
+        when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.deletePost("promotionboard", postNum)).thenReturn(1);
 
-        boardService.deletePost("FreeBoard", postNum, admin);
+        boardService.deletePost("PromotionBoard", postNum, admin);
 
-        verify(boardMapper).deletePost("freeboard", postNum);
+        verify(boardMapper).deletePost("promotionboard", postNum);
     }
 
     @Test
@@ -142,9 +142,9 @@ class BoardServiceImplTest {
         latecomer.setNickName("Alice");
         latecomer.setRegDate(new java.util.Date(1_800_000_000_000L));
 
-        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(post);
 
-        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("FreeBoard", postNum, latecomer));
+        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("PromotionBoard", postNum, latecomer));
 
         verify(boardMapper, never()).deletePost(anyString(), anyInt());
     }
@@ -160,12 +160,12 @@ class BoardServiceImplTest {
         member.setId("user");
         member.setNickName("Alice");
 
-        when(boardMapper.readPost(eq("freeboard"), eq(postNum))).thenReturn(post);
-        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(1);
+        when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(post);
+        when(boardMapper.deletePost("promotionboard", postNum)).thenReturn(1);
 
-        boardService.deletePost("FreeBoard", postNum, member);
+        boardService.deletePost("PromotionBoard", postNum, member);
 
-        verify(boardMapper).deletePost("freeboard", postNum);
+        verify(boardMapper).deletePost("promotionboard", postNum);
     }
 
     @Test
@@ -175,9 +175,9 @@ class BoardServiceImplTest {
         page.setSearchType(null);
         page.setKeyword(null);
 
-        when(boardMapper.countTotalPost(eq("freeboard"), any(PageDTO.class))).thenReturn(30);
+        when(boardMapper.countTotalPost(eq("promotionboard"), any(PageDTO.class))).thenReturn(30);
 
-        PageDTO result = boardService.pageSetting("FreeBoard", page);
+        PageDTO result = boardService.pageSetting("PromotionBoard", page);
 
         assertSame(page, result);
         assertEquals(1, result.getRecentPage());
@@ -196,12 +196,12 @@ class BoardServiceImplTest {
         int postNum = 10;
         String ip = "127.0.0.1";
 
-        when(boardMapper.checkViewUserIp("freeboard", postNum, ip)).thenReturn(0);
+        when(boardMapper.checkViewUserIp("promotionboard", postNum, ip)).thenReturn(0);
 
-        boardService.increaseViewCount("FreeBoard", postNum, ip);
+        boardService.increaseViewCount("PromotionBoard", postNum, ip);
 
-        verify(boardMapper).saveViewUserIp("freeboard", postNum, ip);
-        verify(boardMapper).updateViews("freeboard", postNum);
+        verify(boardMapper).saveViewUserIp("promotionboard", postNum, ip);
+        verify(boardMapper).updateViews("promotionboard", postNum);
     }
 
     @Test
@@ -209,9 +209,9 @@ class BoardServiceImplTest {
         int postNum = 10;
         String ip = "127.0.0.1";
 
-        when(boardMapper.checkViewUserIp("freeboard", postNum, ip)).thenReturn(1);
+        when(boardMapper.checkViewUserIp("promotionboard", postNum, ip)).thenReturn(1);
 
-        boardService.increaseViewCount("FreeBoard", postNum, ip);
+        boardService.increaseViewCount("PromotionBoard", postNum, ip);
 
         verify(boardMapper, never()).saveViewUserIp(anyString(), anyInt(), anyString());
         verify(boardMapper, never()).updateViews(anyString(), anyInt());
@@ -223,10 +223,10 @@ class BoardServiceImplTest {
         comment.setPostNum(17);
         comment.setContent("댓글");
 
-        boardService.addComment("FreeBoard", comment);
+        boardService.addComment("PromotionBoard", comment);
 
-        verify(boardMapper).addComment("freeboard", comment);
-        verify(boardMapper).updateCommentCount("freeboard", 17);
+        verify(boardMapper).addComment("promotionboard", comment);
+        verify(boardMapper).updateCommentCount("promotionboard", 17);
     }
 
     @Test
@@ -238,13 +238,13 @@ class BoardServiceImplTest {
         MemberDTO owner = new MemberDTO();
         owner.setId("owner");
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
-        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("promotionboard", 9)).thenReturn(1);
 
-        boardService.deleteComment("FreeBoard", 9, owner, null);
+        boardService.deleteComment("PromotionBoard", 9, owner, null);
 
-        verify(boardMapper).deleteComment("freeboard", 9);
-        verify(boardMapper).updateCommentCount("freeboard", 17);
+        verify(boardMapper).deleteComment("promotionboard", 9);
+        verify(boardMapper).updateCommentCount("promotionboard", 17);
     }
 
     @Test
@@ -254,13 +254,13 @@ class BoardServiceImplTest {
         stored.setPostNum(17);
         stored.setPassword("secret");
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
-        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("promotionboard", 9)).thenReturn(1);
 
-        boardService.deleteComment("FreeBoard", 9, null, " secret ");
+        boardService.deleteComment("PromotionBoard", 9, null, " secret ");
 
-        verify(boardMapper).deleteComment("freeboard", 9);
-        verify(boardMapper).updateCommentCount("freeboard", 17);
+        verify(boardMapper).deleteComment("promotionboard", 9);
+        verify(boardMapper).updateCommentCount("promotionboard", 17);
     }
 
     @Test
@@ -272,10 +272,10 @@ class BoardServiceImplTest {
         MemberDTO other = new MemberDTO();
         other.setId("other");
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
 
         assertThrows(AccessDeniedException.class,
-                () -> boardService.deleteComment("FreeBoard", 9, other, null));
+                () -> boardService.deleteComment("PromotionBoard", 9, other, null));
 
         verify(boardMapper, never()).deleteComment(anyString(), anyInt());
         verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
@@ -287,10 +287,10 @@ class BoardServiceImplTest {
         stored.setCommentNum(9);
         stored.setPostNum(17);
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
 
         assertThrows(AccessDeniedException.class,
-                () -> boardService.deleteComment("FreeBoard", 9, null, "anything"));
+                () -> boardService.deleteComment("PromotionBoard", 9, null, "anything"));
 
         verify(boardMapper, never()).deleteComment(anyString(), anyInt());
     }
@@ -302,10 +302,10 @@ class BoardServiceImplTest {
         stored.setPostNum(17);
         stored.setPassword("secret");
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
 
         assertThrows(AccessDeniedException.class,
-                () -> boardService.deleteComment("FreeBoard", 9, null, "wrong"));
+                () -> boardService.deleteComment("PromotionBoard", 9, null, "wrong"));
 
         verify(boardMapper, never()).deleteComment(anyString(), anyInt());
         verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
@@ -320,11 +320,11 @@ class BoardServiceImplTest {
         MemberDTO owner = new MemberDTO();
         owner.setId("owner");
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
-        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(0);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("promotionboard", 9)).thenReturn(0);
 
         assertThrows(IllegalStateException.class,
-                () -> boardService.deleteComment("FreeBoard", 9, owner, null));
+                () -> boardService.deleteComment("PromotionBoard", 9, owner, null));
 
         verify(boardMapper, never()).updateCommentCount(anyString(), anyInt());
     }
@@ -338,13 +338,13 @@ class BoardServiceImplTest {
         MemberDTO admin = new MemberDTO();
         admin.setGrade(3);
 
-        when(boardMapper.readCommentForUpdate("freeboard", 9)).thenReturn(stored);
-        when(boardMapper.deleteComment("freeboard", 9)).thenReturn(1);
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("promotionboard", 9)).thenReturn(1);
 
-        boardService.deleteComment("FreeBoard", 9, admin, null);
+        boardService.deleteComment("PromotionBoard", 9, admin, null);
 
-        verify(boardMapper).deleteComment("freeboard", 9);
-        verify(boardMapper).updateCommentCount("freeboard", 17);
+        verify(boardMapper).deleteComment("promotionboard", 9);
+        verify(boardMapper).updateCommentCount("promotionboard", 17);
     }
 
     @Test
@@ -353,14 +353,14 @@ class BoardServiceImplTest {
         dto.setPostNum(55);
         dto.setUserId("user");
 
-        when(boardMapper.checkRecommendation("freeboard", dto)).thenReturn(0);
-        when(boardMapper.getActualRecommendCount("freeboard", 55)).thenReturn(1);
-        when(boardMapper.getRecommendCount("freeboard", 55)).thenReturn(0);
+        when(boardMapper.checkRecommendation("promotionboard", dto)).thenReturn(0);
+        when(boardMapper.getActualRecommendCount("promotionboard", 55)).thenReturn(1);
+        when(boardMapper.getRecommendCount("promotionboard", 55)).thenReturn(0);
 
-        boardService.insertRecommendation("FreeBoard", dto);
+        boardService.insertRecommendation("PromotionBoard", dto);
 
-        verify(boardMapper).insertRecommendation("freeboard", dto);
-        verify(boardMapper).updateTotalRecommendCount("freeboard", 55);
+        verify(boardMapper).insertRecommendation("promotionboard", dto);
+        verify(boardMapper).updateTotalRecommendCount("promotionboard", 55);
     }
 
     @Test
@@ -369,11 +369,11 @@ class BoardServiceImplTest {
         dto.setPostNum(55);
         dto.setUserId("user");
 
-        when(boardMapper.checkRecommendation("freeboard", dto)).thenReturn(1);
+        when(boardMapper.checkRecommendation("promotionboard", dto)).thenReturn(1);
 
         RuntimeException ex = assertThrows(
                 RuntimeException.class,
-                () -> boardService.insertRecommendation("FreeBoard", dto)
+                () -> boardService.insertRecommendation("PromotionBoard", dto)
         );
         assertTrue(ex.getMessage().contains("이미 추천"));
 
@@ -391,11 +391,11 @@ class BoardServiceImplTest {
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
         when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms");
 
-        boardService.submitPost("FreeBoard", post);
+        boardService.submitPost("PromotionBoard", post);
 
         assertEquals(normalizedContent, post.getContent());
         assertEquals("terms", post.getSearchTerms());
-        verify(boardMapper).submitPost("freeboard", post);
+        verify(boardMapper).submitPost("promotionboard", post);
     }
 
     @Test
@@ -408,13 +408,13 @@ class BoardServiceImplTest {
         when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(normalizedContent);
         when(searchTermsService.buildSearchTerms("title", normalizedContent)).thenReturn("terms2");
-        when(boardMapper.submitModifyPost("freeboard", post)).thenReturn(1);
+        when(boardMapper.submitModifyPost("promotionboard", post)).thenReturn(1);
 
-        boardService.submitModifyPost("FreeBoard", post);
+        boardService.submitModifyPost("PromotionBoard", post);
 
         assertEquals(normalizedContent, post.getContent());
         assertEquals("terms2", post.getSearchTerms());
-        verify(boardMapper).submitModifyPost("freeboard", post);
+        verify(boardMapper).submitModifyPost("promotionboard", post);
     }
 
     @Test
@@ -425,10 +425,10 @@ class BoardServiceImplTest {
         when(postContentSanitizer.sanitize(post.getContent())).thenReturn(post.getContent());
         when(uploadedImageDimensionInjector.injectMissingDimensions(post.getContent())).thenReturn(post.getContent());
         when(searchTermsService.buildSearchTerms("title", post.getContent())).thenReturn("terms");
-        when(boardMapper.submitModifyPost("freeboard", post)).thenReturn(0);
+        when(boardMapper.submitModifyPost("promotionboard", post)).thenReturn(0);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> boardService.submitModifyPost("FreeBoard", post));
+                () -> boardService.submitModifyPost("PromotionBoard", post));
 
         assertEquals("게시글 수정 결과를 확인할 수 없습니다.", error.getMessage());
     }
@@ -437,11 +437,11 @@ class BoardServiceImplTest {
     void deletePost_throwsWhenNoRowWasDeleted() throws Exception {
         int postNum = 123;
         BoardDTO post = new BoardDTO();
-        when(boardMapper.readPost("freeboard", postNum)).thenReturn(post);
-        when(boardMapper.deletePost("freeboard", postNum)).thenReturn(0);
+        when(boardMapper.readPost("promotionboard", postNum)).thenReturn(post);
+        when(boardMapper.deletePost("promotionboard", postNum)).thenReturn(0);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> boardService.deletePost("FreeBoard", postNum));
+                () -> boardService.deletePost("PromotionBoard", postNum));
 
         assertEquals("게시글 삭제 결과를 확인할 수 없습니다.", error.getMessage());
     }

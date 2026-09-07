@@ -77,10 +77,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/**/movePost", "/migrate/**",
                         "/api/admin/**")
                 // 회원 작성이 허용되는 게시판. URL 은 소문자로 정규화되므로 소문자 패턴이 실제로 매칭되는 쪽이다.
-                .excludePathPatterns("/boards/supportBoard/**", "/boards/supportboard/**",
-                        "/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
+                .excludePathPatterns("/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
                         "/boards/promotionBoard/**", "/boards/promotionboard/**",
-                        "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",
-                        "/boards/funBoard/**", "/boards/funboard/**", "/boards/userGuideBoard/**", "/boards/userguideboard/**");
+                        "/boards/funBoard/**", "/boards/funboard/**");
     }
 }

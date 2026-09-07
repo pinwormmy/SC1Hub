@@ -24,7 +24,7 @@ class SecurityRouteRegistrationTest {
         config.addInterceptors(registry);
         for (String path : new String[]{"/submitModifyMemberByAdmin", "/boards/noticeboard/submitPost",
                 "/boards/tipboard/submitModifyPost", "/boards/funboard/movePost",
-                "/boards/supportboard/movePost", "/boards/videoLinkBoard/movePost",
+                "/boards/promotionboard/movePost", "/boards/videoLinkBoard/movePost",
                 "/api/admin/assistant-publisher/drafts/1/publish",
                 "/api/admin/assistant-publisher/auto-publish/run-all", "/api/admin/chat/sanctions"}) {
             var request = new MockHttpServletRequest("POST", path);
@@ -51,7 +51,7 @@ class SecurityRouteRegistrationTest {
         var registry = new ExposedRegistry();
         config.addInterceptors(registry);
         for (String path : new String[]{"/boards/promotionboard/writePost", "/boards/promotionboard/submitPost",
-                "/boards/supportboard/submitPost", "/boards/videolinkboard/submitPost", "/boards/funboard/submitPost"}) {
+                "/boards/videolinkboard/submitPost", "/boards/funboard/submitPost"}) {
             var request = new MockHttpServletRequest("POST", path);
             ServletRequestPathUtils.parseAndCache(request);
             for (Object candidate : registry.values()) {

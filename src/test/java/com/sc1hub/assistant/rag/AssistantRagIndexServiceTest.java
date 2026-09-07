@@ -83,7 +83,7 @@ class AssistantRagIndexServiceTest {
         writeExistingIndex(regDate);
 
         BoardListDTO board = new BoardListDTO();
-        board.setBoardTitle("FreeBoard");
+        board.setBoardTitle("PromotionBoard");
         BoardDTO post = new BoardDTO();
         post.setPostNum(1);
         post.setTitle("same");
@@ -91,7 +91,7 @@ class AssistantRagIndexServiceTest {
         post.setRegDate(regDate);
 
         when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(board));
-        when(boardMapper.selectPostsForRag("freeboard", ragProperties.getMaxPostsPerBoard()))
+        when(boardMapper.selectPostsForRag("promotionboard", ragProperties.getMaxPostsPerBoard()))
                 .thenReturn(Collections.singletonList(post));
 
         AssistantRagIndexService.ReindexResult result = indexService.reindex();
@@ -241,7 +241,7 @@ class AssistantRagIndexServiceTest {
     /** 서로 다른 본문을 가진 글 2개짜리 게시판. 임베딩 호출이 글당 1회 필요하다. */
     private void stubTwoPostBoard() throws Exception {
         BoardListDTO board = new BoardListDTO();
-        board.setBoardTitle("FreeBoard");
+        board.setBoardTitle("PromotionBoard");
         BoardDTO first = new BoardDTO();
         first.setPostNum(1);
         first.setTitle("first");
@@ -253,7 +253,7 @@ class AssistantRagIndexServiceTest {
         second.setContent("second body");
         second.setRegDate(new Date(1_700_000_001_000L));
         when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(board));
-        when(boardMapper.selectPostsForRag("freeboard", ragProperties.getMaxPostsPerBoard()))
+        when(boardMapper.selectPostsForRag("promotionboard", ragProperties.getMaxPostsPerBoard()))
                 .thenReturn(Arrays.asList(first, second));
     }
 
@@ -265,12 +265,12 @@ class AssistantRagIndexServiceTest {
         index.setUpdatedAt(regDate);
 
         AssistantRagChunk chunk = new AssistantRagChunk();
-        chunk.setId("freeboard:1:0:existing");
-        chunk.setBoardTitle("freeboard");
+        chunk.setId("promotionboard:1:0:existing");
+        chunk.setBoardTitle("promotionboard");
         chunk.setPostNum(1);
         chunk.setTitle("same");
         chunk.setRegDate(regDate);
-        chunk.setUrl("/boards/freeboard/readPost?postNum=1");
+        chunk.setUrl("/boards/promotionboard/readPost?postNum=1");
         chunk.setChunkIndex(0);
         chunk.setText("same body");
         chunk.setVector(new float[]{0.1f, 0.2f});

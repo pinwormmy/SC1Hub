@@ -39,6 +39,7 @@ REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strate
 REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_strategy_recommendation.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_RESET_TOKEN_SQL="$REMOTE_SCRIPT_DIR/20260901_drop_member_reset_token.sql"
+REMOTE_DROP_SUPPORTBOARD_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_supportboard.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
 ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
@@ -72,6 +73,7 @@ scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$R
 scp "$ROOT_DIR/src/main/resources/sql/20260824_create_one_line_strategy_recommendation.sql" "$REMOTE:$REMOTE_STRATEGY_RECOMMENDATION_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260901_drop_member_reset_token.sql" "$REMOTE:$REMOTE_RESET_TOKEN_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260907_drop_supportboard.sql" "$REMOTE:$REMOTE_DROP_SUPPORTBOARD_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
@@ -91,6 +93,7 @@ ssh "$REMOTE" \
    REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    REMOTE_RESET_TOKEN_SQL='$REMOTE_RESET_TOKEN_SQL'
+   REMOTE_DROP_SUPPORTBOARD_SQL='$REMOTE_DROP_SUPPORTBOARD_SQL'
    ROLLBACK_REQUIRES_LEGACY_RUNTIME='$ROLLBACK_REQUIRES_LEGACY_RUNTIME'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -311,6 +314,14 @@ ssh "$REMOTE" \
    $REMOTE_STOP_CMD || true
    if ! wait_for_tomcat_shutdown; then
      echo \"Tomcat is still responding on port \$REMOTE_HTTP_PORT after shutdown.\" >&2
+     exit 1
+   fi
+   # Schema removals run only while no release is up: the old WAR still queries these tables.
+   echo 'Retiring the supportboard tables (idempotent)...'
+   if ! MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_DROP_SUPPORTBOARD_SQL\"; then
+     echo 'Failed to retire the supportboard tables; restarting the previous release untouched.' >&2
+     rm -f \"\$REMOTE_UPLOAD_PATH\"
+     $REMOTE_START_CMD || true
      exit 1
    fi
    if ! mv \"\$REMOTE_UPLOAD_PATH\" \"\$REMOTE_WAR_PATH\"; then
