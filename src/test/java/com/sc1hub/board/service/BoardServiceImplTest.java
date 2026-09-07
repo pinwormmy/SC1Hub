@@ -5,13 +5,16 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.mapper.BoardMapper;
+import com.sc1hub.board.support.GuestPasswordHasher;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.member.dto.MemberDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.nio.file.AccessDeniedException;
 
@@ -22,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -45,6 +49,9 @@ class BoardServiceImplTest {
 
     @Mock
     private PostContentLazyLoadInjector postContentLazyLoadInjector;
+
+    @Spy
+    private GuestPasswordHasher guestPasswordHasher = new GuestPasswordHasher(new BCryptPasswordEncoder(4));
 
     @InjectMocks
     private BoardServiceImpl boardService;
@@ -120,6 +127,7 @@ class BoardServiceImplTest {
 
         MemberDTO admin = new MemberDTO();
         admin.setId("admin");
+        admin.setGrade(3);
         admin.setNickName("Someone");
 
         when(boardMapper.readPost(eq("promotionboard"), eq(postNum))).thenReturn(post);
@@ -128,6 +136,89 @@ class BoardServiceImplTest {
         boardService.deletePost("PromotionBoard", postNum, admin);
 
         verify(boardMapper).deletePost("promotionboard", postNum);
+    }
+
+    @Test
+    void deletePost_doesNotTreatTheAdminIdWithoutGrade3AsAdministrator() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setWriter("Alice");
+        MemberDTO demoted = new MemberDTO();
+        demoted.setId("admin");
+        demoted.setGrade(1);
+        demoted.setNickName("Someone");
+        when(boardMapper.readPost(eq("promotionboard"), eq(5))).thenReturn(post);
+
+        assertThrows(AccessDeniedException.class, () -> boardService.deletePost("PromotionBoard", 5, demoted));
+        verify(boardMapper, never()).deletePost(anyString(), anyInt());
+    }
+
+    @Test
+    void readPost_sanitizesStoredContentBeforeRendering() throws Exception {
+        BoardDTO stored = new BoardDTO();
+        stored.setContent("<img src=x onerror=alert(1)>");
+        when(boardMapper.readPost("promotionboard", 5)).thenReturn(stored);
+        when(postContentSanitizer.sanitize("<img src=x onerror=alert(1)>")).thenReturn("<img src=\"x\">");
+        when(uploadedImageDimensionInjector.injectMissingDimensions("<img src=\"x\">")).thenReturn("<img src=\"x\">");
+        when(postContentLazyLoadInjector.injectLazyLoading("<img src=\"x\">")).thenReturn("<img src=\"x\" loading=\"lazy\">");
+
+        BoardDTO post = boardService.readPost("PromotionBoard", 5);
+
+        assertEquals("<img src=\"x\" loading=\"lazy\">", post.getContent());
+    }
+
+    @Test
+    void readPost_skipsSanitizerWhenTheSwitchIsOff() throws Exception {
+        BoardDTO stored = new BoardDTO();
+        stored.setContent("<p>legacy</p>");
+        when(boardMapper.readPost("promotionboard", 5)).thenReturn(stored);
+        when(uploadedImageDimensionInjector.injectMissingDimensions("<p>legacy</p>")).thenReturn("<p>legacy</p>");
+        when(postContentLazyLoadInjector.injectLazyLoading("<p>legacy</p>")).thenReturn("<p>legacy</p>");
+        boardService.setSanitizePostContentOnRead(false);
+
+        boardService.readPost("PromotionBoard", 5);
+
+        verify(postContentSanitizer, never()).sanitize(anyString());
+    }
+
+    @Test
+    void submitPost_hashesGuestPasswordBeforeInsert() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setContent("<p>hi</p>");
+        post.setGuestPassword("1234");
+        when(postContentSanitizer.sanitize("<p>hi</p>")).thenReturn("<p>hi</p>");
+        when(uploadedImageDimensionInjector.injectMissingDimensions("<p>hi</p>")).thenReturn("<p>hi</p>");
+
+        boardService.submitPost("funboard", post);
+
+        verify(boardMapper).submitPost("funboard", post);
+        assertNotEquals("1234", post.getGuestPassword());
+        assertTrue(guestPasswordHasher.isHashed(post.getGuestPassword()));
+        assertTrue(guestPasswordHasher.matches("1234", post.getGuestPassword()));
+    }
+
+    @Test
+    void addComment_hashesGuestPasswordAndDeleteAcceptsTheHash() throws Exception {
+        CommentDTO comment = new CommentDTO();
+        comment.setPostNum(17);
+        comment.setContent("댓글");
+        comment.setPassword("secret");
+
+        boardService.addComment("PromotionBoard", comment);
+
+        verify(boardMapper).addComment("promotionboard", comment);
+        assertTrue(guestPasswordHasher.isHashed(comment.getPassword()));
+
+        CommentDTO stored = new CommentDTO();
+        stored.setCommentNum(9);
+        stored.setPostNum(17);
+        stored.setPassword(comment.getPassword());
+        when(boardMapper.readCommentForUpdate("promotionboard", 9)).thenReturn(stored);
+        when(boardMapper.deleteComment("promotionboard", 9)).thenReturn(1);
+
+        boardService.deleteComment("PromotionBoard", 9, null, "secret");
+        verify(boardMapper).deleteComment("promotionboard", 9);
+
+        assertThrows(AccessDeniedException.class, () -> boardService.deleteComment("PromotionBoard", 9, null, "wrong"));
     }
 
     @Test

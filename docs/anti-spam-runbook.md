@@ -18,10 +18,13 @@ API 는 관리자 로그인 세션 또는 콘텐츠 API 토큰(`Authorization: B
 | 중복 내용 차단 | 같은 글 10분·같은 댓글 5분 안 재등록 거부(전역), 같은 채팅 60초(작성자별) | `DuplicateContentGuard` |
 | 공격 내용 감지 | 글·댓글·채팅·AI 질문·가입 정보에서 스크립트 태그, 이벤트 핸들러, `javascript:` URI, 외부 iframe/object, SQL·템플릿·JNDI 주입, 경로 조작, 명령 실행 구문(HIGH)과 링크 도배(글 5·댓글 3·채팅 2개 초과), 관리자 사칭+외부 링크+인증 유도, AI 에게 관리자·DB 자격증명 요구(MEDIUM)를 잡아 거부 | `AttackContentDetector` |
 | 로그인 보호 | 계정 5회 실패 5분 잠금, IP 30회 실패 15분 잠금 | `LoginAttemptGuard` |
-| 자동 제재 | 거부(속도 제한·로그인 실패·봇 필드 등) 10분 내 IP 30회 → IP 차단 1시간, 회원 20회 → 뮤트 1시간. 24시간 내 재발 시 24시간. **HIGH 공격 내용은 1회로 즉시 24시간**(회원 뮤트, 비회원 IP 차단), MEDIUM 은 거부 5회분으로 누적. 등급 3 관리자는 내용 제재 제외 | `OffenderTracker` |
+| 자동 제재 | 거부(속도 제한·로그인 실패·봇 필드 등) 10분 내 IP 30회 → IP 차단 1시간, 회원 20회 → 뮤트 1시간. 24시간 내 재발 시 24시간. **HIGH 공격 내용은 1회로 즉시 24시간**(회원은 뮤트 + 신뢰할 수 있는 공인 IP 차단, 비회원은 IP 차단 — 2026-09-08 부터 회원도 IP 를 같이 막아 로그아웃 후 비회원·신규 가입으로 이어 쓰는 우회를 차단), MEDIUM 은 거부 5회분으로 누적. 등급 3 관리자는 내용 제재 제외 | `OffenderTracker` |
 | 제재 효력 | 제재 대상은 채팅뿐 아니라 모든 쓰기·로그인이 막힌다. DB(`chat_sanction`)에 저장돼 재시작 후에도 유지 | `ChatModerationService` |
 | 별명 보호 | 과거 글 작성자 별명은 다른 계정이 취득 불가, 글보다 늦게 가입한 계정은 작성자 아님 | `WriterNicknameGuard` |
-| 콘텐츠 정화 | 본문 HTML 허용 목록, 회원정보 마크업 금지, 출력 이스케이프 | `PostContentSanitizer` 등 |
+| 콘텐츠 정화 | 본문 HTML 허용 목록(저장 시 + **읽을 때도** 정화, `sc1hub.security.sanitize-post-content-on-read`), 회원정보 마크업 금지, 출력 이스케이프 | `PostContentSanitizer` 등 |
+| 계정 조회 제한 | 가입 화면 아이디·별명 중복 확인은 IP당 30회/10분(초과 시 429 + 거부 누적), 아이디 형식 검사 후에만 조회. 이메일 중복 확인 GET 은 제거 | `MemberController` |
+| 재인증 | 내 정보 수정·탈퇴는 현재 비밀번호 확인(실패는 로그인 잠금 카운터에 누적). 외부 사이트에서 유도한 `/logout` 이동은 무시 | `MemberController` |
+| 비회원 비밀번호 | 글·댓글 비밀번호는 BCrypt(사전 SHA-256) 저장. 봇 글·댓글은 행마다 무작위 값(관리자만 관리). 평문 행은 기동 후 백그라운드 승격(`GET /api/admin/security/status` 의 `guestPasswordMigration`, 재실행 `POST .../guest-passwords/migrate`) | `GuestPasswordHasher`, `GuestPasswordMigration` |
 
 IP 는 프록시가 덧붙인 `X-Forwarded-For` 의 가장 오른쪽 값이다(왼쪽은 위조 가능). 헤더가 없는 직접 접속
 (헬스체크 등)은 IP 기준 제한·차단 대상이 아니다. 사설·루프백 주소는 어떤 경로로도 차단하지 않는다.

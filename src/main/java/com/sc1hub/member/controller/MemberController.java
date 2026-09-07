@@ -3,6 +3,7 @@ package com.sc1hub.member.controller;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.OffenderTracker;
+import com.sc1hub.common.security.WriteRateLimiter;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.service.LoginAttemptGuard;
@@ -26,7 +27,10 @@ import jakarta.servlet.http.HttpSession;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Controller
 @Slf4j
@@ -36,21 +40,29 @@ public class MemberController {
     private static final String LOGIN_THROTTLED_MESSAGE = "로그인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.";
     // 가입 폼의 숨김 필드. 사람은 채우지 않고 자동화 도구만 채우므로 값이 있으면 가입을 거부한다.
     static final String SIGNUP_HONEYPOT_FIELD = "homepage";
+    static final String CURRENT_PASSWORD_MISMATCH_MESSAGE = "현재 비밀번호가 일치하지 않습니다.";
+    // 가입 화면의 아이디·별명 중복 확인. 계정 존재 여부를 알려주는 오라클이므로 주소당 횟수를 제한한다.
+    static final int LOOKUPS_PER_IP_PER_10_MINUTES = 30;
+    private static final long LOOKUP_WINDOW_MILLIS = 10 * 60 * 1000L;
+    private static final Pattern MEMBER_ID_PATTERN = Pattern.compile("^[a-z][a-z0-9]{3,19}$");
+    private static final Set<String> SITE_HOSTS = Set.of("sc1hub.com", "www.sc1hub.com");
 
     private final MemberService memberService;
     private final LoginAttemptGuard loginAttemptGuard;
     private final MemberSessionRegistry sessionRegistry;
     private final OffenderTracker offenderTracker;
     private final AttackContentDetector attackContentDetector;
+    private final WriteRateLimiter rateLimiter;
 
     public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard,
                             MemberSessionRegistry sessionRegistry, OffenderTracker offenderTracker,
-                            AttackContentDetector attackContentDetector) {
+                            AttackContentDetector attackContentDetector, WriteRateLimiter rateLimiter) {
         this.memberService = memberService;
         this.loginAttemptGuard = loginAttemptGuard;
         this.sessionRegistry = sessionRegistry;
         this.offenderTracker = offenderTracker;
         this.attackContentDetector = attackContentDetector;
+        this.rateLimiter = rateLimiter;
     }
 
     @GetMapping("/login")
@@ -67,16 +79,6 @@ public class MemberController {
     @GetMapping("/signAgreement")
     public String signAgreement() {
         return "signAgreement";
-    }
-
-    @GetMapping("/isUniqueId")
-    @ResponseBody
-    public ResponseEntity<String> isUniqueId(@RequestParam(required = false) String id) throws Exception {
-        if (!StringUtils.hasText(id)) {
-            return ResponseEntity.badRequest().body("");
-        }
-        log.debug("(중복확인용)ID 입력 확인: {}", id);
-        return ResponseEntity.ok(memberService.isUniqueId(id));
     }
 
     @PostMapping("/submitSignUp")
@@ -145,7 +147,12 @@ public class MemberController {
     }
 
     @GetMapping(value = "/logout")
-    public String logout(HttpSession httpSession) {
+    public String logout(HttpServletRequest request, HttpSession httpSession) {
+        if (isCrossSiteNavigation(request)) {
+            // 외부 페이지가 링크·리다이렉트로 유도한 로그아웃(CSRF)은 무시한다. 사이트 안의 로그아웃 링크는
+            // same-origin 이고, 주소창 입력·북마크는 Sec-Fetch-Site: none 이라 그대로 처리된다.
+            return "redirect:/";
+        }
         httpSession.invalidate();
         return "redirect:/";
     }
@@ -161,10 +168,18 @@ public class MemberController {
     }
 
     @PostMapping("/submitModifyMyInfo")
-    public String submitModifyMyInfo(MemberDTO member, HttpSession session) throws Exception {
+    public String submitModifyMyInfo(MemberDTO member,
+                                     @RequestParam(name = "currentPw", required = false) String currentPw,
+                                     HttpSession session, Model model) throws Exception {
         MemberDTO authenticatedMember = (MemberDTO) session.getAttribute("member");
         if (authenticatedMember == null) {
             return "redirect:/login";
+        }
+        // 비밀번호·이메일 변경은 현재 비밀번호를 다시 확인한다(탈취된 세션만으로 계정을 영구 장악하지 못하게).
+        if (!verifiesCurrentPassword(authenticatedMember, currentPw)) {
+            model.addAttribute("msg", CURRENT_PASSWORD_MISMATCH_MESSAGE);
+            model.addAttribute("url", "/modifyMyInfo");
+            return "alert";
         }
         member.setId(authenticatedMember.getId());
         memberService.submitModifyMyInfo(member);
@@ -183,31 +198,30 @@ public class MemberController {
 
     @GetMapping("/checkUniqueId")
     @ResponseBody
-    public ResponseEntity<String> checkUniqueId(@RequestParam(required = false) String id) throws Exception {
-        if (!StringUtils.hasText(id)) {
+    public ResponseEntity<String> checkUniqueId(@RequestParam(required = false) String id,
+                                                HttpServletRequest request) throws Exception {
+        if (!StringUtils.hasText(id) || !MEMBER_ID_PATTERN.matcher(id).matches()) {
             return ResponseEntity.badRequest().body("");
         }
-        log.info("아이디 중복 확인 컨트롤러 작동");
+        if (!allowLookup(request, "아이디 중복 확인 속도 제한")) {
+            return lookupThrottled();
+        }
         return ResponseEntity.ok(memberService.isUniqueId(id));
     }
 
-    @GetMapping("/checkUniqueEmail")
-    @ResponseBody
-    public ResponseEntity<String> checkUniqueEmail(@RequestParam(required = false) String email) {
-        if (!StringUtils.hasText(email)) {
-            return ResponseEntity.badRequest().body("");
-        }
-        log.info("이멜 중복 확인 컨트롤러 작동");
-        return ResponseEntity.ok(memberService.isUniqueEmail(email));
-    }
+    // 이메일 중복 확인 GET 은 화면에서 쓰지 않는 무인증 "이메일 가입 여부" 오라클이라 제거했다.
+    // 가입 시 중복은 서버가 제출 단계에서 검사한다.
 
     @GetMapping("/checkUniqueNickName")
     @ResponseBody
-    public ResponseEntity<String> checkUniqueNickName(@RequestParam(required = false) String nickName) {
+    public ResponseEntity<String> checkUniqueNickName(@RequestParam(required = false) String nickName,
+                                                      HttpServletRequest request) {
         if (!StringUtils.hasText(nickName)) {
             return ResponseEntity.badRequest().body("");
         }
-        log.info("별명 중복 확인 컨트롤러 작동");
+        if (!allowLookup(request, "별명 중복 확인 속도 제한")) {
+            return lookupThrottled();
+        }
         return ResponseEntity.ok(memberService.isUniqueNickName(nickName));
     }
 
@@ -277,12 +291,17 @@ public class MemberController {
 
     @PostMapping("/deleteMyAccount")
     @ResponseBody
-    public String deleteMyAccount(HttpServletRequest request) {
+    public String deleteMyAccount(HttpServletRequest request,
+                                  @RequestParam(name = "currentPw", required = false) String currentPw) {
         log.info("계정 탈퇴 후 로그아웃 처리하기....");
         String userId = null; // userId 변수를 try 블록 바깥에 선언합니다.
         try {
             MemberDTO member = (MemberDTO) request.getSession().getAttribute("member");
             userId = member.getId(); // userId 변수를 초기화합니다.
+            // 탈퇴는 되돌릴 수 없으므로 현재 비밀번호를 다시 확인한다.
+            if (!verifiesCurrentPassword(member, currentPw)) {
+                return "{\"success\": false, \"message\": \"" + CURRENT_PASSWORD_MISMATCH_MESSAGE + "\"}";
+            }
 
             memberService.deleteMember(userId);
             // 현재 세션과 다른 기기의 세션을 모두 종료한다.
@@ -339,6 +358,64 @@ public class MemberController {
     private void registerSession(MemberDTO member, HttpSession session) {
         if (member != null && session != null) {
             sessionRegistry.register(member.getId(), session);
+        }
+    }
+
+    /**
+     * 세션의 회원이 현재 비밀번호를 아는지 확인한다. 실패는 로그인 실패와 같은 잠금 카운터에 넣어
+     * 세션을 쥔 공격자가 비밀번호를 무한히 시험하지 못하게 한다.
+     */
+    private boolean verifiesCurrentPassword(MemberDTO authenticated, String currentPw) throws Exception {
+        if (authenticated == null || !StringUtils.hasText(currentPw)) {
+            return false;
+        }
+        String id = authenticated.getId();
+        if (loginAttemptGuard.isBlocked(id)) {
+            return false;
+        }
+        MemberDTO credentials = new MemberDTO();
+        credentials.setId(id);
+        credentials.setPw(currentPw);
+        if (memberService.checkLoginData(credentials) == null) {
+            loginAttemptGuard.recordFailure(id);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean allowLookup(HttpServletRequest request, String reason) {
+        if (!IpService.hasForwardedClient(request)) {
+            return true; // 프록시 헤더로 클라이언트를 확인할 수 없는 요청(헬스체크 등)은 세지 않는다.
+        }
+        String ip = IpService.getRemoteIP(request);
+        if (rateLimiter.allow("lookup-ip:" + ip, LOOKUPS_PER_IP_PER_10_MINUTES, LOOKUP_WINDOW_MILLIS)) {
+            return true;
+        }
+        offenderTracker.strike(ip, true, null, null, reason);
+        return false;
+    }
+
+    private static ResponseEntity<String> lookupThrottled() {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "600").body("");
+    }
+
+    /** 외부 사이트에서 유도된 최상위 이동인지. Sec-Fetch-Site 가 없으면 Referer 로 판단하고, 둘 다 없으면 직접 입력으로 본다. */
+    static boolean isCrossSiteNavigation(HttpServletRequest request) {
+        String site = request.getHeader("Sec-Fetch-Site");
+        if (StringUtils.hasText(site)) {
+            return "cross-site".equalsIgnoreCase(site.trim());
+        }
+        String referer = request.getHeader("Referer");
+        if (!StringUtils.hasText(referer)) {
+            return false;
+        }
+        try {
+            String host = new URI(referer.trim()).getHost();
+            return host != null
+                    && !SITE_HOSTS.contains(host.toLowerCase(Locale.ROOT))
+                    && !host.equalsIgnoreCase(request.getServerName());
+        } catch (URISyntaxException e) {
+            return true;
         }
     }
 

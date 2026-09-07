@@ -34,6 +34,19 @@ public interface BoardMapper {
 
         void addComment(@Param("boardTitle") String boardTitle, @Param("comment") CommentDTO comment) throws Exception;
 
+        /** 아직 해시되지 않은(평문) 비회원 글 비밀번호 행. funboard 전용 컬럼이라 다른 게시판은 빈 목록. */
+        List<BoardDTO> selectLegacyGuestPostPasswords(@Param("boardTitle") String boardTitle, @Param("limit") int limit);
+
+        /** 읽었을 때와 값이 같을 때만 해시로 바꾼다(낙관적 갱신). */
+        int updateGuestPostPasswordIfUnchanged(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum,
+                        @Param("expected") String expected, @Param("hash") String hash);
+
+        /** 아직 해시되지 않은(평문) 비회원 댓글 비밀번호 행. */
+        List<CommentDTO> selectLegacyCommentPasswords(@Param("boardTitle") String boardTitle, @Param("limit") int limit);
+
+        int updateCommentPasswordIfUnchanged(@Param("boardTitle") String boardTitle, @Param("commentNum") int commentNum,
+                        @Param("expected") String expected, @Param("hash") String hash);
+
         List<CommentDTO> showCommentList(@Param("boardTitle") String boardTitle, @Param("page") PageDTO page)
                         throws Exception;
 

@@ -8,10 +8,12 @@ import com.sc1hub.board.dto.LatestPostDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.support.BoardTitleNormalizer;
+import com.sc1hub.board.support.GuestPasswordHasher;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.util.PageUtils;
 import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -44,18 +46,32 @@ public class BoardServiceImpl implements BoardService {
     private final UploadedImageDimensionInjector uploadedImageDimensionInjector;
     private final PostContentSanitizer postContentSanitizer;
     private final PostContentLazyLoadInjector postContentLazyLoadInjector;
+    private final GuestPasswordHasher guestPasswordHasher;
+
+    /**
+     * 읽을 때도 본문을 허용 목록으로 정화한다. 저장 시점에 정화기가 없던 옛 글이나 정화기를 거치지 않은
+     * 경로로 들어온 행이 그대로 화면에 실리는 일을 막는다(화면에 나가는 HTML 은 언제나 정화기를 통과한 것).
+     */
+    @Value("${sc1hub.security.sanitize-post-content-on-read:true}")
+    private boolean sanitizePostContentOnRead = true;
 
     public BoardServiceImpl(
             BoardMapper boardMapper,
             AssistantSearchTermsService searchTermsService,
             UploadedImageDimensionInjector uploadedImageDimensionInjector,
             PostContentSanitizer postContentSanitizer,
-            PostContentLazyLoadInjector postContentLazyLoadInjector) {
+            PostContentLazyLoadInjector postContentLazyLoadInjector,
+            GuestPasswordHasher guestPasswordHasher) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
         this.uploadedImageDimensionInjector = uploadedImageDimensionInjector;
         this.postContentSanitizer = postContentSanitizer;
         this.postContentLazyLoadInjector = postContentLazyLoadInjector;
+        this.guestPasswordHasher = guestPasswordHasher;
+    }
+
+    void setSanitizePostContentOnRead(boolean sanitizePostContentOnRead) {
+        this.sanitizePostContentOnRead = sanitizePostContentOnRead;
     }
 
     @Override
@@ -68,6 +84,10 @@ public class BoardServiceImpl implements BoardService {
     public void submitPost(String boardTitle, BoardDTO board) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         preparePostForPersistence(board);
+        if (board != null && StringUtils.hasText(board.getGuestPassword())) {
+            // 비회원 글 비밀번호는 평문으로 저장하지 않는다(검증은 GuestPasswordHasher.matches).
+            board.setGuestPassword(guestPasswordHasher.hash(board.getGuestPassword()));
+        }
         boardMapper.submitPost(boardTitle, board);
     }
 
@@ -95,7 +115,7 @@ public class BoardServiceImpl implements BoardService {
         if (postToDelete == null) {
             throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
         }
-        if (!isPostOwner(postToDelete, requestingMember) && !"admin".equals(requestingMember.getId())) {
+        if (!isPostOwner(postToDelete, requestingMember) && !isAdmin(requestingMember)) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");
         }
         deleteExistingPost(boardTitle, postNum);
@@ -138,6 +158,10 @@ public class BoardServiceImpl implements BoardService {
     @Transactional(rollbackFor = Exception.class)
     public void addComment(String boardTitle, CommentDTO comment) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
+        if (StringUtils.hasText(comment.getPassword())) {
+            // 비회원 댓글 비밀번호는 평문으로 저장하지 않는다.
+            comment.setPassword(guestPasswordHasher.hash(comment.getPassword()));
+        }
         boardMapper.addComment(boardTitle, comment);
         boardMapper.updateCommentCount(boardTitle, comment.getPostNum());
     }
@@ -319,7 +343,11 @@ public class BoardServiceImpl implements BoardService {
             return;
         }
 
-        String content = uploadedImageDimensionInjector.injectMissingDimensions(post.getContent());
+        String content = post.getContent();
+        if (sanitizePostContentOnRead) {
+            content = postContentSanitizer.sanitize(content);
+        }
+        content = uploadedImageDimensionInjector.injectMissingDimensions(content);
         // 저장본은 그대로 두고 읽을 때만 embed/이미지 로딩 힌트를 보정한다(구 글의 유튜브 즉시 로딩 방지).
         post.setContent(postContentLazyLoadInjector.injectLazyLoading(content));
     }
@@ -382,11 +410,12 @@ public class BoardServiceImpl implements BoardService {
             return member != null && Objects.equals(comment.getId(), member.getId());
         }
         return StringUtils.hasText(comment.getPassword())
-                && Objects.equals(comment.getPassword(), trimToNull(guestPassword));
+                && guestPasswordHasher.matches(trimToNull(guestPassword), comment.getPassword());
     }
 
+    /** 관리자 판정은 사이트 전체와 같이 등급 3 하나로 한다(ID 문자열 예외 없음). */
     private boolean isAdmin(MemberDTO member) {
-        return member != null && (member.getGrade() == 3 || "admin".equals(member.getId()));
+        return member != null && member.getGrade() == 3;
     }
 
     private String trimToNull(String value) {

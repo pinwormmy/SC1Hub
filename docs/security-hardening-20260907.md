@@ -174,6 +174,10 @@ WAR 풋프린트 검증 통과). 임시 쓰기 제한(`sc1hub.security.public-wr
 - **레거시 비밀번호 승격 결과**: 배포 직후 기동 시 53건 전부 승격, 실패 0, 남은 평문 0
   (`GET /api/admin/security/status`로 확인).
 
+## 후속
+
+2026-09-08 전체 재검토와 추가 조치는 [security-review-20260908.md](security-review-20260908.md).
+
 ## 참고
 - 미추적 `spring-boot-starter-mail` 의존성은 메일 스택 제거로 이제 사용되지 않는다(런타임 무해).
   풋프린트를 더 줄이려면 의존성과 `spring.autoconfigure.exclude`의 Mail 항목을 함께 제거하면 된다.

@@ -1,5 +1,6 @@
 package com.sc1hub.member.controller;
 
+import com.sc1hub.board.service.GuestPasswordMigration;
 import com.sc1hub.chat.dto.ChatSanctionDTO;
 import com.sc1hub.chat.service.ChatModerationService;
 import com.sc1hub.common.security.OffenderTracker;
@@ -46,15 +47,17 @@ public class SecurityAdminController {
     private final SecuritySwitches switches;
     private final ChatModerationService moderationService;
     private final OffenderTracker offenderTracker;
+    private final GuestPasswordMigration guestPasswordMigration;
 
     public SecurityAdminController(MemberMapper memberMapper, LegacyPasswordMigration legacyPasswordMigration,
                                    SecuritySwitches switches, ChatModerationService moderationService,
-                                   OffenderTracker offenderTracker) {
+                                   OffenderTracker offenderTracker, GuestPasswordMigration guestPasswordMigration) {
         this.memberMapper = memberMapper;
         this.legacyPasswordMigration = legacyPasswordMigration;
         this.switches = switches;
         this.moderationService = moderationService;
         this.offenderTracker = offenderTracker;
+        this.guestPasswordMigration = guestPasswordMigration;
     }
 
     @GetMapping(value = "/status", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -155,6 +158,12 @@ public class SecurityAdminController {
     }
 
     /** 프록시가 이 요청에 붙인 주소 정보를 그대로 보여 준다. IP 판정·차단 설정 검증용. */
+    /** 비회원 글·댓글 비밀번호 평문 행을 해시로 승격한다(기동 시 백그라운드 실행의 수동 재실행). */
+    @PostMapping(value = "/guest-passwords/migrate", produces = MediaType.APPLICATION_JSON_VALUE)
+    public GuestPasswordMigration.Summary migrateGuestPasswords() {
+        return guestPasswordMigration.run();
+    }
+
     @GetMapping(value = "/request-echo", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> requestEcho(HttpServletRequest request) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -189,6 +198,7 @@ public class SecurityAdminController {
         body.put("autoBansSinceStart", offenderTracker.autoBanCount());
         body.put("legacyPasswordCount", memberMapper.countLegacyPasswordMembers());
         body.put("legacyPasswordMigration", legacyPasswordMigration.getLastRun());
+        body.put("guestPasswordMigration", guestPasswordMigration.getLastRun());
         return body;
     }
 

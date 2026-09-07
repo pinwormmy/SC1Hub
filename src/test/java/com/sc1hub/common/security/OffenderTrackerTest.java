@@ -67,12 +67,28 @@ class OffenderTrackerTest {
         tracker.attackDetected("203.0.113.9", true, "attacker", "공격자", high);
         verify(moderationService).addSanction(eq(ChatModerationService.TYPE_MUTE), eq("attacker"), isNull(),
                 eq("공격자"), eq(OffenderTracker.ATTACK_BAN_MINUTES), contains("공격 패턴 감지: script-tag"), eq("auto"));
+        // 회원이라도 신뢰할 수 있는 공인 주소는 함께 차단한다(로그아웃 뒤 비회원·신규 가입으로 이어 쓰는 우회 방지).
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_BLOCK_IP), isNull(), eq("203.0.113.9"),
+                eq("공격자"), eq(OffenderTracker.ATTACK_BAN_MINUTES), contains("공격 패턴 감지: script-tag"), eq("auto"));
 
         tracker.attackDetected("203.0.113.10", true, null, null, high);
         verify(moderationService).addSanction(eq(ChatModerationService.TYPE_BLOCK_IP), isNull(), eq("203.0.113.10"),
                 any(), eq(OffenderTracker.ATTACK_BAN_MINUTES), contains("공격 패턴 감지"), eq("auto"));
-        assertEquals(2, tracker.autoBanCount());
+        assertEquals(3, tracker.autoBanCount());
         assertEquals(2, tracker.recentStrikeCount());
+    }
+
+    @Test
+    void memberAttackFromPrivateOrUntrustedAddressOnlyMutesTheMember() {
+        OffenderTracker tracker = tracker();
+        AttackContentDetector.Verdict high = new AttackContentDetector.Verdict(AttackContentDetector.Severity.HIGH, "script-tag");
+
+        tracker.attackDetected("10.0.0.7", true, "attacker", null, high);
+        tracker.attackDetected("203.0.113.9", false, "attacker2", null, high);
+
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_MUTE), eq("attacker"), isNull(), any(), any(), any(), eq("auto"));
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_MUTE), eq("attacker2"), isNull(), any(), any(), any(), eq("auto"));
+        verify(moderationService, never()).addSanction(eq(ChatModerationService.TYPE_BLOCK_IP), any(), any(), any(), any(), any(), any());
     }
 
     @Test

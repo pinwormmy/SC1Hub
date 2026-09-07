@@ -92,6 +92,35 @@
         values(#{comment.postNum}, #{comment.id}, #{comment.nickname}, #{comment.password}, now(), #{comment.content})
     </insert>
 
+    <!-- 비회원 비밀번호 평문 행 승격용. BCrypt 형식($2a$..)이 아닌 값만 고른다. -->
+    <select id="selectLegacyGuestPostPasswords" resultType="com.sc1hub.board.dto.BoardDTO">
+        select post_num, writer, guest_password
+        from ${boardTitle}
+        where guest_password is not null and guest_password not like '$2_$%'
+        order by post_num
+        limit #{limit}
+    </select>
+
+    <update id="updateGuestPostPasswordIfUnchanged">
+        update ${boardTitle}
+        set guest_password=#{hash}
+        where post_num=#{postNum} and guest_password=#{expected}
+    </update>
+
+    <select id="selectLegacyCommentPasswords" resultMap="boardCommentDTO">
+        select comment_num, post_num, id, nickname, password
+        from ${boardTitle}_comment
+        where password is not null and password not like '$2_$%'
+        order by comment_num
+        limit #{limit}
+    </select>
+
+    <update id="updateCommentPasswordIfUnchanged">
+        update ${boardTitle}_comment
+        set password=#{hash}
+        where comment_num=#{commentNum} and password=#{expected}
+    </update>
+
     <select id="showCommentList" resultMap="boardCommentDTO">
         select c.* from
         (select a.post_num, a.comment_num, a.id, a.reg_date, a.content, a.nickname, a.password, b.nickname as member_nickname

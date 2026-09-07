@@ -65,8 +65,8 @@ public class OffenderTracker {
     }
 
     /**
-     * 내용 검사에서 공격 의도가 확인된 경우. HIGH 는 즉시 24시간 제재(회원이면 뮤트, 아니면 IP 차단),
-     * MEDIUM 은 가중 스트라이크로 누적한다.
+     * 내용 검사에서 공격 의도가 확인된 경우. HIGH 는 즉시 24시간 제재(회원이면 뮤트, 신뢰할 수 있는
+     * 공인 주소는 회원 여부와 무관하게 IP 차단), MEDIUM 은 가중 스트라이크로 누적한다.
      */
     public void attackDetected(String ip, boolean ipTrusted, String memberId, String nickname,
                                AttackContentDetector.Verdict verdict) {
@@ -81,7 +81,10 @@ public class OffenderTracker {
         }
         if (StringUtils.hasText(memberId)) {
             autoBan(ChatModerationService.TYPE_MUTE, memberId, null, nickname, reason, ATTACK_BAN_MINUTES);
-        } else if (ipTrusted && IpService.isPublicAddress(ip)) {
+        }
+        // 회원 뮤트만 걸면 같은 주소에서 로그아웃한 뒤 비회원 글·댓글·채팅이나 신규 가입으로 이어 쓸 수
+        // 있으므로, 신뢰할 수 있는 공인 주소는 회원 여부와 무관하게 함께 차단한다.
+        if (ipTrusted && IpService.isPublicAddress(ip)) {
             autoBan(ChatModerationService.TYPE_BLOCK_IP, null, ip, nickname, reason, ATTACK_BAN_MINUTES);
         }
     }

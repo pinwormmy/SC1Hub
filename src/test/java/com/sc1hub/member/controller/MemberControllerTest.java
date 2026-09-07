@@ -2,6 +2,7 @@ package com.sc1hub.member.controller;
 
 import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.OffenderTracker;
+import com.sc1hub.common.security.WriteRateLimiter;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
@@ -19,12 +20,18 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.ui.ExtendedModelMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,6 +53,9 @@ class MemberControllerTest {
 
     @Spy
     private AttackContentDetector attackContentDetector = new AttackContentDetector();
+
+    @Mock
+    private WriteRateLimiter rateLimiter;
 
     @InjectMocks
     private MemberController controller;
@@ -167,7 +177,7 @@ class MemberControllerTest {
 
     @Test
     void checkUniqueId_rejectsBlankIdWithoutQueryingDatabase() throws Exception {
-        ResponseEntity<String> response = controller.checkUniqueId(" ");
+        ResponseEntity<String> response = controller.checkUniqueId(" ", new MockHttpServletRequest());
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("", response.getBody());
@@ -213,11 +223,101 @@ class MemberControllerTest {
         refreshed.setId("owner");
         when(memberService.checkLoginData(any(MemberDTO.class))).thenReturn(refreshed);
 
-        String view = controller.submitModifyMyInfo(submitted, session);
+        String view = controller.submitModifyMyInfo(submitted, "current-password", session, new ExtendedModelMap());
 
         assertEquals("myPage", view);
         assertEquals("owner", submitted.getId());
         assertEquals(refreshed, session.getAttribute("member"));
         verify(memberService).submitModifyMyInfo(submitted);
+    }
+
+    @Test
+    void submitModifyMyInfo_rejectsWrongOrMissingCurrentPassword() throws Exception {
+        MemberDTO authenticatedMember = new MemberDTO();
+        authenticatedMember.setId("owner");
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", authenticatedMember);
+        MemberDTO submitted = new MemberDTO();
+        submitted.setPw("new-password");
+        when(memberService.checkLoginData(any(MemberDTO.class))).thenReturn(null);
+
+        ExtendedModelMap model = new ExtendedModelMap();
+        assertEquals("alert", controller.submitModifyMyInfo(submitted, "wrong", session, model));
+        assertEquals(MemberController.CURRENT_PASSWORD_MISMATCH_MESSAGE, model.get("msg"));
+        verify(loginAttemptGuard).recordFailure("owner");
+
+        assertEquals("alert", controller.submitModifyMyInfo(submitted, null, session, new ExtendedModelMap()));
+        verify(memberService, never()).submitModifyMyInfo(any(MemberDTO.class));
+        assertEquals(authenticatedMember, session.getAttribute("member"));
+    }
+
+    @Test
+    void deleteMyAccount_requiresCurrentPassword() throws Exception {
+        MemberDTO authenticatedMember = new MemberDTO();
+        authenticatedMember.setId("owner");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession().setAttribute("member", authenticatedMember);
+        when(memberService.checkLoginData(any(MemberDTO.class))).thenReturn(null);
+
+        String body = controller.deleteMyAccount(request, "wrong");
+
+        assertTrue(body.contains("\"success\": false"));
+        verify(memberService, never()).deleteMember(anyString());
+        verify(sessionRegistry, never()).invalidateMember(anyString());
+    }
+
+    @Test
+    void logout_ignoresCrossSiteNavigation() {
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", new MemberDTO());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/logout");
+        request.addHeader("Sec-Fetch-Site", "cross-site");
+
+        assertEquals("redirect:/", controller.logout(request, session));
+        assertFalse(session.isInvalid());
+
+        // Sec-Fetch-Site 가 없는 옛 브라우저는 Referer 로 판단한다.
+        MockHttpServletRequest legacy = new MockHttpServletRequest("GET", "/logout");
+        legacy.addHeader("Referer", "https://evil.example/trap");
+        assertEquals("redirect:/", controller.logout(legacy, session));
+        assertFalse(session.isInvalid());
+    }
+
+    @Test
+    void logout_invalidatesSessionForSameOriginAndDirectNavigation() {
+        MockHttpSession fromSite = new MockHttpSession();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/logout");
+        request.addHeader("Sec-Fetch-Site", "same-origin");
+        assertEquals("redirect:/", controller.logout(request, fromSite));
+        assertTrue(fromSite.isInvalid());
+
+        MockHttpSession typed = new MockHttpSession();
+        assertEquals("redirect:/", controller.logout(new MockHttpServletRequest("GET", "/logout"), typed));
+        assertTrue(typed.isInvalid());
+
+        MockHttpSession referred = new MockHttpSession();
+        MockHttpServletRequest legacy = new MockHttpServletRequest("GET", "/logout");
+        legacy.addHeader("Referer", "https://sc1hub.com/boards/funboard");
+        assertEquals("redirect:/", controller.logout(legacy, referred));
+        assertTrue(referred.isInvalid());
+    }
+
+    @Test
+    void checkUniqueId_rejectsMalformedIdsAndThrottlesRepeatedLookups() throws Exception {
+        assertEquals(HttpStatus.BAD_REQUEST,
+                controller.checkUniqueId("Admin'--", new MockHttpServletRequest()).getStatusCode());
+        verifyNoInteractions(memberService);
+
+        MockHttpServletRequest proxied = new MockHttpServletRequest();
+        proxied.addHeader("X-Forwarded-For", "203.0.113.9");
+        when(rateLimiter.allow(eq("lookup-ip:203.0.113.9"), eq(MemberController.LOOKUPS_PER_IP_PER_10_MINUTES), anyLong()))
+                .thenReturn(true, false);
+        when(memberService.isUniqueId("validid")).thenReturn("0");
+
+        assertEquals(HttpStatus.OK, controller.checkUniqueId("validid", proxied).getStatusCode());
+        ResponseEntity<String> throttled = controller.checkUniqueId("validid", proxied);
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, throttled.getStatusCode());
+        verify(offenderTracker).strike(eq("203.0.113.9"), eq(true), isNull(), isNull(), anyString());
+        verify(memberService, times(1)).isUniqueId("validid");
     }
 }

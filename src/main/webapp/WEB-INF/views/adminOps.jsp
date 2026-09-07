@@ -119,27 +119,27 @@
                         <div class="ops-grid">
                             <div class="ops-stat">
                                 <div class="ops-label">enabled</div>
-                                <div class="ops-value">${autoPublishStatus.enabled}</div>
+                                <div class="ops-value"><c:out value="${autoPublishStatus.enabled}"/></div>
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">autoPublishEnabled</div>
-                                <div class="ops-value">${autoPublishStatus.autoPublishEnabled}</div>
+                                <div class="ops-value"><c:out value="${autoPublishStatus.autoPublishEnabled}"/></div>
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">catchUpEnabled</div>
-                                <div class="ops-value">${autoPublishStatus.autoPublishCatchUpEnabled}</div>
+                                <div class="ops-value"><c:out value="${autoPublishStatus.autoPublishCatchUpEnabled}"/></div>
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">serverNow</div>
-                                <div class="ops-value">${autoPublishStatus.serverNow}</div>
+                                <div class="ops-value"><c:out value="${autoPublishStatus.serverNow}"/></div>
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">zone</div>
-                                <div class="ops-value">${autoPublishStatus.autoPublishZone}</div>
+                                <div class="ops-value"><c:out value="${autoPublishStatus.autoPublishZone}"/></div>
                             </div>
                             <div class="ops-stat">
                                 <div class="ops-label">dailyLimit</div>
-                                <div class="ops-value">post ${autoPublishStatus.postDailyLimit} / comment ${autoPublishStatus.commentDailyLimit} / chat ${autoPublishStatus.chatDailyLimit}</div>
+                                <div class="ops-value">post <c:out value="${autoPublishStatus.postDailyLimit}"/> / comment <c:out value="${autoPublishStatus.commentDailyLimit}"/> / chat <c:out value="${autoPublishStatus.chatDailyLimit}"/></div>
                             </div>
                         </div>
                     </div>
@@ -162,13 +162,13 @@
                                 <tbody>
                                     <c:forEach var="persona" items="${autoPublishStatus.personas}">
                                         <tr>
-                                            <td>${persona.personaName}<br>(${persona.publishChannel})</td>
-                                            <td>${persona.boardTitle}</td>
-                                            <td>${persona.model}</td>
-                                            <td>post ${persona.handledPostToday}, comment ${persona.handledCommentToday}, chat ${persona.handledChatToday}</td>
-                                            <td>post ${persona.nextPostSlot}<br>comment ${persona.nextCommentSlot}<br>chat ${persona.nextChatSlot}</td>
-                                            <td>${persona.dueModes}</td>
-                                            <td>${persona.waitingDetail}</td>
+                                            <td><c:out value="${persona.personaName}"/><br>(<c:out value="${persona.publishChannel}"/>)</td>
+                                            <td><c:out value="${persona.boardTitle}"/></td>
+                                            <td><c:out value="${persona.model}"/></td>
+                                            <td>post <c:out value="${persona.handledPostToday}"/>, comment <c:out value="${persona.handledCommentToday}"/>, chat <c:out value="${persona.handledChatToday}"/></td>
+                                            <td>post <c:out value="${persona.nextPostSlot}"/><br>comment <c:out value="${persona.nextCommentSlot}"/><br>chat <c:out value="${persona.nextChatSlot}"/></td>
+                                            <td><c:out value="${persona.dueModes}"/></td>
+                                            <td><c:out value="${persona.waitingDetail}"/></td>
                                         </tr>
                                     </c:forEach>
                                     <c:if test="${empty autoPublishStatus.personas}">
@@ -182,7 +182,7 @@
                     <div class="ops-card">
                         <div class="ops-header">
                             <div>
-                                <h3 class="ops-title">최근 ${days}일 요약</h3>
+                                <h3 class="ops-title">최근 <c:out value="${days}"/>일 요약</h3>
                                 <p class="ops-subtitle">persona, board, mode, status 기준</p>
                             </div>
                         </div>
@@ -201,12 +201,12 @@
                                 <tbody>
                                     <c:forEach var="item" items="${historySummary}">
                                         <tr>
-                                            <td>${item.personaName}</td>
-                                            <td>${item.boardTitle}</td>
-                                            <td>${item.generationMode}</td>
-                                            <td>${item.status}</td>
-                                            <td>${item.count}</td>
-                                            <td>${item.latestCreatedAt}</td>
+                                            <td><c:out value="${item.personaName}"/></td>
+                                            <td><c:out value="${item.boardTitle}"/></td>
+                                            <td><c:out value="${item.generationMode}"/></td>
+                                            <td><c:out value="${item.status}"/></td>
+                                            <td><c:out value="${item.count}"/></td>
+                                            <td><c:out value="${item.latestCreatedAt}"/></td>
                                         </tr>
                                     </c:forEach>
                                     <c:if test="${empty historySummary}">
@@ -218,7 +218,7 @@
                     </div>
 
                     <div class="ops-card">
-                        <h3 class="ops-title">최근 이력 ${limit}건</h3>
+                        <h3 class="ops-title">최근 이력 <c:out value="${limit}"/>건</h3>
                         <div class="ops-table-wrap">
                             <table class="ops-table">
                                 <thead>
@@ -235,13 +235,13 @@
                                 <tbody>
                                     <c:forEach var="item" items="${history}">
                                         <tr>
-                                            <td>${item.createdAt}</td>
-                                            <td>${item.personaName}</td>
-                                            <td>${item.boardTitle}</td>
-                                            <td>${item.generationMode}</td>
-                                            <td>${item.status}</td>
-                                            <td>${item.publishedPostNum}</td>
-                                            <td>${item.draftTitle}</td>
+                                            <td><c:out value="${item.createdAt}"/></td>
+                                            <td><c:out value="${item.personaName}"/></td>
+                                            <td><c:out value="${item.boardTitle}"/></td>
+                                            <td><c:out value="${item.generationMode}"/></td>
+                                            <td><c:out value="${item.status}"/></td>
+                                            <td><c:out value="${item.publishedPostNum}"/></td>
+                                            <td><c:out value="${item.draftTitle}"/></td>
                                         </tr>
                                     </c:forEach>
                                     <c:if test="${empty history}">

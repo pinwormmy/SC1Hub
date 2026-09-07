@@ -23,12 +23,17 @@ if [[ -z "$TOKEN" ]]; then
     exit 1
 fi
 
-AUTH_HEADER="Authorization: Bearer $TOKEN"
+# 토큰은 관리자 로그인과 같으므로 curl 인자(ps 로 보임)가 아니라 0600 헤더 파일로 넘긴다.
+AUTH_HEADER_FILE="$(mktemp "${TMPDIR:-/tmp}/sc1hub-content-api.XXXXXX")"
+chmod 600 "$AUTH_HEADER_FILE"
+trap 'rm -f "$AUTH_HEADER_FILE"' EXIT
+printf 'Authorization: Bearer %s\n' "$TOKEN" > "$AUTH_HEADER_FILE"
+unset TOKEN
 API_ROOT="$BASE_URL/api/admin/content"
 INDEX_ROOT="$BASE_URL/api/assistant/index"
 
 request() {
-    curl --fail --silent --show-error -H "$AUTH_HEADER" "$@"
+    curl --fail --silent --show-error -H "@$AUTH_HEADER_FILE" "$@"
     echo
 }
 

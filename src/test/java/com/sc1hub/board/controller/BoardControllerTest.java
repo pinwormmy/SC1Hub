@@ -4,6 +4,7 @@ import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDataDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.service.BoardService;
+import com.sc1hub.board.support.GuestPasswordHasher;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.common.security.AttackContentDetector;
@@ -17,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.http.HttpStatus;
@@ -73,6 +75,9 @@ class BoardControllerTest {
 
     @Mock
     private OffenderTracker offenderTracker;
+
+    @Spy
+    private GuestPasswordHasher guestPasswordHasher = new GuestPasswordHasher(new BCryptPasswordEncoder(4));
 
     @InjectMocks
     private BoardController boardController;
@@ -306,6 +311,19 @@ class BoardControllerTest {
         String view = boardController.modifyPost("funBoard", model, 7, session);
 
         assertEquals("alert", view);
+    }
+
+    @Test
+    void verifyGuestPostPassword_acceptsHashedStoredPasswordAndRejectsWrongOne() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(8);
+        post.setGuestPassword(guestPasswordHasher.hash("1234"));
+        when(boardService.readPost("funboard", 8)).thenReturn(post);
+
+        assertEquals(Boolean.TRUE, boardController.verifyGuestPostPassword("funBoard", 8, "1234", new MockHttpSession())
+                .getBody().get("valid"));
+        assertEquals(Boolean.FALSE, boardController.verifyGuestPostPassword("funBoard", 8, "4321", new MockHttpSession())
+                .getBody().get("valid"));
     }
 
     @Test

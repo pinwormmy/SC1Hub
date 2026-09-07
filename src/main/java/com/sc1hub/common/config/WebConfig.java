@@ -11,6 +11,8 @@ import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.util.pattern.PathPatternParser;
+import org.springframework.web.util.pattern.PatternParseException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -54,31 +56,52 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(visitorCountInterceptor)
-                .addPathPatterns(
+                .addPathPatterns(patterns(
                         "/", "/guidelines", "/login", "/signAgreement", "/signUp",
                         "/findId", "/findPassword", "/myPage", "/modifyMyInfo",
                         "/adminPage/**", "/boards/*", "/boards/*/readPost",
-                        "/boards/*/writePost", "/boards/*/modifyPost");
+                        "/boards/*/writePost", "/boards/*/modifyPost"));
         registry.addInterceptor(canonicalInterceptor)
-                .addPathPatterns("/**")
-                .excludePathPatterns(
+                .addPathPatterns(patterns("/**"))
+                .excludePathPatterns(patterns(
                         "/css/**", "/js/**", "/images/**",
                         "/favicon.ico", "/robots.txt", "/ads.txt", "/sitemap.xml",
-                        "/img/**", "/uploadedImg/**", "/ckImgSubmit");
+                        "/img/**", "/uploadedImg/**", "/ckImgSubmit"));
+        // 게시판 쓰기 경로는 반드시 PathPatternParser 가 받아들이는 형태로만 등록한다. 예전의
+        // "/**/writePost" 처럼 ** 가 가운데 오는 패턴은 파서가 거부해 MappedInterceptor 가 조용히
+        // AntPathMatcher(원본 URI 기준) 로 후퇴했고, 핸들러 매핑은 디코딩된 경로를 쓰므로
+        // "/boards/noticeboard/submit%50ost" 한 글자 인코딩만으로 관리자·로그인 검사를 건너뛸 수 있었다.
         registry.addInterceptor(boardLvInterceptor)
-                .addPathPatterns("/**/writePost", "/**/modifyPost/**", "/**/deletePost/**")
-                .excludePathPatterns("/boards/funBoard/**", "/boards/funboard/**");
+                .addPathPatterns(patterns("/boards/*/writePost", "/boards/*/modifyPost", "/boards/*/modifyPost/**",
+                        "/boards/*/deletePost", "/boards/*/deletePost/**"))
+                .excludePathPatterns(patterns("/boards/funBoard/**", "/boards/funboard/**"));
         registry.addInterceptor(memberLoginInterceptor)
-                .addPathPatterns("/myPage", "/modifyMyInfo", "/submitModifyMyInfo", "/deleteMyAccount");
-        registry.addInterceptor(adminInterceptor).addPathPatterns("/boards/*/movePost");
+                .addPathPatterns(patterns("/myPage", "/modifyMyInfo", "/submitModifyMyInfo", "/deleteMyAccount"));
+        registry.addInterceptor(adminInterceptor).addPathPatterns(patterns("/boards/*/movePost"));
         registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/adminPage/**", "/modifyMemberByAdmin/**", "/submitModifyMemberByAdmin", "/deleteMember",
-                        "/**/writePost", "/**/submitPost", "/**/submitModifyPost", "/**/modifyPost/**", "/**/deletePost/**",
-                        "/**/movePost", "/migrate/**",
-                        "/api/admin/**")
+                .addPathPatterns(patterns("/adminPage/**", "/modifyMemberByAdmin/**", "/submitModifyMemberByAdmin", "/deleteMember",
+                        "/boards/*/writePost", "/boards/*/submitPost", "/boards/*/submitModifyPost",
+                        "/boards/*/modifyPost", "/boards/*/modifyPost/**",
+                        "/boards/*/deletePost", "/boards/*/deletePost/**", "/boards/*/movePost",
+                        "/migrate/**", "/api/admin/**"))
                 // 회원 작성이 허용되는 게시판. URL 은 소문자로 정규화되므로 소문자 패턴이 실제로 매칭되는 쪽이다.
-                .excludePathPatterns("/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
+                .excludePathPatterns(patterns("/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
                         "/boards/promotionBoard/**", "/boards/promotionboard/**",
-                        "/boards/funBoard/**", "/boards/funboard/**");
+                        "/boards/funBoard/**", "/boards/funboard/**"));
+    }
+
+    /**
+     * 모든 인터셉터 패턴이 PathPatternParser 로 해석되는지 기동 시 검증한다. 해석되지 않는 패턴은
+     * AntPathMatcher 로 조용히 후퇴해 인코딩 우회가 생기므로 등록 자체를 실패시킨다.
+     */
+    static String[] patterns(String... values) {
+        for (String value : values) {
+            try {
+                PathPatternParser.defaultInstance.parse(value);
+            } catch (PatternParseException e) {
+                throw new IllegalStateException("인터셉터 경로 패턴이 PathPatternParser 로 해석되지 않습니다: " + value, e);
+            }
+        }
+        return values;
     }
 }

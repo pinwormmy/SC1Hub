@@ -18,6 +18,7 @@ import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotException;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
+import com.sc1hub.board.support.GuestPasswordHasher;
 import com.sc1hub.board.mapper.BoardMapper;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.chat.dto.ChatMessageDTO;
@@ -384,7 +385,8 @@ public class AssistantBotService {
             CommentDTO comment = new CommentDTO();
             comment.setPostNum(history.getTargetPostNum());
             comment.setNickname(persona.getName());
-            comment.setPassword(botProperties.getPublishGuestPassword());
+            // 봇 댓글은 비밀번호로 수정할 일이 없으므로 행마다 무작위 값을 준다(저장 시 해시).
+            comment.setPassword(GuestPasswordHasher.newRandomSecret());
             comment.setContent(safeCommentForPublish(persona, textOrNull(result.path("reply").path("body"))));
             if (!StringUtils.hasText(comment.getContent())) {
                 response.setError("발행할 댓글 본문이 비어 있습니다.");
@@ -556,7 +558,8 @@ public class AssistantBotService {
     private BoardDTO buildPostForPublish(PersonaProperties persona, JsonNode result) {
         BoardDTO post = new BoardDTO();
         post.setWriter(persona.getName());
-        post.setGuestPassword(botProperties.getPublishGuestPassword());
+        // 봇 글도 행마다 무작위 비밀번호(저장 시 해시). 공유 비밀번호 유출로 봇 글 전체가 열리지 않게 한다.
+        post.setGuestPassword(GuestPasswordHasher.newRandomSecret());
         post.setTitle(safeTitleForPublish(persona, textOrNull(result.path("post").path("title"))));
         post.setContent(toHtmlBody(persona, textOrNull(result.path("post").path("body"))));
         post.setNotice(0);

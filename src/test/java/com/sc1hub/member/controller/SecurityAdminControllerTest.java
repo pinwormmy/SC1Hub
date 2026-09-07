@@ -1,6 +1,7 @@
 package com.sc1hub.member.controller;
 
 import com.sc1hub.chat.dto.ChatSanctionDTO;
+import com.sc1hub.board.service.GuestPasswordMigration;
 import com.sc1hub.chat.service.ChatModerationService;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.common.security.SecuritySwitches;
@@ -41,6 +42,8 @@ class SecurityAdminControllerTest {
     private ChatModerationService moderationService;
     @Mock
     private OffenderTracker offenderTracker;
+    @Mock
+    private GuestPasswordMigration guestPasswordMigration;
 
     private final SecuritySwitches switches = new SecuritySwitches(true, false);
     private SecurityAdminController controller;
@@ -48,7 +51,7 @@ class SecurityAdminControllerTest {
     @BeforeEach
     void setUp() {
         controller = new SecurityAdminController(memberMapper, legacyPasswordMigration, switches,
-                moderationService, offenderTracker);
+                moderationService, offenderTracker, guestPasswordMigration);
     }
 
     private Map<String, Object> body(Object... keyValues) {

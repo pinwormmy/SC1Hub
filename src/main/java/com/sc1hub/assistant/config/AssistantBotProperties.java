@@ -34,7 +34,12 @@ public class AssistantBotProperties {
     private int dailyGenerateCallLimit = 20;
     private double duplicateSimilarityThreshold = 0.72;
     private int selfReviewMinimumScore = 0;
-    private String publishGuestPassword = "bot-approved";
+    /**
+     * 더 이상 사용하지 않는다(2026-09-08). 봇 글·댓글은 행마다 무작위 비밀번호를 받아 해시로 저장되므로
+     * 공유 비밀번호가 필요 없다. 외부 설정 파일에 남아 있어도 바인딩만 되고 무시된다.
+     */
+    @Deprecated
+    private String publishGuestPassword;
     private boolean autoPublishEnabled = false;
     private String autoPublishCron = "0 * * * * *";
     private String autoPublishZone = "Asia/Seoul";

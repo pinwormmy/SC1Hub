@@ -286,13 +286,6 @@
         return map.get(key) || boardTitle;
     }
 
-    function sanitizeHtml(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`<div>${html ?? ''}</div>`, 'text/html');
-        doc.querySelectorAll('script, style').forEach((el) => el.remove());
-        return doc.body.firstElementChild ? doc.body.firstElementChild.innerHTML : '';
-    }
-
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text ?? '';
@@ -368,7 +361,8 @@
     }
 
     function appendSystemMessage(message) {
-        appendEntry(['[SYSTEM]'], sanitizeHtml(message));
+        // 시스템 메시지는 서버 응답 본문을 그대로 담기도 하므로 항상 텍스트로만 표시한다.
+        appendEntry(['[SYSTEM]'], escapeHtml(message));
     }
 
     function isBoardUrl(urlOrPath) {

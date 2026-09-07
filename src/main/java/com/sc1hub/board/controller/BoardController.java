@@ -8,6 +8,7 @@ import com.sc1hub.board.dto.LatestPostDTO;
 import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.BoardTitleNormalizer;
+import com.sc1hub.board.support.GuestPasswordHasher;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.common.security.AttackContentDetector;
@@ -76,16 +77,19 @@ public class BoardController {
     private final DuplicateContentGuard duplicateContentGuard;
     private final AttackContentDetector attackContentDetector;
     private final OffenderTracker offenderTracker;
+    private final GuestPasswordHasher guestPasswordHasher;
 
     public BoardController(BoardService boardService, MemberService memberService,
                            SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard,
-                           AttackContentDetector attackContentDetector, OffenderTracker offenderTracker) {
+                           AttackContentDetector attackContentDetector, OffenderTracker offenderTracker,
+                           GuestPasswordHasher guestPasswordHasher) {
         this.boardService = boardService;
         this.memberService = memberService;
         this.seoMetadataService = seoMetadataService;
         this.duplicateContentGuard = duplicateContentGuard;
         this.attackContentDetector = attackContentDetector;
         this.offenderTracker = offenderTracker;
+        this.guestPasswordHasher = guestPasswordHasher;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -558,6 +562,7 @@ public class BoardController {
 
         post.setWriter(trimToNull(post.getWriter()));
         post.setGuestPassword(trimToNull(post.getGuestPassword()));
+        // 비밀번호 해시는 저장 직전에 BoardServiceImpl.submitPost 가 한다(봇 발행 경로와 동일).
         return post.getWriter() != null && post.getGuestPassword() != null;
     }
 
@@ -601,7 +606,7 @@ public class BoardController {
     }
 
     private boolean guestPasswordMatches(BoardDTO post, String guestPassword) {
-        return Objects.equals(post.getGuestPassword(), trimToNull(guestPassword));
+        return guestPasswordHasher.matches(trimToNull(guestPassword), post.getGuestPassword());
     }
 
     private boolean isGuestPost(BoardDTO post) {
@@ -688,12 +693,13 @@ public class BoardController {
         return GUEST_WRITABLE_BOARD.equals(normalizeBoardTitle(boardTitle));
     }
 
+    /** 관리자 판정은 인터셉터·서비스와 같이 등급 3 하나로 한다(ID 문자열 예외 없음). */
     private boolean isAdmin(MemberDTO member) {
-        return member != null && ADMIN_ID.equals(member.getId());
+        return member != null && member.getGrade() == 3;
     }
 
     private boolean isCommentAdmin(MemberDTO member) {
-        return member != null && (member.getGrade() == 3 || ADMIN_ID.equals(member.getId()));
+        return isAdmin(member);
     }
 
     /** 등급 3 관리자·운영 계정은 내용 기반 자동 제재 대상에서 제외한다(정화기는 그대로 적용된다). */
