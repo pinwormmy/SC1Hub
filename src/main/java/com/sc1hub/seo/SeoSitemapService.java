@@ -63,7 +63,6 @@ public class SeoSitemapService {
         Set<String> seenUrls = new LinkedHashSet<>();
         addEntry(entries, seenUrls, SeoUrlPolicy.CANONICAL_ORIGIN + "/", null);
         addEntry(entries, seenUrls, SeoUrlPolicy.CANONICAL_ORIGIN + "/guidelines", null);
-        addEntry(entries, seenUrls, SeoUrlPolicy.CANONICAL_ORIGIN + "/strategy-tips", null);
 
         List<BoardListDTO> boards = boardService.getBoardList();
         if (boards == null) {

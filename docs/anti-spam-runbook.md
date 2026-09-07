@@ -16,7 +16,7 @@ API 는 관리자 로그인 세션 또는 콘텐츠 API 토큰(`Authorization: B
 | IP 속도 제한 | 20회/분(프록시 헤더로 클라이언트를 확인한 요청만) | 〃 |
 | 가입 제한 | IP당 3건/시간, 전체 30건/시간, 숨김 필드(honeypot) 채우면 거부, ID 형식·이메일 형식 서버 검증 | 〃, `MemberController`, `MemberServiceImpl` |
 | 중복 내용 차단 | 같은 글 10분·같은 댓글 5분 안 재등록 거부(전역), 같은 채팅 60초(작성자별) | `DuplicateContentGuard` |
-| 공격 내용 감지 | 글·댓글·채팅·AI 질문·한줄 공략·가입 정보에서 스크립트 태그, 이벤트 핸들러, `javascript:` URI, 외부 iframe/object, SQL·템플릿·JNDI 주입, 경로 조작, 명령 실행 구문(HIGH)과 링크 도배(글 5·댓글 3·채팅 2개 초과), 관리자 사칭+외부 링크+인증 유도, AI 에게 관리자·DB 자격증명 요구(MEDIUM)를 잡아 거부 | `AttackContentDetector` |
+| 공격 내용 감지 | 글·댓글·채팅·AI 질문·가입 정보에서 스크립트 태그, 이벤트 핸들러, `javascript:` URI, 외부 iframe/object, SQL·템플릿·JNDI 주입, 경로 조작, 명령 실행 구문(HIGH)과 링크 도배(글 5·댓글 3·채팅 2개 초과), 관리자 사칭+외부 링크+인증 유도, AI 에게 관리자·DB 자격증명 요구(MEDIUM)를 잡아 거부 | `AttackContentDetector` |
 | 로그인 보호 | 계정 5회 실패 5분 잠금, IP 30회 실패 15분 잠금 | `LoginAttemptGuard` |
 | 자동 제재 | 거부(속도 제한·로그인 실패·봇 필드 등) 10분 내 IP 30회 → IP 차단 1시간, 회원 20회 → 뮤트 1시간. 24시간 내 재발 시 24시간. **HIGH 공격 내용은 1회로 즉시 24시간**(회원 뮤트, 비회원 IP 차단), MEDIUM 은 거부 5회분으로 누적. 등급 3 관리자는 내용 제재 제외 | `OffenderTracker` |
 | 제재 효력 | 제재 대상은 채팅뿐 아니라 모든 쓰기·로그인이 막힌다. DB(`chat_sanction`)에 저장돼 재시작 후에도 유지 | `ChatModerationService` |

@@ -26,7 +26,7 @@
                     <h1 id="scHomeTitle">스타크래프트1 빌드와 실전 운영</h1>
                     <p>내 종족과 상대 종족에 맞는 공략을 찾아보세요.</p>
                 </div>
-                <a class="btn sc-primary-action" href="/strategy-tips">한줄 공략 모아보기 <span aria-hidden="true">→</span></a>
+                <a class="btn sc-primary-action" href="/boards/tipboard">꿀팁보급고 보러가기 <span aria-hidden="true">→</span></a>
             </div>
         </section>
         <div class="section-inner">
@@ -37,7 +37,7 @@
                             <main class="sc-col-9 sc-home-main" id="main-content">
                             <div class="sc-content-heading"><h2>종족별 공략</h2><span>테란 · 저그 · 프로토스</span></div>
                             <div class="sc-home-feeds">
-                            <c:set var="menuIndex" value="22" />
+                            <c:set var="menuIndex" value="21" />
                             <c:forEach var="section" items="${popularSections}">
                                 <section class="sc-home-feed ${section.cssClass}">
                                     <h3 class="sc-race-heading"><c:out value="${fn:replace(section.title, '네트워크', '공략')}" /></h3>

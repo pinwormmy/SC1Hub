@@ -34,7 +34,7 @@ class VisitorCountInterceptorTest {
     void preHandle_doesNotCountNonGetRequest() {
         VisitorCountService service = mock(VisitorCountService.class);
         VisitorCountInterceptor interceptor = new VisitorCountInterceptor(service);
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/strategy-tips");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/boards/funboard/submitPost");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         interceptor.preHandle(request, response, new Object());

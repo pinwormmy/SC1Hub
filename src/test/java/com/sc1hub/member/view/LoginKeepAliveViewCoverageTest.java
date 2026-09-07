@@ -24,7 +24,6 @@ class LoginKeepAliveViewCoverageTest {
                 "board/readPost.jsp",
                 "board/writePost.jsp",
                 "board/modifyPost.jsp",
-                "strategyTip/list.jsp",
                 "myPage.jsp",
                 "modifyMyInfo.jsp",
                 "adminPage.jsp",

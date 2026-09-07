@@ -72,20 +72,6 @@ public class SeoMetadataService {
                 buildArticleStructuredData(post, title, description, canonical));
     }
 
-    public void applyStrategyTips(Model model, HttpServletRequest request,
-                                  String categoryName, PageDTO page) {
-        String categoryPrefix = StringUtils.hasText(categoryName) ? categoryName.trim() + " " : "";
-        String pageSuffix = paginationSuffix(page);
-        String title = truncateTitle(categoryPrefix + "한줄 공략" + pageSuffix
-                + " | 스타크래프트1 실전 팁 - SC1Hub");
-        String description = truncateMeta(categoryPrefix
-                + "스타크래프트1 빌드, 운영, 타이밍과 실전 팁을 짧고 빠르게 확인하세요."
-                + pageSuffix);
-        String canonical = canonicalFrom(request);
-        applyCommon(model, title, description,
-                buildCollectionStructuredData(title, description, canonical));
-    }
-
     String buildBoardDescription(String koreanTitle) {
         return truncateMeta(koreanTitle
                 + "의 스타크래프트1 빌드오더, 운영법, 공격 타이밍과 실전 공략을 확인하세요.");

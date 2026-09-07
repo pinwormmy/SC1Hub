@@ -24,18 +24,6 @@ class SeoUrlPolicyTest {
     }
 
     @Test
-    void resolve_preservesCategoryAndNonFirstPagination() {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/strategy-tips");
-        request.addParameter("category", "Z_VS_T");
-        request.addParameter("recentPage", "3");
-
-        SeoUrlPolicy.ResolvedUrl resolved = policy.resolve(request);
-
-        assertEquals("https://sc1hub.com/strategy-tips?category=z_vs_t&recentPage=3",
-                resolved.getCanonical());
-    }
-
-    @Test
     void resolve_stripsFirstPageParameterFromBoardCanonical() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/boards/tipboard");
         request.addParameter("recentPage", "1");

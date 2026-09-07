@@ -58,7 +58,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/", "/guidelines", "/login", "/signAgreement", "/signUp",
                         "/findId", "/findPassword", "/myPage", "/modifyMyInfo",
                         "/adminPage/**", "/boards/*", "/boards/*/readPost",
-                        "/boards/*/writePost", "/boards/*/modifyPost", "/strategy-tips");
+                        "/boards/*/writePost", "/boards/*/modifyPost");
         registry.addInterceptor(canonicalInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(

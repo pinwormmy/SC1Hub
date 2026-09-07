@@ -30,7 +30,7 @@ public class AssistantProperties {
     private int maxPromptChars = 12000;
     private List<String> excludedBoards = new ArrayList<>();
     private List<String> factBoards = new ArrayList<>(
-            Arrays.asList("tipBoard", "strategyTipBoard"));
+            Arrays.asList("tipBoard"));
     private int boardListCacheSeconds = 60;
     private List<String> blockedWords = new ArrayList<>();
 

@@ -100,7 +100,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
         boolean comment = boardWrite && action.equals("addComment");
         boolean chat = path.equals("/api/chat/messages");
         boolean upload = path.equals("/imageUpload");
-        boolean contentWrite = boardWrite || path.startsWith("/api/chat/") || path.startsWith("/strategy-tips")
+        boolean contentWrite = boardWrite || path.startsWith("/api/chat/")
                 || path.equals("/imageUpload") || signup || path.equals("/submitModifyMyInfo");
 
         if (member != null && member.getGrade() == 3) {

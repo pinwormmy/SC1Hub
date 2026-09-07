@@ -170,9 +170,10 @@ fetch('/api/admin/assistant-publisher/auto-publish/run', {
 - `/adminPage/ops/history?days=3&limit=100`
 - `/adminPage/ops/history/summary?days=3`
 
-### 한줄 공략 운영
+### 한줄 공략 (2026-09-07 제거)
 
-AI 초안 생성·검수 기능은 사용하지 않습니다. 필요한 공략은 공개채팅의 고수봇 메시지에서 운영자가 직접 선별한 뒤 `/strategy-tips` 입력 폼으로 등록합니다. 기존 한줄 공략 목록, 분류, 직접 등록, 추천, 삭제 기능은 그대로 유지합니다.
+한줄 공략 기능(`/strategy-tips`, `one_line_strategy*` 테이블)은 이용률이 낮고 도배에 쓰여 2026-09-07 에 통째로 제거했습니다.
+공략은 종족별 공략게시판과 꿀팁보급고에서 다룹니다.
 
 ### RAG 적용 흐름
 
@@ -210,7 +211,7 @@ fetch('/api/assistant/rag/status').then(r => r.json()).then(console.log)
 
 - 인덱스는 기본적으로 `data/assistant/rag-index.json`에 저장되며 gitignore 처리되어 있습니다.
 - 대상은 “일반 게시물(notice=0)”이며 댓글은 제외됩니다.
-- 인덱싱 대상은 `*board`로 끝나는 일반 게시판과 공개된 `one_line_strategy` 한줄 공략입니다. 승인 대기·반려 AI 초안은 포함하지 않습니다.
+- 인덱싱 대상은 `*board`로 끝나는 일반 게시판입니다.
 - 게시글 수정 시 `reg_date`가 갱신되므로, `update`는 수정된 글도 자동으로 재인덱싱합니다.
 - `update`는 현재 보드 목록에 없는 보드의 기존 chunks를 자동으로 제거합니다.
 - `sc1hub.assistant.rag.autoUpdate.enabled=true`로 켜면 서버가 살아있는 동안 매일 지정된 cron 시간에 RAG `update` + `search_terms` 재인덱싱을 같이 수행합니다. (search_terms 기본 batchSize=200)

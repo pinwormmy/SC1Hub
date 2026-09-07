@@ -35,11 +35,10 @@ REMOTE_EXPLODED_DIR="$REMOTE_WEBAPPS_DIR/${REMOTE_WAR_NAME%.war}"
 REMOTE_WAR_BACKUP_PATH="$REMOTE_WAR_PATH.rollback"
 REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_OOM_RECOVERY_SCRIPT="$REMOTE_SCRIPT_DIR/restart-tomcat-after-oom.sh"
-REMOTE_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260616_create_one_line_strategy.sql"
-REMOTE_STRATEGY_RECOMMENDATION_SQL="$REMOTE_SCRIPT_DIR/20260824_create_one_line_strategy_recommendation.sql"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_RESET_TOKEN_SQL="$REMOTE_SCRIPT_DIR/20260901_drop_member_reset_token.sql"
 REMOTE_DROP_SUPPORTBOARD_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_supportboard.sql"
+REMOTE_DROP_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_one_line_strategy.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
 ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
@@ -69,11 +68,10 @@ echo "Uploading maintenance scripts..."
 ssh "$REMOTE" "mkdir -p '$REMOTE_SCRIPT_DIR'"
 scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRIPT"
 scp "$ROOT_DIR/scripts/restart-tomcat-after-oom.sh" "$REMOTE:$REMOTE_OOM_RECOVERY_SCRIPT"
-scp "$ROOT_DIR/src/main/resources/sql/20260616_create_one_line_strategy.sql" "$REMOTE:$REMOTE_ONE_LINE_STRATEGY_SQL"
-scp "$ROOT_DIR/src/main/resources/sql/20260824_create_one_line_strategy_recommendation.sql" "$REMOTE:$REMOTE_STRATEGY_RECOMMENDATION_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260901_drop_member_reset_token.sql" "$REMOTE:$REMOTE_RESET_TOKEN_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260907_drop_supportboard.sql" "$REMOTE:$REMOTE_DROP_SUPPORTBOARD_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20260907_drop_one_line_strategy.sql" "$REMOTE:$REMOTE_DROP_ONE_LINE_STRATEGY_SQL"
 
 echo "Installing WAR and restarting Tomcat..."
 ssh "$REMOTE" \
@@ -89,11 +87,10 @@ ssh "$REMOTE" \
    REMOTE_WAR_BACKUP_PATH='$REMOTE_WAR_BACKUP_PATH'
    REMOTE_HTTP_PORT='$REMOTE_HTTP_PORT'
    REMOTE_OOM_RECOVERY_SCRIPT='$REMOTE_OOM_RECOVERY_SCRIPT'
-   REMOTE_ONE_LINE_STRATEGY_SQL='$REMOTE_ONE_LINE_STRATEGY_SQL'
-   REMOTE_STRATEGY_RECOMMENDATION_SQL='$REMOTE_STRATEGY_RECOMMENDATION_SQL'
    REMOTE_VISITOR_COUNT_SQL='$REMOTE_VISITOR_COUNT_SQL'
    REMOTE_RESET_TOKEN_SQL='$REMOTE_RESET_TOKEN_SQL'
    REMOTE_DROP_SUPPORTBOARD_SQL='$REMOTE_DROP_SUPPORTBOARD_SQL'
+   REMOTE_DROP_ONE_LINE_STRATEGY_SQL='$REMOTE_DROP_ONE_LINE_STRATEGY_SQL'
    ROLLBACK_REQUIRES_LEGACY_RUNTIME='$ROLLBACK_REQUIRES_LEGACY_RUNTIME'
    mkdir -p '$REMOTE_WEBAPPS_DIR'
    mkdir -p \"\$REMOTE_CONFIG_DIR\"
@@ -171,13 +168,6 @@ ssh "$REMOTE" \
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_VISITOR_COUNT_SQL\"
    echo 'Dropping dead member.reset_token column (idempotent)...'
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_RESET_TOKEN_SQL\"
-   ONE_LINE_STRATEGY_TABLES=\$(MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" -N -s -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('one_line_strategy', 'one_line_strategy_category');\" \"\$DB_NAME\")
-   if [ \"\$ONE_LINE_STRATEGY_TABLES\" != \"2\" ]; then
-     echo 'Applying one-line strategy schema...'
-     MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_ONE_LINE_STRATEGY_SQL\"
-   fi
-   echo 'Applying one-line strategy recommendation schema...'
-   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_STRATEGY_RECOMMENDATION_SQL\"
    if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
      echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
      exit 1
@@ -205,7 +195,7 @@ ssh "$REMOTE" \
      return 0
    }
    warm_up_representative_routes() {
-     for route in / /strategy-tips /boards/pvstboard /boards/zvszboard /boards/funboard \
+     for route in / /boards/pvstboard /boards/zvszboard /boards/funboard \
        '/boards/pvstboard/readPost?postNum=2' '/api/chat/messages?afterSeq=0' /sitemap.xml; do
        if ! curl -fsS --max-time 5 -o /dev/null \"http://127.0.0.1:\$REMOTE_HTTP_PORT\$route\"; then
          echo \"Representative warm-up failed: \$route\" >&2
@@ -317,9 +307,10 @@ ssh "$REMOTE" \
      exit 1
    fi
    # Schema removals run only while no release is up: the old WAR still queries these tables.
-   echo 'Retiring the supportboard tables (idempotent)...'
-   if ! MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_DROP_SUPPORTBOARD_SQL\"; then
-     echo 'Failed to retire the supportboard tables; restarting the previous release untouched.' >&2
+   echo 'Retiring the supportboard and one-line strategy tables (idempotent)...'
+   if ! MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_DROP_SUPPORTBOARD_SQL\" \\
+      || ! MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_DROP_ONE_LINE_STRATEGY_SQL\"; then
+     echo 'Failed to retire the legacy tables; restarting the previous release untouched.' >&2
      rm -f \"\$REMOTE_UPLOAD_PATH\"
      $REMOTE_START_CMD || true
      exit 1

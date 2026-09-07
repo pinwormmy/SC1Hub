@@ -67,18 +67,17 @@ class CanonicalInterceptorTest {
     @Test
     void preHandle_removesSessionPathAndTrailingSlash() {
         MockHttpServletRequest request = new MockHttpServletRequest(
-                "GET", "/strategy-tips;jsessionid=ABC123/");
-        request.setQueryString("recentPage=1&category=z_vs_t");
-        request.addParameter("recentPage", "1");
-        request.addParameter("category", "z_vs_t");
+                "GET", "/boards/tipboard;jsessionid=ABC123/");
+        request.setQueryString("recentPage=2");
+        request.addParameter("recentPage", "2");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         boolean proceed = interceptor.preHandle(request, response, new Object());
 
         assertFalse(proceed);
         assertEquals(HttpServletResponse.SC_MOVED_PERMANENTLY, response.getStatus());
-        assertEquals("/strategy-tips?recentPage=1&category=z_vs_t", response.getHeader("Location"));
-        assertEquals("https://sc1hub.com/strategy-tips?category=z_vs_t",
+        assertEquals("/boards/tipboard?recentPage=2", response.getHeader("Location"));
+        assertEquals("https://sc1hub.com/boards/tipboard?recentPage=2",
                 request.getAttribute("canonical"));
     }
 

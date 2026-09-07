@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const path = window.location.pathname.replace(/\/$/, '') || '/';
     const boardPath = path.startsWith('/boards/') ? path.split('/').slice(0, 3).join('/') : path;
     const communityBoards = ['/boards/noticeboard', '/boards/videolinkboard', '/boards/promotionboard', '/boards/funboard'];
-    const section = path === '/' ? 'home' : path.startsWith('/strategy-tips') ? 'tips'
+    const section = path === '/' ? 'home'
         : communityBoards.includes(boardPath) ? 'community' : path.startsWith('/boards/') ? 'strategy' : null;
     document.querySelectorAll('[data-nav-section]').forEach((link) => {
         if (link.dataset.navSection === section) link.setAttribute('aria-current', 'page');

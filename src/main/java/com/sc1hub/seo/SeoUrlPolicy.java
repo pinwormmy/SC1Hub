@@ -69,15 +69,6 @@ public class SeoUrlPolicy {
             return String.join("&", parameters);
         }
 
-        if ("/strategy-tips".equals(path)) {
-            String category = normalizeCategory(request.getParameter("category"));
-            if (category != null) {
-                parameters.add("category=" + encode(category));
-            }
-            addPaginationParameter(parameters, request.getParameter("recentPage"));
-            return String.join("&", parameters);
-        }
-
         if (isBoardListPath(path)) {
             addPaginationParameter(parameters, request.getParameter("recentPage"));
         }

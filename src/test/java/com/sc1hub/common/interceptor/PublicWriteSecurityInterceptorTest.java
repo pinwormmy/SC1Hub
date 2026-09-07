@@ -52,7 +52,7 @@ class PublicWriteSecurityInterceptorTest {
     void containmentBlocksGuestAndMemberWritesButKeepsReadsAndLogin() throws Exception {
         var guard = guard(false, false);
         for (String path : new String[]{"/api/chat/messages", "/boards/funboard/submitPost",
-                "/boards/tipboard/addComment", "/imageUpload", "/submitSignUp", "/strategy-tips",
+                "/boards/tipboard/addComment", "/imageUpload", "/submitSignUp",
                 "/submitModifyMyInfo"}) {
             var request = new MockHttpServletRequest("POST", path);
             var response = new MockHttpServletResponse();
