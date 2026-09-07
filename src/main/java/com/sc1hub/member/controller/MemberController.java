@@ -1,6 +1,7 @@
 package com.sc1hub.member.controller;
 
 import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.service.LoginAttemptGuard;
@@ -31,15 +32,21 @@ import java.util.Map;
 public class MemberController {
     private static final int LOGIN_SESSION_TIMEOUT_SECONDS = 30 * 60;
 
+    private static final String LOGIN_THROTTLED_MESSAGE = "로그인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.";
+    // 가입 폼의 숨김 필드. 사람은 채우지 않고 자동화 도구만 채우므로 값이 있으면 가입을 거부한다.
+    static final String SIGNUP_HONEYPOT_FIELD = "homepage";
+
     private final MemberService memberService;
     private final LoginAttemptGuard loginAttemptGuard;
     private final MemberSessionRegistry sessionRegistry;
+    private final OffenderTracker offenderTracker;
 
     public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard,
-                            MemberSessionRegistry sessionRegistry) {
+                            MemberSessionRegistry sessionRegistry, OffenderTracker offenderTracker) {
         this.memberService = memberService;
         this.loginAttemptGuard = loginAttemptGuard;
         this.sessionRegistry = sessionRegistry;
+        this.offenderTracker = offenderTracker;
     }
 
     @GetMapping("/login")
@@ -69,8 +76,15 @@ public class MemberController {
     }
 
     @PostMapping("/submitSignUp")
-    public String submitSignUp(HttpServletRequest request, MemberDTO memberDTO, HttpSession httpSession)
-            throws Exception {
+    public String submitSignUp(HttpServletRequest request, MemberDTO memberDTO, HttpSession httpSession,
+                               Model model) throws Exception {
+        if (StringUtils.hasText(request.getParameter(SIGNUP_HONEYPOT_FIELD))) {
+            offenderTracker.strike(IpService.getRemoteIP(request), IpService.hasForwardedClient(request),
+                    null, null, "가입 봇 필드 입력");
+            model.addAttribute("msg", "가입 정보를 확인해주세요.");
+            model.addAttribute("url", "/signUp");
+            return "alert";
+        }
         memberService.submitSignUp(memberDTO);
         MemberDTO loginData = memberService.checkLoginData(memberDTO); // 로그인도 해줌
         rotateSession(request); // 세션 고정 공격 방지: 인증 후 세션 ID 교체
@@ -83,15 +97,25 @@ public class MemberController {
     @PostMapping("/submitLogin")
     public String submitLogin(HttpServletRequest request, HttpSession session, MemberDTO memberDTO,
                               Model model) throws Exception {
+        String ip = IpService.getRemoteIP(request);
+        boolean ipTrusted = IpService.hasForwardedClient(request);
+        if (ipTrusted && loginAttemptGuard.isIpBlocked(ip)) {
+            log.warn("로그인 시도 IP 잠금 상태의 접근입니다. memberId={}, ip={}", memberDTO.getId(), ip);
+            model.addAttribute("message", LOGIN_THROTTLED_MESSAGE);
+            return "login";
+        }
         if (loginAttemptGuard.isBlocked(memberDTO.getId())) {
-            log.warn("로그인 시도 잠금 상태의 접근입니다. memberId={}, ip={}",
-                    memberDTO.getId(), IpService.getRemoteIP(request));
-            model.addAttribute("message", "로그인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.");
+            log.warn("로그인 시도 잠금 상태의 접근입니다. memberId={}, ip={}", memberDTO.getId(), ip);
+            model.addAttribute("message", LOGIN_THROTTLED_MESSAGE);
             return "login";
         }
         MemberDTO loginData = memberService.checkLoginData(memberDTO);
         if (loginData == null) {
             loginAttemptGuard.recordFailure(memberDTO.getId());
+            if (ipTrusted) {
+                loginAttemptGuard.recordIpFailure(ip);
+            }
+            offenderTracker.strike(ip, ipTrusted, null, null, "로그인 실패");
             model.addAttribute("message", "아이디 또는 비밀번호가 일치하지 않습니다.");
             return "login";
         }

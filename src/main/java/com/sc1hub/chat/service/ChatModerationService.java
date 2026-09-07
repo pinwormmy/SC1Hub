@@ -90,9 +90,9 @@ public class ChatModerationService {
             return null;
         }
         if (PERMANENT.equals(expiry)) {
-            return "채팅 이용이 제한되었습니다.";
+            return "이용이 제한되었습니다.";
         }
-        return "채팅 이용이 제한되었습니다. (해제: " + expiry.format(EXPIRY_FORMAT) + ")";
+        return "이용이 제한되었습니다. (해제: " + expiry.format(EXPIRY_FORMAT) + ")";
     }
 
     public ChatSanctionDTO addSanction(String type, String memberId, String ip, String nickname,

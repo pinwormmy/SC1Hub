@@ -43,6 +43,25 @@ class SecurityRouteRegistrationTest {
         }
     }
 
+    @Test
+    void memberWritableBoardsAreNotAdminProtectedUnderTheirCanonicalLowercaseUrls() throws Exception {
+        var admin = new AdminInterceptor(new ContentApiTokenAuthenticator(""));
+        var config = new WebConfig(mock(VisitorCountInterceptor.class), mock(CanonicalInterceptor.class),
+                new BoardLvInterceptor(), admin, new MemberLoginInterceptor());
+        var registry = new ExposedRegistry();
+        config.addInterceptors(registry);
+        for (String path : new String[]{"/boards/promotionboard/writePost", "/boards/promotionboard/submitPost",
+                "/boards/supportboard/submitPost", "/boards/videolinkboard/submitPost", "/boards/funboard/submitPost"}) {
+            var request = new MockHttpServletRequest("POST", path);
+            ServletRequestPathUtils.parseAndCache(request);
+            for (Object candidate : registry.values()) {
+                if (candidate instanceof MappedInterceptor mapped && mapped.getInterceptor() == admin) {
+                    assertFalse(mapped.matches(request), path + " must stay open to logged-in members");
+                }
+            }
+        }
+    }
+
     private static class ExposedRegistry extends InterceptorRegistry {
         List<Object> values() { return getInterceptors(); }
     }

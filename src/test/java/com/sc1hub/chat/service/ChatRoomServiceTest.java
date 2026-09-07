@@ -34,7 +34,8 @@ class ChatRoomServiceTest {
                 chatMapper,
                 new ChatProperties(),
                 moderationService,
-                memberMapper);
+                memberMapper,
+                new com.sc1hub.common.security.DuplicateContentGuard());
     }
 
     @Test

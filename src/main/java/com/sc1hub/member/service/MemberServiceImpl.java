@@ -14,6 +14,7 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -33,6 +34,8 @@ public class MemberServiceImpl implements MemberService {
     private static final int MAX_PHONE_LENGTH = 50;
     private static final int MIN_GRADE = 1;
     private static final int MAX_GRADE = 3;
+    private static final Pattern MEMBER_ID_FORMAT = Pattern.compile("^[a-z][a-z0-9]{3,19}$");
+    private static final Pattern EMAIL_FORMAT = Pattern.compile("^[^@\\s<>\"']+@[^@\\s<>\"']+\\.[^@\\s<>\"']+$");
     // 기존 회원 행은 평문 pw를 담고 있다. 로그인 성공 시 BCrypt로 제자리 승격되며,
     // 이 접두사로 저장 형식을 판별한다.
     private static final String BCRYPT_PREFIX = "$2";
@@ -68,6 +71,7 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public void submitSignUp(MemberDTO memberDTO) throws Exception {
+        validateMemberId(memberDTO.getId());
         validateNewPassword(memberDTO.getPw());
         validateProfileFields(memberDTO, true);
         ensureNicknameAvailable(null, memberDTO.getNickName());
@@ -229,6 +233,16 @@ public class MemberServiceImpl implements MemberService {
         validateSafeText(member.getRealName(), "이름", MAX_REALNAME_LENGTH);
         validateSafeText(member.getEmail(), "이메일", MAX_EMAIL_LENGTH);
         validateSafeText(member.getPhone(), "연락처", MAX_PHONE_LENGTH);
+        if (StringUtils.hasText(member.getEmail()) && !EMAIL_FORMAT.matcher(member.getEmail().trim()).matches()) {
+            throw new IllegalArgumentException("이메일 형식을 확인해주세요.");
+        }
+    }
+
+    /** 가입 화면과 같은 규칙을 서버에서도 강제한다: 영문 소문자로 시작하는 4~20자 소문자·숫자. */
+    private void validateMemberId(String id) {
+        if (!StringUtils.hasText(id) || !MEMBER_ID_FORMAT.matcher(id).matches()) {
+            throw new IllegalArgumentException("아이디는 영문 소문자로 시작하는 4~20자의 영문 소문자·숫자여야 합니다.");
+        }
     }
 
     private void validateSafeText(String value, String fieldLabel, int maxLength) {

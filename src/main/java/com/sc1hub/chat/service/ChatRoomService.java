@@ -4,6 +4,7 @@ import com.sc1hub.chat.config.ChatProperties;
 import com.sc1hub.chat.dto.ChatMessageDTO;
 import com.sc1hub.chat.dto.ChatPollResponseDTO;
 import com.sc1hub.chat.mapper.ChatMapper;
+import com.sc1hub.common.security.DuplicateContentGuard;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.mapper.MemberMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,7 @@ public class ChatRoomService {
     private final ChatProperties chatProperties;
     private final ChatModerationService moderationService;
     private final MemberMapper memberMapper;
+    private final DuplicateContentGuard duplicateContentGuard;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final ArrayDeque<ChatMessageDTO> buffer = new ArrayDeque<>();
@@ -60,11 +62,13 @@ public class ChatRoomService {
     public ChatRoomService(ChatMapper chatMapper,
                            ChatProperties chatProperties,
                            ChatModerationService moderationService,
-                           MemberMapper memberMapper) {
+                           MemberMapper memberMapper,
+                           DuplicateContentGuard duplicateContentGuard) {
         this.chatMapper = chatMapper;
         this.chatProperties = chatProperties;
         this.moderationService = moderationService;
         this.memberMapper = memberMapper;
+        this.duplicateContentGuard = duplicateContentGuard;
     }
 
     @PostConstruct
@@ -161,6 +165,10 @@ public class ChatRoomService {
         }
 
         checkFlood(memberId, ip);
+        String actorKey = StringUtils.hasText(memberId) ? "member:" + memberId : "ip:" + ip;
+        if (duplicateContentGuard.isDuplicate("chat", actorKey, trimmed, 8, 60_000L)) {
+            throw new ChatRejectedException(HttpStatus.TOO_MANY_REQUESTS, "같은 내용을 짧은 시간에 반복해서 보낼 수 없습니다.");
+        }
 
         String nickname = resolveNickname(member, session);
         String role = resolveRole(member);

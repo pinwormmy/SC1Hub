@@ -1,5 +1,6 @@
 package com.sc1hub.member.controller;
 
+import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
@@ -19,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -35,8 +39,24 @@ class MemberControllerTest {
     @Mock
     private MemberSessionRegistry sessionRegistry;
 
+    @Mock
+    private OffenderTracker offenderTracker;
+
     @InjectMocks
     private MemberController controller;
+
+    @Test
+    void submitSignUp_rejectsHoneypotFilledRequestsWithoutTouchingTheService() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/submitSignUp");
+        request.setParameter(MemberController.SIGNUP_HONEYPOT_FIELD, "http://spam.example");
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = controller.submitSignUp(request, new MemberDTO(), new MockHttpSession(), model);
+
+        assertEquals("alert", view);
+        verifyNoInteractions(memberService);
+        verify(offenderTracker).strike(any(), anyBoolean(), isNull(), isNull(), anyString());
+    }
 
     @Test
     void login_rejectsExternalReturnUrl() {

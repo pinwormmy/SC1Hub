@@ -10,6 +10,7 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
+import com.sc1hub.common.security.DuplicateContentGuard;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
@@ -57,15 +58,24 @@ public class BoardController {
     private static final int COMMENT_NICKNAME_MAX_LENGTH = 50;
     private static final int COMMENT_PASSWORD_MAX_LENGTH = 100;
 
+    private static final String DUPLICATE_POST_MESSAGE = "같은 내용의 글을 짧은 시간에 반복 등록할 수 없습니다.";
+    private static final String DUPLICATE_COMMENT_MESSAGE = "같은 내용의 댓글을 짧은 시간에 반복 등록할 수 없습니다.";
+    private static final int DUPLICATE_POST_MIN_LENGTH = 30;
+    private static final int DUPLICATE_COMMENT_MIN_LENGTH = 20;
+    private static final long DUPLICATE_POST_WINDOW_MILLIS = 10 * 60 * 1000L;
+    private static final long DUPLICATE_COMMENT_WINDOW_MILLIS = 5 * 60 * 1000L;
+
     private final BoardService boardService;
     private final MemberService memberService;
     private final SeoMetadataService seoMetadataService;
+    private final DuplicateContentGuard duplicateContentGuard;
 
     public BoardController(BoardService boardService, MemberService memberService,
-                           SeoMetadataService seoMetadataService) {
+                           SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard) {
         this.boardService = boardService;
         this.memberService = memberService;
         this.seoMetadataService = seoMetadataService;
+        this.duplicateContentGuard = duplicateContentGuard;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -160,6 +170,13 @@ public class BoardController {
         }
         if (member == null && isRegisteredMemberNickname(post.getWriter())) {
             model.addAttribute("msg", GUEST_NICKNAME_CONFLICT_MESSAGE);
+            model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
+            return "alert";
+        }
+        // 도배 방지: 누가 올리든 같은 내용의 글은 짧은 시간에 한 번만 받는다(관리자 제외).
+        if (!isAdmin(member) && duplicateContentGuard.isDuplicate("post", null,
+                post.getTitle() + "\n" + post.getContent(), DUPLICATE_POST_MIN_LENGTH, DUPLICATE_POST_WINDOW_MILLIS)) {
+            model.addAttribute("msg", DUPLICATE_POST_MESSAGE);
             model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
             return "alert";
         }
@@ -317,6 +334,10 @@ public class BoardController {
             if (isRegisteredMemberNickname(comment.getNickname())) {
                 return commentResponse(HttpStatus.BAD_REQUEST, GUEST_NICKNAME_CONFLICT_MESSAGE);
             }
+        }
+        if (!isCommentAdmin(member) && duplicateContentGuard.isDuplicate("comment", null, comment.getContent(),
+                DUPLICATE_COMMENT_MIN_LENGTH, DUPLICATE_COMMENT_WINDOW_MILLIS)) {
+            return commentResponse(HttpStatus.TOO_MANY_REQUESTS, DUPLICATE_COMMENT_MESSAGE);
         }
         boardService.addComment(boardTitle, comment);
         return commentResponse(HttpStatus.OK, "댓글이 성공적으로 추가되었습니다.");

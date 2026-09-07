@@ -20,7 +20,11 @@ public class LoginAttemptGuard {
     static final int MAX_FAILURES = 5;
     static final Duration LOCKOUT = Duration.ofMinutes(5);
     static final int MAX_TRACKED_ACCOUNTS = 10_000;
+    // 접속 주소 기준: 여러 계정을 돌아가며 시도하는 무차별 대입을 막는다(프록시 헤더가 신뢰될 때만 사용).
+    static final int IP_MAX_FAILURES = 30;
+    static final Duration IP_LOCKOUT = Duration.ofMinutes(15);
     private static final int MAX_KEY_LENGTH = 100;
+    private static final String IP_KEY_PREFIX = "ip:";
 
     private final Clock clock;
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
@@ -83,8 +87,49 @@ public class LoginAttemptGuard {
         attempts.remove(key(memberId));
     }
 
+    /** 접속 주소가 잠겨 있으면 true. */
+    public boolean isIpBlocked(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+        String key = IP_KEY_PREFIX + key(ip);
+        Attempt attempt = attempts.get(key);
+        if (attempt == null) {
+            return false;
+        }
+        if (isExpired(attempt, IP_LOCKOUT)) {
+            attempts.remove(key);
+            return false;
+        }
+        return attempt.failures >= IP_MAX_FAILURES;
+    }
+
+    public void recordIpFailure(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return;
+        }
+        String key = IP_KEY_PREFIX + key(ip);
+        if (attempts.size() >= MAX_TRACKED_ACCOUNTS && !attempts.containsKey(key)) {
+            attempts.entrySet().removeIf(entry -> isExpired(entry.getValue()));
+            while (attempts.size() >= MAX_TRACKED_ACCOUNTS && !evictOldest()) {
+                break;
+            }
+        }
+        attempts.compute(key, (ignored, current) -> {
+            Instant now = clock.instant();
+            if (current == null || isExpired(current, IP_LOCKOUT)) {
+                return new Attempt(1, now);
+            }
+            return new Attempt(current.failures + 1, now);
+        });
+    }
+
     private boolean isExpired(Attempt attempt) {
-        return attempt.lastFailure.plus(LOCKOUT).isBefore(clock.instant());
+        return isExpired(attempt, LOCKOUT);
+    }
+
+    private boolean isExpired(Attempt attempt, Duration lockout) {
+        return attempt.lastFailure.plus(lockout).isBefore(clock.instant());
     }
 
     private String key(String memberId) {

@@ -116,21 +116,28 @@ class VisitorCountServiceImplTest {
     }
 
     @Test
-    void processVisitor_ignoresRawForwardedForWhenBuildingIdentity() {
+    void processVisitor_usesProxyAppendedClientAddressAndIgnoresSpoofedLeadingValues() {
         when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(0);
 
+        // 원격 주소는 항상 프록시(같은 값)이고, 프록시가 덧붙인 가장 오른쪽 X-Forwarded-For 가 방문자다.
         MockHttpServletRequest firstRequest = browserRequest("203.0.113.30");
         firstRequest.addHeader("X-Forwarded-For", "198.51.100.10");
         MockHttpServletRequest secondRequest = browserRequest("203.0.113.30");
         secondRequest.addHeader("X-Forwarded-For", "198.51.100.99");
+        MockHttpServletRequest spoofedRequest = browserRequest("203.0.113.30");
+        spoofedRequest.addHeader("X-Forwarded-For", "1.2.3.4, 198.51.100.10");
 
         visitorCountService.processVisitor(firstRequest, new MockHttpServletResponse());
         visitorCountService.processVisitor(secondRequest, new MockHttpServletResponse());
+        visitorCountService.processVisitor(spoofedRequest, new MockHttpServletResponse());
 
         ArgumentCaptor<String> hashCaptor = ArgumentCaptor.forClass(String.class);
-        verify(visitorCountMapper, times(2))
+        verify(visitorCountMapper, times(3))
                 .insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), hashCaptor.capture());
-        assertEquals(hashCaptor.getAllValues().get(0), hashCaptor.getAllValues().get(1));
+        org.junit.jupiter.api.Assertions.assertNotEquals(hashCaptor.getAllValues().get(0),
+                hashCaptor.getAllValues().get(1), "다른 방문자는 다른 식별자여야 한다");
+        assertEquals(hashCaptor.getAllValues().get(0), hashCaptor.getAllValues().get(2),
+                "위조 가능한 왼쪽 값은 식별에 쓰지 않는다");
     }
 
     @Test

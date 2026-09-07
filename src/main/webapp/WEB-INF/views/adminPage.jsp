@@ -401,6 +401,64 @@
                             </nav>
                         </div>
                     </div>
+                    <div class="admin-card admin-card--security">
+                        <div class="admin-card-header">
+                            <div>
+                                <h2 class="admin-card-title">보안 운영</h2>
+                                <p class="admin-card-subtitle">쓰기 스위치 · 제재(IP 차단/회원 뮤트) · 자동 차단 현황</p>
+                            </div>
+                            <button type="button" class="admin-btn admin-btn--ghost" id="adminSecurityRefreshBtn">새로고침</button>
+                        </div>
+                        <div class="admin-indexing-section">
+                            <div class="admin-indexing-hint" id="adminSecurityStatus">상태를 불러오는 중…</div>
+                            <div class="admin-indexing-row">
+                                <button type="button" class="admin-btn admin-btn--danger" data-security-switch="public-writes" data-enabled="false">회원 쓰기 차단(긴급)</button>
+                                <button type="button" class="admin-btn" data-security-switch="public-writes" data-enabled="true">회원 쓰기 재개</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" data-security-switch="guest-writes" data-enabled="true">비회원 쓰기 허용</button>
+                                <button type="button" class="admin-btn admin-btn--ghost" data-security-switch="guest-writes" data-enabled="false">비회원 쓰기 차단</button>
+                            </div>
+                            <div class="admin-indexing-hint">스위치는 즉시 반영되며 재시작하면 설정 파일의 기본값으로 돌아갑니다.</div>
+                        </div>
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">제재 추가</h3>
+                            <form id="adminSanctionForm" class="admin-indexing-row" autocomplete="off">
+                                <select class="admin-indexing-input" name="type" aria-label="제재 유형">
+                                    <option value="BLOCK_IP">IP 차단</option>
+                                    <option value="MUTE">회원 뮤트</option>
+                                </select>
+                                <input class="admin-indexing-input" name="target" placeholder="IP 또는 회원 ID" style="width: 200px;" required>
+                                <input class="admin-indexing-input" name="minutes" type="number" min="0" placeholder="분(비우면 영구)" style="width: 140px;">
+                                <input class="admin-indexing-input" name="reason" placeholder="사유" style="width: 220px;" maxlength="200">
+                                <button type="submit" class="admin-btn admin-btn--danger">제재 적용</button>
+                            </form>
+                            <div class="admin-indexing-hint">IP는 공인 주소만 받습니다. 어떤 IP가 보이는지는 "내 접속 정보"로 확인할 수 있습니다.</div>
+                            <div class="admin-indexing-row">
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminSecurityEchoBtn">내 접속 정보</button>
+                            </div>
+                        </div>
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">활성 제재</h3>
+                            <div class="admin-table-wrap">
+                                <table class="admin-memberlist" id="adminSanctionTable">
+                                    <thead>
+                                        <tr>
+                                            <th width="12%">유형</th>
+                                            <th width="22%">대상</th>
+                                            <th width="16%">표시명</th>
+                                            <th width="26%">사유</th>
+                                            <th width="14%">해제</th>
+                                            <th width="10%">관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="admin-indexing-section">
+                            <h3 class="admin-indexing-title">최근 응답</h3>
+                            <pre class="admin-indexing-output" id="adminSecurityOutput" aria-live="polite"></pre>
+                        </div>
+                    </div>
                     <div class="admin-card">
                         <div class="admin-card-header">
                             <div>
@@ -646,6 +704,156 @@ async function confirmDelete(id) {
             setBusy(false);
         }
     });
+})();
+
+(function() {
+    var outputEl = document.getElementById('adminSecurityOutput');
+    var statusEl = document.getElementById('adminSecurityStatus');
+    var tableBody = document.querySelector('#adminSanctionTable tbody');
+    if (!outputEl || !statusEl || !tableBody) {
+        return;
+    }
+
+    function writeOutput(title, result) {
+        var body = result && result.json ? JSON.stringify(result.json, null, 2)
+            : (result && typeof result.text === 'string' ? result.text : String((result && result.error) || ''));
+        outputEl.textContent = '[' + new Date().toLocaleString() + '] ' + title
+            + (result && typeof result.status === 'number' ? ' (' + result.status + ')' : '') + '\n' + body + '\n';
+    }
+
+    async function call(method, url, payload) {
+        var options = { method: method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
+        if (payload !== undefined) {
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(payload);
+        }
+        var response = await fetch(url, options);
+        var text = await response.text().catch(function() { return ''; });
+        var json = null;
+        try { json = text ? JSON.parse(text) : null; } catch (e) { json = null; }
+        return { ok: response.ok, status: response.status, text: text, json: json };
+    }
+
+    function cell(text) {
+        var td = document.createElement('td');
+        td.textContent = text == null ? '' : String(text);
+        return td;
+    }
+
+    function renderSanctions(rows) {
+        tableBody.textContent = '';
+        if (!rows || !rows.length) {
+            var tr = document.createElement('tr');
+            var td = cell('활성 제재가 없습니다.');
+            td.className = 'admin-empty';
+            td.colSpan = 6;
+            tr.appendChild(td);
+            tableBody.appendChild(tr);
+            return;
+        }
+        rows.forEach(function(row) {
+            var tr = document.createElement('tr');
+            tr.appendChild(cell(row.type === 'MUTE' ? '회원 뮤트' : 'IP 차단'));
+            tr.appendChild(cell(row.target));
+            tr.appendChild(cell(row.nickname));
+            tr.appendChild(cell(row.reason));
+            tr.appendChild(cell(row.expiresAtText));
+            var actions = document.createElement('td');
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'admin-btn admin-btn--ghost';
+            btn.textContent = '해제';
+            btn.setAttribute('data-sanction-revoke', String(row.id));
+            actions.appendChild(btn);
+            tr.appendChild(actions);
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function renderStatus(s) {
+        if (!s) {
+            statusEl.textContent = '상태를 불러오지 못했습니다.';
+            return;
+        }
+        statusEl.textContent = '회원 쓰기: ' + (s.publicWritesEnabled ? '허용' : '차단')
+            + ' · 비회원 쓰기: ' + (s.guestWritesEnabled ? '허용' : '차단')
+            + ' · 활성 제재: ' + s.activeSanctionCount + '건'
+            + ' · 최근 10분 거부: ' + s.recentRejections10Min + '회'
+            + ' · 자동 차단(기동 후): ' + s.autoBansSinceStart + '건'
+            + ' · 평문 비밀번호: ' + s.legacyPasswordCount + '건';
+    }
+
+    async function refresh() {
+        try {
+            var status = await call('GET', '/api/admin/security/status');
+            renderStatus(status.json);
+            var sanctions = await call('GET', '/api/admin/security/sanctions');
+            renderSanctions(Array.isArray(sanctions.json) ? sanctions.json : []);
+        } catch (e) {
+            renderStatus(null);
+        }
+    }
+
+    document.getElementById('adminSecurityRefreshBtn').addEventListener('click', refresh);
+
+    document.addEventListener('click', async function(event) {
+        var target = event.target instanceof Element ? event.target : null;
+        if (!target) {
+            return;
+        }
+        var switchEl = target.closest('[data-security-switch]');
+        if (switchEl) {
+            var name = switchEl.getAttribute('data-security-switch');
+            var enabled = switchEl.getAttribute('data-enabled') === 'true';
+            if (name === 'public-writes' && !enabled && !confirm('회원 글·댓글·채팅·가입을 즉시 차단할까요?')) {
+                return;
+            }
+            var result = await call('POST', '/api/admin/security/' + name, { enabled: enabled });
+            writeOutput('POST /api/admin/security/' + name, result);
+            refresh();
+            return;
+        }
+        var revokeEl = target.closest('[data-sanction-revoke]');
+        if (revokeEl) {
+            var id = revokeEl.getAttribute('data-sanction-revoke');
+            if (!confirm('이 제재를 해제할까요?')) {
+                return;
+            }
+            var revoked = await call('DELETE', '/api/admin/security/sanctions/' + encodeURIComponent(id));
+            writeOutput('DELETE /api/admin/security/sanctions/' + id, revoked);
+            refresh();
+        }
+    });
+
+    document.getElementById('adminSanctionForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        var form = event.target;
+        var payload = {
+            type: form.elements.type.value,
+            target: form.elements.target.value.trim(),
+            minutes: form.elements.minutes.value ? Number(form.elements.minutes.value) : null,
+            reason: form.elements.reason.value.trim()
+        };
+        if (!payload.target) {
+            return;
+        }
+        if (!confirm((payload.type === 'MUTE' ? '회원 뮤트' : 'IP 차단') + ' 제재를 적용할까요? 대상: ' + payload.target)) {
+            return;
+        }
+        var result = await call('POST', '/api/admin/security/sanctions', payload);
+        writeOutput('POST /api/admin/security/sanctions', result);
+        if (result.ok) {
+            form.reset();
+        }
+        refresh();
+    });
+
+    document.getElementById('adminSecurityEchoBtn').addEventListener('click', async function() {
+        var result = await call('GET', '/api/admin/security/request-echo');
+        writeOutput('GET /api/admin/security/request-echo', result);
+    });
+
+    refresh();
 })();
 </script>
 

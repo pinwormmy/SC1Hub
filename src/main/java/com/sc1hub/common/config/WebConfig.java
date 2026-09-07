@@ -76,7 +76,10 @@ public class WebConfig implements WebMvcConfigurer {
                         "/**/writePost", "/**/submitPost", "/**/submitModifyPost", "/**/modifyPost/**", "/**/deletePost/**",
                         "/**/movePost", "/migrate/**",
                         "/api/admin/**")
-                .excludePathPatterns("/boards/supportBoard/**", "/boards/videoLinkBoard/**", "/boards/promotionBoard/**",
+                // 회원 작성이 허용되는 게시판. URL 은 소문자로 정규화되므로 소문자 패턴이 실제로 매칭되는 쪽이다.
+                .excludePathPatterns("/boards/supportBoard/**", "/boards/supportboard/**",
+                        "/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
+                        "/boards/promotionBoard/**", "/boards/promotionboard/**",
                         "/boards/freeBoard/**", "/boards/freeboard/**", "/boards/beginnerBoard/**", "/boards/beginnerboard/**",
                         "/boards/funBoard/**", "/boards/funboard/**", "/boards/userGuideBoard/**", "/boards/userguideboard/**");
     }

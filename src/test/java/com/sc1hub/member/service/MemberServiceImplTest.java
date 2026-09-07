@@ -224,6 +224,18 @@ class MemberServiceImplTest {
     }
 
     @Test
+    void signUpRejectsIdsOutsideTheAllowedFormat() throws Exception {
+        for (String badId : new String[]{"XALGTEST1", "ab", "1abc", "test-user", "a".repeat(21), "테스터"}) {
+            MemberDTO signUp = new MemberDTO();
+            signUp.setId(badId);
+            signUp.setPw(RAW_PASSWORD);
+            signUp.setNickName("tester");
+            assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp), badId);
+        }
+        verify(memberMapper, never()).submitSignUp(any());
+    }
+
+    @Test
     void adminEditRejectsOutOfRangeGrade() {
         MemberDTO edit = new MemberDTO();
         edit.setId(MEMBER_ID);

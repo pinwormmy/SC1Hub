@@ -85,6 +85,19 @@ class LoginAttemptGuardTest {
     }
 
     @Test
+    void addressLocksAfterRepeatedFailuresAndExpires() {
+        for (int i = 0; i < LoginAttemptGuard.IP_MAX_FAILURES; i++) {
+            guard.recordIpFailure("203.0.113.9");
+        }
+        assertTrue(guard.isIpBlocked("203.0.113.9"));
+        assertFalse(guard.isIpBlocked("203.0.113.10"));
+        assertFalse(guard.isBlocked("203.0.113.9"), "IP 키는 계정 키와 섞이지 않는다");
+
+        now.set(now.get().plus(LoginAttemptGuard.IP_LOCKOUT).plus(Duration.ofSeconds(1)));
+        assertFalse(guard.isIpBlocked("203.0.113.9"));
+    }
+
+    @Test
     void trackedAccountsStayWithinTheHardCap() {
         for (int i = 0; i < LoginAttemptGuard.MAX_TRACKED_ACCOUNTS + 50; i++) {
             guard.recordFailure("synthetic-" + i);

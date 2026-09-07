@@ -1,5 +1,6 @@
 package com.sc1hub.visitor.service;
 
+import com.sc1hub.common.util.IpService;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -113,9 +114,9 @@ public class VisitorCountServiceImpl implements VisitorCountService {
     }
 
     private String createVisitorHash(HttpServletRequest request, LocalDate date) {
-        // Forwarded headers are normalized by the configured Tomcat RemoteIpValve.
-        // Reading the raw X-Forwarded-For header here would let direct clients spoof identities.
-        String clientAddress = request.getRemoteAddr();
+        // 프록시가 덧붙인 가장 오른쪽 X-Forwarded-For 값(IpService)이 실제 방문자다. 원격 주소는 프록시라
+        // 그대로 쓰면 모든 방문자가 하나로 합쳐진다.
+        String clientAddress = IpService.getRemoteIP(request);
         String userAgent = request.getHeader("User-Agent");
         String source = date + "|" + normalize(clientAddress) + "|" + normalize(userAgent);
 

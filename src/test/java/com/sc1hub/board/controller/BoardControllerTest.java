@@ -6,6 +6,7 @@ import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
+import com.sc1hub.common.security.DuplicateContentGuard;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
@@ -39,8 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -57,8 +60,32 @@ class BoardControllerTest {
     @Mock
     private MemberService memberService;
 
+    @Mock
+    private DuplicateContentGuard duplicateContentGuard;
+
     @InjectMocks
     private BoardController boardController;
+
+    @Test
+    void submitPost_rejectsDuplicateContentFromMembers() throws Exception {
+        MemberDTO member = new MemberDTO();
+        member.setId("writer");
+        member.setNickName("작성자");
+        member.setGrade(1);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession().setAttribute("member", member);
+        BoardDTO post = new BoardDTO();
+        post.setTitle("같은 제목");
+        post.setContent("같은 내용을 반복해서 올리는 도배 글입니다.");
+        when(boardService.canWrite("funboard", member)).thenReturn(true);
+        when(duplicateContentGuard.isDuplicate(eq("post"), isNull(), anyString(), anyInt(), anyLong())).thenReturn(true);
+        Model model = new ExtendedModelMap();
+
+        assertEquals("alert", boardController.submitPost("funboard", post, request, model));
+
+        assertEquals("같은 내용의 글을 짧은 시간에 반복 등록할 수 없습니다.", model.asMap().get("msg"));
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+    }
 
     @Test
     void submitPostRejectsMemberWithoutBoardPermission() throws Exception {

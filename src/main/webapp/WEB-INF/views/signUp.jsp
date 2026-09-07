@@ -52,6 +52,10 @@
                                 이메일>
                                 <input type="email" id="email" name="email"><br>
                             </div>
+                            <%-- 자동 가입 도구만 채우는 숨김 필드. 값이 있으면 서버가 가입을 거부한다. --%>
+                            <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;height:0;overflow:hidden;">
+                                <label>홈페이지 <input type="text" name="homepage" tabindex="-1" autocomplete="off"></label>
+                            </div>
                             <br>
                             <button type="button" class="basicButton" onclick="checkSignupForm();" accesskey="s">가입하기(S)</button><br>
                         </form>
