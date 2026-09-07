@@ -71,6 +71,16 @@
         where post_num=#{page.postNum}
     </select>
 
+    <select id="selectRecommendedPostNumsByUser" resultType="int">
+        select post_num from ${boardTitle}_recommend
+        where user_id=#{userId}
+    </select>
+
+    <delete id="deleteRecommendationsByUser">
+        delete from ${boardTitle}_recommend
+        where user_id=#{userId}
+    </delete>
+
     <select id="countMemberPostsByWriter" resultType="int">
         select count(*) from ${boardTitle}
         where writer=#{writer}

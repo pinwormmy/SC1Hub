@@ -70,6 +70,13 @@ public interface BoardMapper {
 
         void updateTotalRecommendCount(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum);
 
+        /** 회원이 추천한 게시글 번호 목록. 회원 삭제 전 추천 기록 정리용. */
+        List<Integer> selectRecommendedPostNumsByUser(@Param("boardTitle") String boardTitle,
+                        @Param("userId") String userId);
+
+        /** 회원의 추천 기록을 모두 지우고 지운 행 수를 돌려준다. */
+        int deleteRecommendationsByUser(@Param("boardTitle") String boardTitle, @Param("userId") String userId);
+
         int getRecommendCount(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum);
 
         int getActualRecommendCount(@Param("boardTitle") String boardTitle, @Param("postNum") int postNum);

@@ -33,13 +33,26 @@ class MemberServiceImplTest {
     @Mock
     private WriterNicknameGuard writerNicknameGuard;
 
+    @Mock
+    private MemberRecommendationCleanup recommendationCleanup;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private MemberServiceImpl memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberServiceImpl(memberMapper, passwordEncoder, writerNicknameGuard);
+        memberService = new MemberServiceImpl(memberMapper, passwordEncoder, writerNicknameGuard,
+                recommendationCleanup);
+    }
+
+    @Test
+    void deleteMemberRemovesRecommendationRowsBeforeTheMemberRow() {
+        memberService.deleteMember(MEMBER_ID);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(recommendationCleanup, memberMapper);
+        order.verify(recommendationCleanup).removeRecommendationsOf(MEMBER_ID);
+        order.verify(memberMapper).deleteMember(MEMBER_ID);
     }
 
     private MemberDTO storedMember(String storedPw) {

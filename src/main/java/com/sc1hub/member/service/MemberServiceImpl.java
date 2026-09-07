@@ -8,6 +8,7 @@ import com.sc1hub.member.mapper.MemberMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -39,12 +40,15 @@ public class MemberServiceImpl implements MemberService {
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
     private final WriterNicknameGuard writerNicknameGuard;
+    private final MemberRecommendationCleanup recommendationCleanup;
 
     public MemberServiceImpl(MemberMapper memberMapper, PasswordEncoder passwordEncoder,
-                             WriterNicknameGuard writerNicknameGuard) {
+                             WriterNicknameGuard writerNicknameGuard,
+                             MemberRecommendationCleanup recommendationCleanup) {
         this.memberMapper = memberMapper;
         this.passwordEncoder = passwordEncoder;
         this.writerNicknameGuard = writerNicknameGuard;
+        this.recommendationCleanup = recommendationCleanup;
     }
 
     @Override
@@ -176,7 +180,10 @@ public class MemberServiceImpl implements MemberService {
     }
 
     @Override
+    @Transactional
     public void deleteMember(String id) {
+        // *_recommend.user_id 외래키 때문에 추천 기록을 먼저 지워야 회원 행을 지울 수 있다.
+        recommendationCleanup.removeRecommendationsOf(id);
         memberMapper.deleteMember(id);
     }
 
