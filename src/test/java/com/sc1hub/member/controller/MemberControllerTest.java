@@ -1,5 +1,6 @@
 package com.sc1hub.member.controller;
 
+import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.LoginAttemptGuard;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +44,9 @@ class MemberControllerTest {
     @Mock
     private OffenderTracker offenderTracker;
 
+    @Spy
+    private AttackContentDetector attackContentDetector = new AttackContentDetector();
+
     @InjectMocks
     private MemberController controller;
 
@@ -56,6 +61,23 @@ class MemberControllerTest {
         assertEquals("alert", view);
         verifyNoInteractions(memberService);
         verify(offenderTracker).strike(any(), anyBoolean(), isNull(), isNull(), anyString());
+    }
+
+    @Test
+    void submitSignUp_rejectsInjectedProfileFieldsAndSanctionsTheAddress() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/submitSignUp");
+        request.addHeader("X-Forwarded-For", "203.0.113.88");
+        MemberDTO signup = new MemberDTO();
+        signup.setId("newbie1");
+        signup.setNickName("<script>alert(1)</script>");
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = controller.submitSignUp(request, signup, new MockHttpSession(), model);
+
+        assertEquals("alert", view);
+        verifyNoInteractions(memberService);
+        verify(offenderTracker).attackDetected(org.mockito.ArgumentMatchers.eq("203.0.113.88"), anyBoolean(), isNull(), isNull(),
+                org.mockito.ArgumentMatchers.argThat(AttackContentDetector.Verdict::isHigh));
     }
 
     @Test

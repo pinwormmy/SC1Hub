@@ -1,6 +1,7 @@
 package com.sc1hub.member.controller;
 
 import com.sc1hub.common.dto.PageDTO;
+import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.common.util.IpService;
@@ -40,13 +41,16 @@ public class MemberController {
     private final LoginAttemptGuard loginAttemptGuard;
     private final MemberSessionRegistry sessionRegistry;
     private final OffenderTracker offenderTracker;
+    private final AttackContentDetector attackContentDetector;
 
     public MemberController(MemberService memberService, LoginAttemptGuard loginAttemptGuard,
-                            MemberSessionRegistry sessionRegistry, OffenderTracker offenderTracker) {
+                            MemberSessionRegistry sessionRegistry, OffenderTracker offenderTracker,
+                            AttackContentDetector attackContentDetector) {
         this.memberService = memberService;
         this.loginAttemptGuard = loginAttemptGuard;
         this.sessionRegistry = sessionRegistry;
         this.offenderTracker = offenderTracker;
+        this.attackContentDetector = attackContentDetector;
     }
 
     @GetMapping("/login")
@@ -81,6 +85,17 @@ public class MemberController {
         if (StringUtils.hasText(request.getParameter(SIGNUP_HONEYPOT_FIELD))) {
             offenderTracker.strike(IpService.getRemoteIP(request), IpService.hasForwardedClient(request),
                     null, null, "가입 봇 필드 입력");
+            model.addAttribute("msg", "가입 정보를 확인해주세요.");
+            model.addAttribute("url", "/signUp");
+            return "alert";
+        }
+        AttackContentDetector.Verdict verdict = memberDTO == null ? AttackContentDetector.Verdict.NONE
+                : attackContentDetector.inspect(0, memberDTO.getId(), memberDTO.getNickName(),
+                        memberDTO.getRealName(), memberDTO.getEmail());
+        if (verdict.isAttack()) {
+            String ip = IpService.getRemoteIP(request);
+            offenderTracker.attackDetected(ip, IpService.hasForwardedClient(request), null, null, verdict);
+            log.warn("공격 패턴 가입 시도 거부 - rule={}, severity={}, ip={}", verdict.rule(), verdict.severity(), ip);
             model.addAttribute("msg", "가입 정보를 확인해주세요.");
             model.addAttribute("url", "/signUp");
             return "alert";

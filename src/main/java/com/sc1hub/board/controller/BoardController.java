@@ -10,7 +10,9 @@ import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
+import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.DuplicateContentGuard;
+import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.MemberService;
@@ -64,18 +66,26 @@ public class BoardController {
     private static final int DUPLICATE_COMMENT_MIN_LENGTH = 20;
     private static final long DUPLICATE_POST_WINDOW_MILLIS = 10 * 60 * 1000L;
     private static final long DUPLICATE_COMMENT_WINDOW_MILLIS = 5 * 60 * 1000L;
+    private static final String ATTACK_CONTENT_MESSAGE = "허용되지 않는 내용(스크립트·주입 구문·과다 링크 등)이 포함되어 있어 등록할 수 없습니다.";
+    private static final int POST_MAX_LINKS = 5;
+    private static final int COMMENT_MAX_LINKS = 3;
 
     private final BoardService boardService;
     private final MemberService memberService;
     private final SeoMetadataService seoMetadataService;
     private final DuplicateContentGuard duplicateContentGuard;
+    private final AttackContentDetector attackContentDetector;
+    private final OffenderTracker offenderTracker;
 
     public BoardController(BoardService boardService, MemberService memberService,
-                           SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard) {
+                           SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard,
+                           AttackContentDetector attackContentDetector, OffenderTracker offenderTracker) {
         this.boardService = boardService;
         this.memberService = memberService;
         this.seoMetadataService = seoMetadataService;
         this.duplicateContentGuard = duplicateContentGuard;
+        this.attackContentDetector = attackContentDetector;
+        this.offenderTracker = offenderTracker;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -170,6 +180,13 @@ public class BoardController {
         }
         if (member == null && isRegisteredMemberNickname(post.getWriter())) {
             model.addAttribute("msg", GUEST_NICKNAME_CONFLICT_MESSAGE);
+            model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
+            return "alert";
+        }
+        // 공격 의도(스크립트·주입 구문·링크 도배)가 확인되면 거부하고 자동 제재를 건다(관리자 제외).
+        if (!isExemptFromContentSanctions(member) && rejectsAttack(request, member,
+                attackContentDetector.inspect(POST_MAX_LINKS, post.getTitle(), post.getContent(), post.getWriter()))) {
+            model.addAttribute("msg", ATTACK_CONTENT_MESSAGE);
             model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
             return "alert";
         }
@@ -294,6 +311,13 @@ public class BoardController {
             return "alert";
         }
 
+        if (!isExemptFromContentSanctions(member) && rejectsAttack(request, member,
+                attackContentDetector.inspect(POST_MAX_LINKS, post.getTitle(), post.getContent()))) {
+            model.addAttribute("msg", ATTACK_CONTENT_MESSAGE);
+            model.addAttribute("url", "/boards/" + boardTitle + "/readPost?postNum=" + post.getPostNum());
+            return "alert";
+        }
+
         post.setWriter(existingPost.getWriter());
         post.setGuestPassword(existingPost.getGuestPassword());
         if (!isAdmin(member)) {
@@ -309,7 +333,8 @@ public class BoardController {
     @ResponseBody
     public ResponseEntity<Map<String, String>> addComment(@PathVariable String boardTitle,
             @RequestBody CommentDTO comment,
-            @SessionAttribute(name = "member", required = false) MemberDTO member) throws Exception {
+            @SessionAttribute(name = "member", required = false) MemberDTO member,
+            HttpServletRequest request) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         if (comment == null || comment.getPostNum() <= 0 || trimToNull(comment.getContent()) == null
                 || exceedsCodePointLimit(comment.getContent(), COMMENT_CONTENT_MAX_LENGTH)) {
@@ -334,6 +359,10 @@ public class BoardController {
             if (isRegisteredMemberNickname(comment.getNickname())) {
                 return commentResponse(HttpStatus.BAD_REQUEST, GUEST_NICKNAME_CONFLICT_MESSAGE);
             }
+        }
+        if (!isExemptFromContentSanctions(member) && rejectsAttack(request, member,
+                attackContentDetector.inspect(COMMENT_MAX_LINKS, comment.getContent(), comment.getNickname()))) {
+            return commentResponse(HttpStatus.BAD_REQUEST, ATTACK_CONTENT_MESSAGE);
         }
         if (!isCommentAdmin(member) && duplicateContentGuard.isDuplicate("comment", null, comment.getContent(),
                 DUPLICATE_COMMENT_MIN_LENGTH, DUPLICATE_COMMENT_WINDOW_MILLIS)) {
@@ -665,6 +694,27 @@ public class BoardController {
 
     private boolean isCommentAdmin(MemberDTO member) {
         return member != null && (member.getGrade() == 3 || ADMIN_ID.equals(member.getId()));
+    }
+
+    /** 등급 3 관리자·운영 계정은 내용 기반 자동 제재 대상에서 제외한다(정화기는 그대로 적용된다). */
+    private boolean isExemptFromContentSanctions(MemberDTO member) {
+        return isCommentAdmin(member);
+    }
+
+    /**
+     * 공격 패턴이 확인되면 {@link OffenderTracker}에 넘겨 즉시 제재(HIGH) 또는 가중 스트라이크(MEDIUM)를 걸고
+     * true 를 돌려준다. 호출자가 거부 응답을 만든다.
+     */
+    private boolean rejectsAttack(HttpServletRequest request, MemberDTO member, AttackContentDetector.Verdict verdict) {
+        if (verdict == null || !verdict.isAttack()) {
+            return false;
+        }
+        String ip = IpService.getRemoteIP(request);
+        offenderTracker.attackDetected(ip, IpService.hasForwardedClient(request),
+                member == null ? null : member.getId(), member == null ? null : member.getNickName(), verdict);
+        log.warn("공격 패턴 게시 시도 거부 - rule={}, severity={}, member={}, ip={}", verdict.rule(), verdict.severity(),
+                member == null ? null : member.getId(), ip);
+        return true;
     }
 
     private void applyCommentPermissions(List<CommentDTO> comments, MemberDTO member) {

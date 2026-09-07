@@ -178,6 +178,33 @@ class PublicWriteSecurityInterceptorTest {
     }
 
     @Test
+    void guestsGetTighterPerAddressPostCommentAndUploadTiers() throws Exception {
+        var guard = guard(true, true);
+        String[][] tiers = {
+                {"/boards/funboard/submitPost", String.valueOf(PublicWriteSecurityInterceptor.GUEST_POSTS_PER_IP_PER_10_MINUTES)},
+                {"/boards/funboard/addComment", String.valueOf(PublicWriteSecurityInterceptor.GUEST_COMMENTS_PER_IP_PER_10_MINUTES)},
+                {"/imageUpload", String.valueOf(PublicWriteSecurityInterceptor.GUEST_UPLOADS_PER_IP_PER_10_MINUTES)}};
+        int address = 20;
+        for (String[] tier : tiers) {
+            String ip = "203.0.113." + (address++);
+            for (int i = 0; i < Integer.parseInt(tier[1]); i++) {
+                var request = new MockHttpServletRequest("POST", tier[0]);
+                request.addHeader("X-Forwarded-For", ip);
+                assertTrue(guard.preHandle(request, new MockHttpServletResponse(), null), tier[0] + " #" + i);
+            }
+            var request = new MockHttpServletRequest("POST", tier[0]);
+            request.addHeader("X-Forwarded-For", ip);
+            var response = new MockHttpServletResponse();
+            assertFalse(guard.preHandle(request, response, null), tier[0]);
+            assertEquals(429, response.getStatus());
+        }
+        // 채팅은 게시글 한도의 영향을 받지 않는다(분당 한도만).
+        var chat = new MockHttpServletRequest("POST", "/api/chat/messages");
+        chat.addHeader("X-Forwarded-For", "203.0.113.20");
+        assertTrue(guard.preHandle(chat, new MockHttpServletResponse(), null));
+    }
+
+    @Test
     void signupIsRateLimitedPerClientAddress() throws Exception {
         var guard = guard(true, false);
         for (int i = 0; i < PublicWriteSecurityInterceptor.SIGNUPS_PER_IP_PER_HOUR; i++) {

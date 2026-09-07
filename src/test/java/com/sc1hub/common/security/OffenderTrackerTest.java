@@ -60,6 +60,48 @@ class OffenderTrackerTest {
     }
 
     @Test
+    void highSeverityAttackContentBansImmediatelyForADay() {
+        OffenderTracker tracker = tracker();
+        AttackContentDetector.Verdict high = new AttackContentDetector.Verdict(AttackContentDetector.Severity.HIGH, "script-tag");
+
+        tracker.attackDetected("203.0.113.9", true, "attacker", "공격자", high);
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_MUTE), eq("attacker"), isNull(),
+                eq("공격자"), eq(OffenderTracker.ATTACK_BAN_MINUTES), contains("공격 패턴 감지: script-tag"), eq("auto"));
+
+        tracker.attackDetected("203.0.113.10", true, null, null, high);
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_BLOCK_IP), isNull(), eq("203.0.113.10"),
+                any(), eq(OffenderTracker.ATTACK_BAN_MINUTES), contains("공격 패턴 감지"), eq("auto"));
+        assertEquals(2, tracker.autoBanCount());
+        assertEquals(2, tracker.recentStrikeCount());
+    }
+
+    @Test
+    void highSeverityFromUntrustedGuestAddressIsRecordedButNotBanned() {
+        OffenderTracker tracker = tracker();
+        AttackContentDetector.Verdict high = new AttackContentDetector.Verdict(AttackContentDetector.Severity.HIGH, "sql-injection");
+        tracker.attackDetected("203.0.113.9", false, null, null, high);
+        tracker.attackDetected("10.0.0.7", true, null, null, high);
+        verify(moderationService, never()).addSanction(anyString(), any(), any(), any(), any(), any(), any());
+        assertEquals(2, tracker.recentStrikeCount());
+    }
+
+    @Test
+    void mediumSeverityContentCountsAsWeightedStrikes() {
+        OffenderTracker tracker = tracker();
+        AttackContentDetector.Verdict medium = new AttackContentDetector.Verdict(AttackContentDetector.Severity.MEDIUM, "link-flood");
+        int attemptsToBan = (int) Math.ceil((OffenderTracker.MEMBER_STRIKE_LIMIT + 1) / (double) OffenderTracker.SUSPICIOUS_CONTENT_WEIGHT);
+        for (int i = 0; i < attemptsToBan - 1; i++) {
+            tracker.attackDetected("203.0.113.9", true, "linker", null, medium);
+        }
+        verify(moderationService, never()).addSanction(anyString(), any(), any(), any(), any(), any(), any());
+        tracker.attackDetected("203.0.113.9", true, "linker", null, medium);
+        verify(moderationService).addSanction(eq(ChatModerationService.TYPE_MUTE), eq("linker"), isNull(), any(),
+                eq(OffenderTracker.FIRST_BAN_MINUTES), contains("link-flood"), eq("auto"));
+        tracker.attackDetected("203.0.113.9", true, "linker", null, AttackContentDetector.Verdict.NONE);
+        tracker.attackDetected("203.0.113.9", true, "linker", null, null);
+    }
+
+    @Test
     void alreadyRestrictedTargetsAreNotBannedAgain() {
         when(moderationService.checkRestricted(isNull(), eq("203.0.113.9"))).thenReturn("이용이 제한되었습니다.");
         OffenderTracker tracker = tracker();

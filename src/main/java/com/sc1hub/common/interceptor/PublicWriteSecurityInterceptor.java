@@ -44,6 +44,9 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
     static final int SIGNUPS_PER_HOUR_GLOBAL = 30;
     static final int GUEST_WRITES_PER_IP_PER_MINUTE = 10;
     static final int GUEST_WRITES_PER_MINUTE_GLOBAL = 60;
+    static final int GUEST_POSTS_PER_IP_PER_10_MINUTES = 3;
+    static final int GUEST_COMMENTS_PER_IP_PER_10_MINUTES = 10;
+    static final int GUEST_UPLOADS_PER_IP_PER_10_MINUTES = 5;
 
     private final ContentApiTokenAuthenticator tokenAuthenticator;
     private final SecuritySwitches switches;
@@ -96,6 +99,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
         boolean post = boardWrite && action.equals("submitPost");
         boolean comment = boardWrite && action.equals("addComment");
         boolean chat = path.equals("/api/chat/messages");
+        boolean upload = path.equals("/imageUpload");
         boolean contentWrite = boardWrite || path.startsWith("/api/chat/") || path.startsWith("/strategy-tips")
                 || path.equals("/imageUpload") || signup || path.equals("/submitModifyMyInfo");
 
@@ -130,8 +134,18 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
                 offenderTracker.strike(ip, ipTrusted, null, null, "비회원 쓰기 시도");
                 return reject(response, 401, "로그인 후 작성해주세요.");
             }
-            if (!rateLimiter.allow("guest:global", GUEST_WRITES_PER_MINUTE_GLOBAL, MINUTE)
-                    || (ipTrusted && !rateLimiter.allow("guest-ip:" + ip, GUEST_WRITES_PER_IP_PER_MINUTE, MINUTE))) {
+            boolean guestAllowed = rateLimiter.allow("guest:global", GUEST_WRITES_PER_MINUTE_GLOBAL, MINUTE)
+                    && (!ipTrusted || rateLimiter.allow("guest-ip:" + ip, GUEST_WRITES_PER_IP_PER_MINUTE, MINUTE));
+            if (guestAllowed && post && ipTrusted) {
+                guestAllowed = rateLimiter.allow("guest-post-ip:" + ip, GUEST_POSTS_PER_IP_PER_10_MINUTES, TEN_MINUTES);
+            }
+            if (guestAllowed && comment && ipTrusted) {
+                guestAllowed = rateLimiter.allow("guest-comment-ip:" + ip, GUEST_COMMENTS_PER_IP_PER_10_MINUTES, TEN_MINUTES);
+            }
+            if (guestAllowed && upload && ipTrusted) {
+                guestAllowed = rateLimiter.allow("guest-upload-ip:" + ip, GUEST_UPLOADS_PER_IP_PER_10_MINUTES, TEN_MINUTES);
+            }
+            if (!guestAllowed) {
                 offenderTracker.strike(ip, ipTrusted, null, null, "비회원 속도 제한");
                 response.setHeader("Retry-After", "60");
                 return reject(response, 429, "작성 횟수가 너무 많습니다. 잠시 후 다시 시도해주세요.");
