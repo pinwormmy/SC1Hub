@@ -104,6 +104,24 @@ curl -s -o /dev/null -w '%{http_code}\n' 'https://sc1hub.com/checkUniqueEmail?em
 `truncated=true` 면 `POST /api/admin/security/guest-passwords/migrate` 를 남은 행이 없을 때까지 반복한다.
 비회원 글 수정·삭제와 댓글 삭제를 실기기에서 한 번 시험한다(옛 평문 행·새 해시 행 모두 통과해야 한다).
 
+## 배포·검증 결과 (2026-09-08 07:58 KST, 커밋 114e462)
+
+`deploy.sh` 정상 완료, 워밍업 후 Metaspace 38%. 사용자 결정으로 당시 작업 트리에 있던 미커밋 SEO 변경
+(head.jspf, SeoMetadataService, 그 테스트)도 같은 WAR 에 포함됐다(테스트 460건 통과 상태).
+
+| 검증 | 결과 |
+|---|---|
+| `/`, `/boards/pvstboard` | 200 |
+| `POST /boards/noticeboard/submit%50ost` (Origin 동일) | 403 (배포 전 200 알림 페이지) |
+| `GET /logout` + `Sec-Fetch-Site: cross-site` | 302 |
+| `/checkUniqueEmail`, `/isUniqueId` | 404 |
+| `/checkUniqueId?id=Admin'--` | 400 |
+| `/adminPage/ops` 비로그인 | 403 |
+| 관리자 status 의 `guestPasswordMigration` | 기동 약 1분 뒤 완료: 대상 959, 승격 955(봇 행 재잠금 848), 건너뜀 4, 실패 0, 남은 행 없음 |
+
+봇 행 848건이 하나의 공유 비밀번호로 열려 있었던 셈이다. 이제 전부 무작위 값이라 관리자만 관리한다.
+남은 수동 확인: 비회원 글 수정·댓글 삭제를 실기기에서 한 번(옛 평문 행은 승격됐고 새 행은 해시 저장).
+
 ## 변경 파일
 코드: `WebConfig`, `OffenderTracker`, `GuestPasswordHasher`(신규), `GuestPasswordMigration`(신규), `BoardMapper`(.java/.xml),
 `BoardServiceImpl`, `BoardController`, `AssistantBotService`, `AssistantBotProperties`, `SecurityAdminController`, `MemberController`.
