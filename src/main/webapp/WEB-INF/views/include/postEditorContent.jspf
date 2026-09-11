@@ -95,7 +95,7 @@
             <span class="sc-post-editor__tool-separator" aria-hidden="true"></span>
             <button type="button" data-editor-link>링크</button>
             <button type="button" data-editor-image>이미지</button>
-            <button type="button" data-editor-video>유튜브</button>
+            <button type="button" data-editor-video>영상</button>
             <button type="button" data-editor-command="insertHorizontalRule">구분선</button>
             <input type="file" accept="image/jpeg,image/png" data-editor-image-input hidden />
         </div>

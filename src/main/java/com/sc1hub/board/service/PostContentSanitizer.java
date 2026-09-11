@@ -15,9 +15,16 @@ import java.util.Set;
 @Component
 public class PostContentSanitizer {
 
+    /**
+     * 본문에 임베드할 수 있는 영상 플레이어 호스트. 유튜브와 SOOP(구 아프리카TV) 생방송·VOD 플레이어만 허용한다.
+     * 목록을 바꾸면 post-editor.js 의 미리보기 허용 목록(ALLOWED_EMBED_HOSTS)도 함께 맞춘다.
+     */
     private static final Set<String> ALLOWED_IFRAME_HOSTS = new HashSet<>(Arrays.asList(
-            "youtube.com", "www.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"
+            "youtube.com", "www.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com",
+            "play.sooplive.co.kr", "vod.sooplive.co.kr", "play.sooplive.com", "vod.sooplive.com",
+            "play.afreecatv.com", "vod.afreecatv.com"
     ));
+    private static final String VIDEO_EMBED_CLASS = "sc-video-embed";
     private static final Set<String> ALLOWED_CLASSES = new HashSet<>(Arrays.asList(
             "sc-video-embed", "sc-video-source", "sc-post-image"
     ));
@@ -57,6 +64,7 @@ public class PostContentSanitizer {
             }
             iframe.attr("loading", "lazy");
             iframe.attr("allowfullscreen", "");
+            wrapInResponsiveEmbed(iframe);
         }
         for (Element link : fragment.select("a[href]")) {
             if (!isAllowedLinkSource(link.attr("href"))) {
@@ -82,6 +90,23 @@ public class PostContentSanitizer {
             }
         }
         return fragment.body().html();
+    }
+
+    /**
+     * 구 에디터(CKEditor)나 HTML 편집 탭에서 그대로 붙여 넣은 고정 크기 iframe 을 에디터가 만드는
+     * {@code <div class="sc-video-embed">} 로 감싸 모바일에서도 16:9 로 꽉 차게 보이도록 한다.
+     * 이미 감싸져 있으면 손대지 않는다. 고정 width/height 는 래퍼 CSS 가 덮어쓰므로 제거한다.
+     */
+    private void wrapInResponsiveEmbed(Element iframe) {
+        Element parent = iframe.parent();
+        if (parent != null && parent.hasClass(VIDEO_EMBED_CLASS)) {
+            return;
+        }
+        iframe.removeAttr("width");
+        iframe.removeAttr("height");
+        Element wrapper = new Element("div").addClass(VIDEO_EMBED_CLASS);
+        iframe.replaceWith(wrapper);
+        wrapper.appendChild(iframe);
     }
 
     private boolean isAllowedIframeSource(String source) {

@@ -210,17 +210,49 @@
         }
     };
 
+    // 서버 PostContentSanitizer.ALLOWED_IFRAME_HOSTS 와 같은 목록. 여기서 허용해도 서버가 다시 거른다.
+    const ALLOWED_EMBED_HOSTS = [
+        'youtube.com', 'www.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com',
+        'play.sooplive.co.kr', 'vod.sooplive.co.kr', 'play.sooplive.com', 'vod.sooplive.com',
+        'play.afreecatv.com', 'vod.afreecatv.com'
+    ];
+
+    // SOOP 생방송(play.sooplive.co.kr/아이디) 과 VOD(vod.sooplive.co.kr/player/번호) 주소를 embed 플레이어 주소로 바꾼다.
+    const soopEmbedUrl = (rawUrl) => {
+        try {
+            const url = new URL(rawUrl);
+            const host = url.hostname;
+            const segments = url.pathname.split('/').filter(Boolean);
+            if (segments[segments.length - 1] === 'embed') {
+                segments.pop();
+            }
+            if (/^(play\.sooplive\.co\.kr|play\.sooplive\.com|play\.afreecatv\.com)$/.test(host)
+                    && segments.length >= 1 && /^[A-Za-z0-9_-]{1,40}$/.test(segments[0])) {
+                return `https://${host}/${segments[0]}/embed`;
+            }
+            if (/^(vod\.sooplive\.co\.kr|vod\.sooplive\.com|vod\.afreecatv\.com)$/.test(host)
+                    && segments[0] === 'player' && /^\d{1,20}$/.test(segments[1] || '')) {
+                return `https://${host}/player/${segments[1]}/embed`;
+            }
+            return null;
+        } catch (error) {
+            return null;
+        }
+    };
+
     form.querySelector('[data-editor-video]').addEventListener('click', () => {
-        const rawUrl = window.prompt('유튜브 영상 주소를 입력하세요.');
+        const rawUrl = window.prompt('유튜브 또는 SOOP 영상 주소를 입력하세요.');
         if (!rawUrl) {
             return;
         }
-        const embedUrl = youtubeEmbedUrl(rawUrl.trim());
+        const youtubeUrl = youtubeEmbedUrl(rawUrl.trim());
+        const embedUrl = youtubeUrl || soopEmbedUrl(rawUrl.trim());
         if (!embedUrl) {
-            window.alert('올바른 유튜브 주소를 입력해주세요.');
+            window.alert('올바른 유튜브 또는 SOOP 주소를 입력해주세요.');
             return;
         }
-        const html = `<div class="sc-video-embed"><iframe src="${embedUrl}" title="유튜브 영상" `
+        const title = youtubeUrl ? '유튜브 영상' : 'SOOP 영상';
+        const html = `<div class="sc-video-embed"><iframe src="${embedUrl}" title="${title}" `
             + 'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
             + 'allowfullscreen loading="lazy"></iframe></div><p><br></p>';
         runCommand('insertHTML', html);
@@ -339,8 +371,7 @@
             if (element.tagName === 'IFRAME') {
                 try {
                     const url = new URL(element.getAttribute('src'));
-                    const allowed = ['youtube.com', 'www.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com'];
-                    if (url.protocol !== 'https:' || !allowed.includes(url.hostname)) {
+                    if (url.protocol !== 'https:' || !ALLOWED_EMBED_HOSTS.includes(url.hostname)) {
                         element.remove();
                     }
                 } catch (error) {

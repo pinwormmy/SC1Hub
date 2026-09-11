@@ -36,4 +36,33 @@ class PostContentSanitizerTest {
         assertFalse(result.contains("bad-class"));
         assertFalse(result.contains("example.com"));
     }
+
+    @Test
+    void sanitize_allowsSoopLiveAndVodPlayersAndWrapsBareIframes() {
+        String html = "<iframe src=\"https://play.sooplive.co.kr/afreeca/embed\" width=\"640\" height=\"360\" frameborder=\"0\"></iframe>"
+                + "<p><iframe src=\"https://vod.sooplive.co.kr/player/79858588/embed?autoPlay=false&amp;showChat=true\"></iframe></p>"
+                + "<iframe src=\"https://vod.afreecatv.com/player/12345/embed\"></iframe>"
+                + "<iframe src=\"http://play.sooplive.co.kr/afreeca/embed\"></iframe>"
+                + "<iframe src=\"https://play.sooplive.co.kr.evil.com/afreeca/embed\"></iframe>";
+
+        String result = sanitizer.sanitize(html);
+
+        assertTrue(result.contains("<div class=\"sc-video-embed\"><iframe src=\"https://play.sooplive.co.kr/afreeca/embed\""));
+        assertTrue(result.contains("vod.sooplive.co.kr/player/79858588/embed"));
+        assertTrue(result.contains("vod.afreecatv.com/player/12345/embed"));
+        assertFalse(result.contains("width=\"640\""));
+        assertFalse(result.contains("http://play.sooplive.co.kr"));
+        assertFalse(result.contains("evil.com"));
+        assertTrue(result.split("sc-video-embed", -1).length - 1 == 3);
+    }
+
+    @Test
+    void sanitize_doesNotDoubleWrapEditorEmbeds() {
+        String html = "<div class=\"sc-video-embed\"><iframe src=\"https://www.youtube-nocookie.com/embed/abc\"></iframe></div>";
+
+        String result = sanitizer.sanitize(html);
+
+        assertTrue(result.split("sc-video-embed", -1).length - 1 == 1);
+        assertTrue(result.contains("loading=\"lazy\""));
+    }
 }
