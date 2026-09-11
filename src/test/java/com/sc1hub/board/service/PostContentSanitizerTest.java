@@ -65,4 +65,26 @@ class PostContentSanitizerTest {
         assertTrue(result.split("sc-video-embed", -1).length - 1 == 1);
         assertTrue(result.contains("loading=\"lazy\""));
     }
+
+    @Test
+    void sanitize_allowsOtherStarcraftPlatformsAndAddsTwitchParent() {
+        String html = "<iframe src=\"https://chzzk.naver.com/embed/clip/imA2eJcYVL?autoplay=1\"></iframe>"
+                + "<iframe src=\"https://player.twitch.tv/?channel=artosis\"></iframe>"
+                + "<iframe src=\"https://clips.twitch.tv/embed?clip=abc&amp;parent=other.example\"></iframe>"
+                + "<iframe src=\"https://player.twitch.tv/?video=1&amp;parent=sc1hub.com\"></iframe>"
+                + "<iframe src=\"https://tv.naver.com/embed/1364071?autoPlay=false\"></iframe>"
+                + "<iframe src=\"https://player.bilibili.com/player.html?bvid=BV1xx411c7mD\"></iframe>"
+                + "<iframe src=\"https://player.kick.com/someone\"></iframe>";
+
+        String result = sanitizer.sanitize(html);
+
+        assertTrue(result.contains("chzzk.naver.com/embed/clip/imA2eJcYVL"));
+        assertTrue(result.contains("https://player.twitch.tv/?channel=artosis&amp;parent=sc1hub.com"));
+        assertTrue(result.contains("clip=abc&amp;parent=other.example&amp;parent=sc1hub.com"));
+        assertTrue(result.contains("video=1&amp;parent=sc1hub.com\""));
+        assertFalse(result.contains("parent=sc1hub.com&amp;parent=sc1hub.com"));
+        assertTrue(result.contains("tv.naver.com/embed/1364071"));
+        assertTrue(result.contains("player.bilibili.com"));
+        assertFalse(result.contains("kick.com"));
+    }
 }

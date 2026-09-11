@@ -214,8 +214,29 @@
     const ALLOWED_EMBED_HOSTS = [
         'youtube.com', 'www.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com',
         'play.sooplive.co.kr', 'vod.sooplive.co.kr', 'play.sooplive.com', 'vod.sooplive.com',
-        'play.afreecatv.com', 'vod.afreecatv.com'
+        'play.afreecatv.com', 'vod.afreecatv.com',
+        'chzzk.naver.com',
+        'player.twitch.tv', 'clips.twitch.tv',
+        'tv.naver.com',
+        'player.bilibili.com'
     ];
+
+    // 이미 플레이어(embed) 주소인 경우 그대로 쓴다. 트위치는 parent 파라미터가 필수라 서버와 같은 값을 붙인다.
+    const allowedPlayerUrl = (rawUrl) => {
+        try {
+            const url = new URL(rawUrl);
+            if (url.protocol !== 'https:' || !ALLOWED_EMBED_HOSTS.includes(url.hostname)) {
+                return null;
+            }
+            if ((url.hostname === 'player.twitch.tv' || url.hostname === 'clips.twitch.tv')
+                    && !url.searchParams.getAll('parent').includes('sc1hub.com')) {
+                url.searchParams.append('parent', 'sc1hub.com');
+            }
+            return url.toString();
+        } catch (error) {
+            return null;
+        }
+    };
 
     // SOOP 생방송(play.sooplive.co.kr/아이디) 과 VOD(vod.sooplive.co.kr/player/번호) 주소를 embed 플레이어 주소로 바꾼다.
     const soopEmbedUrl = (rawUrl) => {
@@ -241,18 +262,19 @@
     };
 
     form.querySelector('[data-editor-video]').addEventListener('click', () => {
-        const rawUrl = window.prompt('유튜브 또는 SOOP 영상 주소를 입력하세요.');
+        const rawUrl = window.prompt('영상 주소를 입력하세요. (유튜브·SOOP 주소 또는 치지직·트위치·네이버TV·빌리빌리 플레이어 주소)');
         if (!rawUrl) {
             return;
         }
         const youtubeUrl = youtubeEmbedUrl(rawUrl.trim());
-        const embedUrl = youtubeUrl || soopEmbedUrl(rawUrl.trim());
+        const soopUrl = youtubeUrl ? null : soopEmbedUrl(rawUrl.trim());
+        const embedUrl = youtubeUrl || soopUrl || allowedPlayerUrl(rawUrl.trim());
         if (!embedUrl) {
-            window.alert('올바른 유튜브 또는 SOOP 주소를 입력해주세요.');
+            window.alert('지원하지 않는 영상 주소입니다. 유튜브·SOOP·치지직·트위치·네이버TV·빌리빌리 주소만 넣을 수 있습니다.');
             return;
         }
-        const title = youtubeUrl ? '유튜브 영상' : 'SOOP 영상';
-        const html = `<div class="sc-video-embed"><iframe src="${embedUrl}" title="${title}" `
+        const title = youtubeUrl ? '유튜브 영상' : soopUrl ? 'SOOP 영상' : '영상';
+        const html = `<div class="sc-video-embed"><iframe src="${escapeHtml(embedUrl)}" title="${title}" `
             + 'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
             + 'allowfullscreen loading="lazy"></iframe></div><p><br></p>';
         runCommand('insertHTML', html);
