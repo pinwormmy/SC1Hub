@@ -5,11 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.common.dto.PageDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
+
 import org.springframework.stereotype.Service;
 import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -30,7 +34,6 @@ public class SeoMetadataService {
             "스타크래프트1 빌드오더, 종족별 운영법과 실전 전략을 공유하는 공략 커뮤니티";
     private static final int META_DESCRIPTION_MAX_LENGTH = 160;
     private static final int TITLE_MAX_LENGTH = 70;
-    private static final Pattern HTML_TAG = Pattern.compile("(?s)<[^>]*>");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final DateTimeFormatter ARTICLE_DATE_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -68,8 +71,11 @@ public class SeoMetadataService {
         String title = truncateTitle(postTitle + " | " + boardName + " - SC1Hub");
         String description = buildPostDescription(boardName, post);
         String canonical = canonicalFrom(request);
+        String image = resolvePostImage(post, canonical);
         applyCommon(model, title, description,
-                buildArticleStructuredData(post, title, description, canonical));
+                buildArticleStructuredData(post, postTitle, description, canonical, image));
+        model.addAttribute("socialImage", image);
+        model.addAttribute("socialImageAlt", postTitle);
     }
 
     String buildBoardDescription(String koreanTitle) {
@@ -150,7 +156,7 @@ public class SeoMetadataService {
     }
 
     private Map<String, Object> buildArticleStructuredData(BoardDTO post, String title,
-                                                            String description, String canonical) {
+                                                            String description, String canonical, String image) {
         Map<String, Object> root = contextRoot();
         root.put("@type", "Article");
         root.put("@id", canonical + "#article");
@@ -158,7 +164,7 @@ public class SeoMetadataService {
         root.put("mainEntityOfPage", reference(canonical));
         root.put("headline", title);
         root.put("description", description);
-        root.put("image", DEFAULT_SOCIAL_IMAGE);
+        root.put("image", image);
         root.put("inLanguage", "ko-KR");
 
         if (post != null) {
@@ -170,7 +176,6 @@ public class SeoMetadataService {
             String published = formatArticleDate(post.getRegDate());
             if (published != null) {
                 root.put("datePublished", published);
-                root.put("dateModified", published);
             }
         }
 
@@ -215,14 +220,29 @@ public class SeoMetadataService {
         if (html == null) {
             return "";
         }
-        String text = HTML_TAG.matcher(html).replaceAll(" ");
-        text = text.replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
-        return WHITESPACE.matcher(text).replaceAll(" ").trim();
+        return Jsoup.parseBodyFragment(html).text();
+    }
+
+    private String resolvePostImage(BoardDTO post, String canonical) {
+        if (post == null || !StringUtils.hasText(post.getContent())) {
+            return DEFAULT_SOCIAL_IMAGE;
+        }
+        for (Element image : Jsoup.parseBodyFragment(post.getContent(), canonical).select("img[src]")) {
+            try {
+                URI source = URI.create(image.attr("src").trim());
+                if (source.getUserInfo() != null) {
+                    continue;
+                }
+                URI uri = URI.create(image.absUrl("src"));
+                if (("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                        && StringUtils.hasText(uri.getHost()) && uri.getUserInfo() == null) {
+                    return uri.toASCIIString();
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Malformed or inline images cannot serve as crawlable social previews.
+            }
+        }
+        return DEFAULT_SOCIAL_IMAGE;
     }
 
     private String truncateMeta(String text) {

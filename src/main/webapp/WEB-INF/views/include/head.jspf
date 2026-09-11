@@ -25,9 +25,11 @@
     <meta property="og:url" content="<c:out value='${canonical}'/>">
 </c:if>
 <meta property="og:image" content="<c:out value='${scSocialImage}'/>">
-<meta property="og:image:width" content="1440">
-<meta property="og:image:height" content="810">
-<meta property="og:image:alt" content="SC1Hub 스타크래프트1 빌드·전략 커뮤니티">
+<c:if test="${scSocialImage eq 'https://sc1hub.com/images/home-wallpaper-dark.jpg'}">
+    <meta property="og:image:width" content="1440">
+    <meta property="og:image:height" content="810">
+</c:if>
+<meta property="og:image:alt" content="<c:out value='${not empty socialImageAlt ? socialImageAlt : "SC1Hub 스타크래프트1 빌드·전략 커뮤니티"}'/>">
 <c:if test="${not empty post.regDate}">
     <fmt:formatDate var="scArticlePublished" value="${post.regDate}"
                     pattern="yyyy-MM-dd'T'HH:mm:ssXXX" timeZone="Asia/Seoul" />
