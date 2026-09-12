@@ -43,8 +43,9 @@ class AssistantBotApplicationPropertiesTest {
         assertNull(properties.getProperty("sc1hub.assistant.bot.personas[4].model"));
         assertNull(properties.getProperty("sc1hub.assistant.bot.personas[4].reasoningEffort"));
         assertEquals("3000", properties.getProperty("sc1hub.assistant.bot.personas[4].maxOutputTokens"));
-        assertEquals("3", properties.getProperty("sc1hub.assistant.bot.personas[4].autoPublishChatDailyLimit"));
-        assertEquals("7", properties.getProperty("sc1hub.assistant.bot.personas[4].autoPublishChatMaxAttemptsPerDay"));
+        // 고수봇도 다른 봇과 같이 공통값(하루 1회 성공 발행, 최대 3회 시도)을 물려받는다.
+        assertNull(properties.getProperty("sc1hub.assistant.bot.personas[4].autoPublishChatDailyLimit"));
+        assertNull(properties.getProperty("sc1hub.assistant.bot.personas[4].autoPublishChatMaxAttemptsPerDay"));
         assertFalse(properties.containsValue("훈훈봇"));
     }
 
