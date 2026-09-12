@@ -48,14 +48,14 @@
                 </style>
                 <div class="loginMenu">
                     <fieldset class="sc-login-card">
-                        <legend>[ 로그인 ]</legend>
+                        <legend>로그인</legend>
                         <form action="/submitLogin" method="post">
                             <div class="sc-login-field">
-                                <label for="id">회원ID&gt;</label>
+                                <label for="id">회원 ID</label>
                                 <input type="text" name="id" id="id" autocomplete="username">
                             </div>
                             <div class="sc-login-field">
-                                <label for="pw">패스워드&gt;</label>
+                                <label for="pw">비밀번호</label>
                                 <input type="password" name="pw" id="pw" autocomplete="current-password">
                             </div>
                             <button id="loginButton" accesskey="l">로그인(L)</button>

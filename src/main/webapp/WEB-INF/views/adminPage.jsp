@@ -5,7 +5,7 @@
 <title>SC1Hub - 관리자 페이지</title>
 <style>
 .leftbar-ul li a {
-    color: white;
+    color: var(--sc-text);
     font-size: 20px;
     font-weight: 400;
 }
@@ -15,8 +15,8 @@
     gap: 20px;
 }
 .admin-card {
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
     padding: 18px;
 }
 .admin-card-header {
@@ -35,9 +35,9 @@
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.2);
-    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
+    color: var(--sc-text);
     font-size: 16px;
     white-space: nowrap;
 }
@@ -55,7 +55,7 @@
 }
 .admin-card-subtitle {
     margin: 2px 0 0;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--sc-text-dim);
     font-size: 18px;
 }
 .admin-search-form {
@@ -75,25 +75,25 @@
     flex: 1;
     min-width: 200px;
     height: 44px;
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    border: 1px solid var(--sc-line);
     padding-left: 12px;
 }
 .admin-btn {
     height: 44px;
     padding: 0 14px;
-    border: 1px solid rgba(255, 255, 255, 0.7);
-    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
 }
 .admin-btn--ghost {
-    border-color: rgba(255, 255, 255, 0.4);
+    border-color: var(--sc-line);
 }
 .admin-btn--danger {
-    border-color: #FF5555;
-    color: #FF5555;
+    border-color: var(--sc-danger);
+    color: var(--sc-danger);
 }
 .admin-table-wrap {
     margin-top: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--sc-line);
     overflow-x: auto;
 }
 .admin-memberlist {
@@ -105,13 +105,13 @@
 .admin-memberlist td {
     padding: 10px 12px;
     text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid var(--sc-line);
 }
 .admin-memberlist thead {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--sc-bg-panel);
 }
 .admin-memberlist tbody tr:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--sc-hover-soft);
 }
 .admin-actions {
     display: flex;
@@ -121,7 +121,7 @@
 .admin-empty {
     text-align: center;
     padding: 18px 10px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--sc-text);
 }
 .admin-pagination {
     margin-top: 12px;
@@ -143,11 +143,11 @@
     justify-content: center;
     min-width: 38px;
     height: 36px;
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--sc-line);
     padding: 0 10px;
 }
 .page-link.active {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--sc-neutral-muted);
 }
 .visitor-grid {
     margin-top: 12px;
@@ -156,13 +156,13 @@
     gap: 10px;
 }
 .visitor-item {
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--sc-line);
     padding: 10px;
     text-align: center;
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--sc-bg-panel);
 }
 .visitor-date {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--sc-text-dim);
     margin-bottom: 6px;
 }
 .visitor-count {
@@ -174,7 +174,7 @@
 .admin-indexing-title {
     margin: 0;
     font-size: 20px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--sc-text);
 }
 .admin-indexing-row {
     margin-top: 10px;
@@ -184,27 +184,27 @@
     align-items: center;
 }
 .admin-indexing-label {
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--sc-text-dim);
     font-size: 14px;
 }
 .admin-indexing-input {
     width: 120px;
     height: 44px;
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    background: rgba(0, 0, 0, 0.2);
-    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
+    color: var(--sc-text);
     padding-left: 10px;
 }
 .admin-indexing-hint {
     margin-top: 8px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--sc-text-dim);
     font-size: 14px;
     line-height: 1.4;
 }
 .admin-indexing-output {
     margin-top: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
     padding: 12px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -212,7 +212,7 @@
     overflow: auto;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--sc-text);
 }
 @media (max-width: 768px) {
     .admin-card {
@@ -241,24 +241,24 @@
         width: 100%;
     }
     .admin-memberlist tr {
-        border: 1px solid rgba(255, 255, 255, 0.25);
+        border: 1px solid var(--sc-line);
         margin-bottom: 12px;
         padding: 10px;
-        background: rgba(0, 0, 0, 0.4);
+        background: var(--sc-bg-panel);
     }
     .admin-memberlist td {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 8px 0;
-        border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+        border-bottom: 1px dashed var(--sc-line-muted);
     }
     .admin-memberlist td:last-child {
         border-bottom: none;
     }
     .admin-memberlist td::before {
         content: attr(data-label);
-        color: rgba(255, 255, 255, 0.7);
+        color: var(--sc-text-dim);
         margin-right: 10px;
     }
     .admin-memberlist td.admin-empty::before {

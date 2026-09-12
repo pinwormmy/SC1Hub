@@ -1,6 +1,6 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 
-<h1 class="post-heading mb">[<c:out value="${koreanTitle}"/>]</h1>
+<h1 class="post-heading mb"><c:out value="${koreanTitle}"/></h1>
 <div class="row">
     <div id="comments" class="col-xs-12">
         <div id="comments-list" class="gap">
@@ -9,10 +9,10 @@
                    <!-- 테이블 헤더 -->
                    <thead>
                        <tr>
-                           <th class="post-num hide-on-mobile" style="width: 7%;">번 호</th>
-                           <th style="width: 54%;">제 &nbsp목</th>
+                           <th class="post-num hide-on-mobile" style="width: 7%;">번호</th>
+                           <th style="width: 54%;">제목</th>
                            <th class="writer hide-on-mobile" style="width: 10%;">작성자</th>
-                           <th class="date hide-on-mobile" style="width: 10%;">날 짜</th>
+                           <th class="date hide-on-mobile" style="width: 10%;">날짜</th>
                            <th class="views hide-on-mobile" style="width: 7%;">조회</th>
                            <th class="recommend hide-on-mobile" style="width: 7%;">추천</th>
                        </tr>
@@ -28,7 +28,7 @@
                                        <span class="sc-post-title-text">[공지] <c:out value="${notice.title}"/></span>
                                    </a>
                                    <c:if test="${notice.commentCount > 0}">
-                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">( ${notice.commentCount} )</a>
+                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${notice.postNum}">${notice.commentCount}</a>
                                    </c:if>
                                </div>
                            </td>
@@ -48,7 +48,7 @@
                                        <span class="sc-post-title-text"><c:out value="${post.title}"/></span>
                                    </a>
                                    <c:if test="${post.commentCount > 0}">
-                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">( ${post.commentCount} )</a>
+                                       <a class="sc-comment-count" href="/boards/${boardTitle}/readPost?postNum=${post.postNum}">${post.commentCount}</a>
                                    </c:if>
                                </div>
                            </td>

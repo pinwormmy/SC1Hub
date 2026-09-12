@@ -11,8 +11,8 @@
     gap: 18px;
 }
 .ops-card {
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
     padding: 18px;
 }
 .ops-header {
@@ -28,13 +28,13 @@
 }
 .ops-subtitle {
     margin: 4px 0 0;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--sc-text-dim);
 }
 .ops-btn {
     height: 42px;
     padding: 0 14px;
-    border: 1px solid rgba(255, 255, 255, 0.65);
-    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
 }
 .ops-grid {
     margin-top: 14px;
@@ -43,12 +43,12 @@
     gap: 10px;
 }
 .ops-stat {
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
     padding: 10px;
 }
 .ops-label {
-    color: rgba(255, 255, 255, 0.68);
+    color: var(--sc-text-dim);
     font-size: 14px;
 }
 .ops-value {
@@ -59,7 +59,7 @@
 .ops-table-wrap {
     margin-top: 14px;
     overflow-x: auto;
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    border: 1px solid var(--sc-line);
 }
 .ops-table {
     width: 100%;
@@ -70,20 +70,20 @@
 .ops-table td {
     padding: 10px 12px;
     text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid var(--sc-line);
     vertical-align: top;
 }
 .ops-table thead {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--sc-bg-panel);
 }
 .ops-empty {
     padding: 16px;
     text-align: center;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--sc-text-dim);
 }
 .ops-note {
     margin-top: 10px;
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--sc-text-dim);
     font-size: 14px;
 }
 @media (max-width: 768px) {

@@ -9,9 +9,9 @@
     <h1 class="post-title"><c:out value="${post.title}"/></h1>
 </div>
 <div class="info-row">
-    <span>작성자 : <c:out value="${post.writer}"/> </span> &nbsp;
-    <span>날 짜 : <fmt:formatDate value="${post.regDate}" pattern="yyyy-MM-dd HH:mm"/> </span> &nbsp;
-    <span>조 회 : ${post.views} </span> &nbsp;
+    <span>작성자 <c:out value="${post.writer}"/></span>
+    <span><fmt:formatDate value="${post.regDate}" pattern="yyyy-MM-dd HH:mm"/></span>
+    <span>조회 ${post.views}</span>
 </div>
 <div class="row">
     <div class="post-content">
@@ -26,7 +26,7 @@
 
     <div id="comments">
         <div class="mb">
-            [댓 글]
+            댓글
         </div>
         <div id="comments-list" class="gap"></div>
         <div id="comments-page" class="gap"></div>
@@ -65,7 +65,7 @@
             <c:if test="${canManageGuestPost}">
                 <input type="password" id="guestPostPassword" class="form-control" placeholder="글 비밀번호 입력" style="width: 220px; display: inline-block;">
             </c:if>
-            <a class="btn btn-right cancel-btn" style="float: none;" href="/boards/${boardTitle}" accesskey="l">목 록(L)</a>
+            <a class="btn btn-right cancel-btn" style="float: none;" href="/boards/${boardTitle}" accesskey="l">목록(L)</a>
             <c:if test="${canManageMemberPost}">
                 <form action="/boards/${boardTitle}/deletePost" method="post" onsubmit="return confirm('정말 이 글을 삭제할까요?');" style="margin: 0;">
                     <input type="hidden" name="postNum" value="${post.postNum}">

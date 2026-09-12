@@ -6,7 +6,7 @@
 <title>SC1Hub - alias_dictionary 관리</title>
 <style>
 .leftbar-ul li a {
-    color: white;
+    color: var(--sc-text);
     font-size: 20px;
     font-weight: 400;
 }
@@ -16,8 +16,8 @@
     gap: 20px;
 }
 .admin-card {
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
     padding: 18px;
 }
 .admin-card-header {
@@ -33,7 +33,7 @@
 }
 .admin-card-subtitle {
     margin: 2px 0 0;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--sc-text-dim);
     font-size: 18px;
 }
 .admin-search-form {
@@ -53,23 +53,23 @@
     flex: 1;
     min-width: 200px;
     height: 44px;
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    border: 1px solid var(--sc-line);
     padding-left: 12px;
 }
 .admin-btn {
     height: 44px;
     padding: 0 16px;
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-hover-soft);
+    color: var(--sc-text);
     cursor: pointer;
 }
 .admin-btn--ghost {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--sc-hover-soft);
 }
 .admin-btn--danger {
-    background: rgba(255, 70, 70, 0.18);
-    border-color: rgba(255, 70, 70, 0.55);
+    background: var(--sc-danger-subtle);
+    border-color: var(--sc-danger);
 }
 .alias-form {
     margin-top: 14px;
@@ -84,14 +84,14 @@
 }
 .alias-label {
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--sc-text);
 }
 .alias-textarea,
 .alias-input {
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    background: rgba(0, 0, 0, 0.15);
-    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
+    color: var(--sc-text);
     padding: 10px 12px;
 }
 .alias-textarea {
@@ -101,7 +101,7 @@
 .alias-help {
     grid-column: 2 / -1;
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--sc-text-dim);
 }
 .alias-checkbox-group {
     display: flex;
@@ -112,7 +112,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--sc-text);
 }
 .alias-actions {
     display: flex;
@@ -121,7 +121,7 @@
 }
 .alias-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--sc-neutral-muted);
     margin: 16px 0;
 }
 .alias-table-wrap {
@@ -135,24 +135,24 @@
 }
 .alias-table th,
 .alias-table td {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 1px solid var(--sc-line);
     padding: 10px 8px;
     text-align: left;
     vertical-align: top;
 }
 .alias-table th {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--sc-text);
     font-weight: 600;
 }
 .alias-muted {
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--sc-text-dim);
     font-size: 14px;
 }
 .alias-message {
     margin-top: 10px;
     padding: 10px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--sc-line);
+    background: var(--sc-bg-panel);
 }
 @media (max-width: 768px) {
     .alias-grid {

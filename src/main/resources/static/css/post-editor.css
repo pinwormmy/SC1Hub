@@ -1,5 +1,5 @@
 .sc-post-editor {
-    --editor-accent: var(--sc-cyan, #6fe3f0);
+    --editor-accent: var(--sc-accent, #0969da);
     --editor-surface: var(--sc-bg-deep);
     display: grid;
     box-sizing: border-box;
@@ -122,8 +122,8 @@
 }
 
 .sc-post-editor__workspace:focus-within {
-    border-color: rgba(111, 227, 240, 0.55);
-    box-shadow: 0 0 0 3px rgba(111, 227, 240, 0.1);
+    border-color: var(--editor-accent);
+    box-shadow: var(--sc-focus-ring);
 }
 
 .sc-post-editor__modebar {
@@ -225,7 +225,7 @@
     padding: 0.7rem 1rem;
     border-left: 3px solid var(--editor-accent);
     color: var(--sc-text-dim);
-    background: rgba(111, 227, 240, 0.06);
+    background: var(--sc-bg-panel);
 }
 
 .sc-post-editor__surface img,
@@ -257,7 +257,7 @@
 }
 
 .sc-post-editor__surface.is-dragging {
-    background: rgba(111, 227, 240, 0.09);
+    background: var(--sc-accent-subtle, rgba(9, 105, 218, 0.08));
     box-shadow: inset 0 0 0 2px var(--editor-accent);
 }
 
@@ -282,7 +282,7 @@
     padding-top: 56.25%;
     margin: 1.4rem 0;
     overflow: hidden;
-    background: #02051e;
+    background: #000000;
 }
 
 .sc-video-embed iframe {
@@ -307,7 +307,7 @@
     padding: 10px 12px;
     border-left: 3px solid var(--editor-accent);
     color: var(--sc-text-dim);
-    background: rgba(111, 227, 240, 0.07);
+    background: var(--sc-bg-panel);
 }
 
 .sc-post-editor__draft > div {

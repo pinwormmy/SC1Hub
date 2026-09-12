@@ -18,7 +18,7 @@
         const theme = preference || (systemTheme.matches ? 'dark' : 'light');
         root.dataset.theme = theme;
         const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = theme === 'dark' ? '#1c2521' : '#f3f4f0';
+        if (meta) meta.content = theme === 'dark' ? '#0d1117' : '#f6f8fa';
         const toggle = document.getElementById('scThemeToggle');
         if (toggle) {
             toggle.setAttribute('aria-checked', String(theme === 'dark'));
