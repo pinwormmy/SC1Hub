@@ -37,7 +37,6 @@
                             <main class="sc-col-9 sc-home-main" id="main-content">
                             <div class="sc-content-heading"><h2>종족별 공략</h2><span>테란 · 저그 · 프로토스</span></div>
                             <div class="sc-home-feeds">
-                            <c:set var="menuIndex" value="21" />
                             <c:forEach var="section" items="${popularSections}">
                                 <section class="sc-home-feed ${section.cssClass}">
                                     <h3 class="sc-race-heading"><c:out value="${fn:replace(section.title, '네트워크', '공략')}" /></h3>
@@ -53,13 +52,10 @@
                                                 <ul class="sc-home-posts">
                                                     <c:forEach var="post" items="${board.posts}" end="2" varStatus="postStatus">
                                                         <li class="${postStatus.index ge 2 ? 'sc-home-post-extra' : ''}">
-                                                            <a href="/boards/${board.boardTitle}/readPost?postNum=${post.postNum}"
-                                                               data-menu-number="${menuIndex}">
-                                                                <span class="sc-home-post-number">${menuIndex}</span>
+                                                            <a href="/boards/${board.boardTitle}/readPost?postNum=${post.postNum}">
                                                                 <span class="sc-home-post-title"><c:out value="${post.title}" /></span>
                                                             </a>
                                                         </li>
-                                                        <c:set var="menuIndex" value="${menuIndex + 1}" />
                                                     </c:forEach>
                                                 </ul>
                                             </div>

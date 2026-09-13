@@ -321,7 +321,6 @@ textarea { padding: 8px 12px; line-height: 1.5; }
 .sc-home-posts a:hover { color: var(--sc-accent); background: var(--sc-hover-soft); text-decoration: none; }
 .sc-home-posts a:hover .sc-home-post-title { text-decoration: underline; }
 .sc-home-post-title { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
-.sc-home-post-number { flex-shrink: 0; color: var(--sc-text-subtle); font-family: var(--sc-font-mono); font-size: 12px; min-width: 18px; }
 .sc-home-note { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; color: var(--sc-text-dim); font-size: 12px; }
 
 /* ---------- sidebar (action list) ---------- */
