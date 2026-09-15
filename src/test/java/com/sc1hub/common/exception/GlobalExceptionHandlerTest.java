@@ -1,9 +1,13 @@
 package com.sc1hub.common.exception;
 
+import com.sc1hub.board.support.BoardTitleNormalizer;
+import com.sc1hub.board.support.InvalidBoardException;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
@@ -76,6 +80,45 @@ class GlobalExceptionHandlerTest {
         assertEquals("alert", view);
         assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatus());
         assertEquals("noindex,nofollow,noarchive", response.getHeader("X-Robots-Tag"));
+    }
+
+    @Test
+    void invalidBoard_returns404AndWarnInsteadOf400Error() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = handler.handleInvalidBoardException(
+                new InvalidBoardException("올바르지 않은 게시판 주소입니다."), model, response);
+
+        assertEquals("alert", view);
+        assertEquals(HttpServletResponse.SC_NOT_FOUND, response.getStatus());
+        assertEquals("noindex,nofollow,noarchive", response.getHeader("X-Robots-Tag"));
+        assertEquals("올바르지 않은 게시판 주소입니다.", model.get("msg"));
+    }
+
+    @Test
+    void invalidBoard_isRoutedToThe404HandlerNotTheIllegalArgument400Handler() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new BoardStubController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(get("/boards/supportboard"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"))
+                .andExpect(view().name("alert"));
+
+        mockMvc.perform(get("/boards/funboard"))
+                .andExpect(status().isOk());
+    }
+
+    @RestController
+    private static class BoardStubController {
+
+        @GetMapping("/boards/{boardTitle}")
+        String board(@PathVariable String boardTitle) {
+            return BoardTitleNormalizer.requireValid(boardTitle);
+        }
     }
 
     @RestController

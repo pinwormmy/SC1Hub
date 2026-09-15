@@ -1,5 +1,6 @@
 package com.sc1hub.common.exception;
 
+import com.sc1hub.board.support.InvalidBoardException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ui.Model;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -31,6 +32,18 @@ public class GlobalExceptionHandler {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         log.error("AccessDeniedException: {}", e.getMessage());
         prepareErrorModel(model, e.getMessage() != null ? e.getMessage() : "접근 권한이 없습니다.", "/");
+        return "alert";
+    }
+
+    @ExceptionHandler(InvalidBoardException.class)
+    public String handleInvalidBoardException(InvalidBoardException e, Model model,
+                                              HttpServletResponse response) {
+        // 삭제된 게시판 주소를 크롤러가 계속 두드리는 일상적 요청이라 404 + 한 줄 WARN 으로 처리한다.
+        // (IllegalArgumentException 의 하위 타입이라 아래 400 핸들러보다 이 핸들러가 먼저 선택된다.)
+        response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        response.setHeader("X-Robots-Tag", ERROR_ROBOTS);
+        log.warn("InvalidBoardException: {}", e.getMessage());
+        prepareErrorModel(model, e.getMessage(), "/");
         return "alert";
     }
 

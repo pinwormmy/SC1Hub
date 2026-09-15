@@ -17,12 +17,12 @@ public final class BoardTitleNormalizer {
 
     public static String requireValid(String boardTitle) {
         if (boardTitle == null) {
-            throw new IllegalArgumentException("게시판을 확인해주세요.");
+            throw new InvalidBoardException("게시판을 확인해주세요.");
         }
 
         String normalized = boardTitle.trim().toLowerCase(Locale.ROOT);
         if (!SAFE_BOARD_TITLE.matcher(normalized).matches() || !BOARDS.contains(normalized)) {
-            throw new IllegalArgumentException("올바르지 않은 게시판 주소입니다.");
+            throw new InvalidBoardException("올바르지 않은 게시판 주소입니다.");
         }
         return normalized;
     }
