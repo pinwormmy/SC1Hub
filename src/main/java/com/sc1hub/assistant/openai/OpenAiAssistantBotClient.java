@@ -66,6 +66,16 @@ public class OpenAiAssistantBotClient {
                 model, effort, true);
     }
 
+    /** 글·댓글 초안은 채팅 전용 스키마 없이 프롬프트의 JSON 형식을 사용한다. */
+    public String generateDraftAnswer(String prompt,
+                                      Integer maxOutputTokens,
+                                      String model,
+                                      String reasoningEffort) {
+        String effort = resolveReasoningEffort(reasoningEffort);
+        return generate(prompt, addReasoningHeadroom(resolveMaxOutputTokens(maxOutputTokens), effort),
+                model, effort, false);
+    }
+
     /** 추론을 많이 도는 강도에서만 답변 예산 위에 reasoning 여유분을 얹는다. */
     private int addReasoningHeadroom(int maxOutputTokens, String reasoningEffort) {
         if (!Arrays.asList("high", "xhigh", "max").contains(reasoningEffort)) {

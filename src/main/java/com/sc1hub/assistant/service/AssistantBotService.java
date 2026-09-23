@@ -236,12 +236,12 @@ public class AssistantBotService {
                     return response;
                 }
                 String prompt = buildPrompt(persona, mode, boardTitle, targetPost, recentPosts, recentComments, recentHistory, retryFeedback, attempt, maxAttempts);
-                String rawJson = geminiClient.generateAnswer(
-                        prompt,
-                        Math.max(1, botProperties.getMaxOutputTokens()),
-                        resolveModel(persona),
-                        resolveGeminiThinkingLevel(persona)
-                );
+                int maxOutputTokens = resolveMaxOutputTokens(persona);
+                String rawJson = usesOpenAi(persona)
+                        ? openAiAssistantBotClient.generateDraftAnswer(
+                                prompt, maxOutputTokens, resolveModel(persona), resolveReasoningEffort(persona))
+                        : geminiClient.generateAnswer(
+                                prompt, maxOutputTokens, resolveModel(persona), resolveGeminiThinkingLevel(persona));
                 JsonNode result = parseJson(rawJson);
                 CandidateDraft candidate = validateCandidate(persona, mode, result, recentPosts, recentComments, recentHistory);
                 if (candidate.accepted) {
@@ -279,9 +279,9 @@ public class AssistantBotService {
             response.setRecentHistoryCount(recentHistory.size());
             response.setResult(acceptedDraft.result);
             return response;
-        } catch (GeminiException e) {
-            log.error("봇 초안 Gemini 호출 실패", e);
-            response.setError("Gemini 호출에 실패했습니다.");
+        } catch (GeminiException | OpenAiAssistantBotException e) {
+            log.error("봇 초안 AI 호출 실패", e);
+            response.setError("AI 호출에 실패했습니다.");
             return response;
         } catch (Exception e) {
             log.error("봇 초안 생성 실패", e);

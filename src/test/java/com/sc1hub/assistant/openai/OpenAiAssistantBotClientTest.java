@@ -51,7 +51,7 @@ class OpenAiAssistantBotClientTest {
         server.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer test-openai-key"))
-                .andExpect(jsonPath("$.model").value("gpt-5.6-luna"))
+                .andExpect(jsonPath("$.model").value("gpt-6-luna"))
                 .andExpect(jsonPath("$.reasoning.effort").value("max"))
                 // 요청 1024 + reasoning 여유분 6000
                 .andExpect(jsonPath("$.max_output_tokens").value(7024))
@@ -66,6 +66,21 @@ class OpenAiAssistantBotClientTest {
     }
 
     @Test
+    void generateDraftAnswer_usesLunaMaxWithoutChatSchema() {
+        server.expect(requestTo(API_URL))
+                .andExpect(jsonPath("$.model").value("gpt-6-luna"))
+                .andExpect(jsonPath("$.reasoning.effort").value("max"))
+                .andExpect(jsonPath("$.max_output_tokens").value(5400))
+                .andExpect(jsonPath("$.text.format").doesNotExist())
+                .andRespond(withSuccess(completedResponse("{\"post\":{\"body\":\"초안\"}}"),
+                        MediaType.APPLICATION_JSON));
+
+        assertEquals("{\"post\":{\"body\":\"초안\"}}",
+                client.generateDraftAnswer("prompt", 1400, "gpt-6-luna", "max"));
+        server.verify();
+    }
+
+    @Test
     void generateAnswer_sendsLunaHighStructuredRequestAndReturnsChatJson() {
         String chatJson = "{\"analysis\":{\"topic\":\"저그전\","
                 + "\"response_mode\":\"contextual_advice\",\"risk_notes\":[]},"
@@ -74,7 +89,7 @@ class OpenAiAssistantBotClientTest {
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("Authorization", "Bearer test-openai-key"))
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.model").value("gpt-5.6-luna"))
+                .andExpect(jsonPath("$.model").value("gpt-6-luna"))
                 .andExpect(jsonPath("$.input[0].role").value("system"))
                 .andExpect(jsonPath("$.input[0].content").value("고수봇 규칙"))
                 .andExpect(jsonPath("$.store").value(false))
@@ -97,7 +112,7 @@ class OpenAiAssistantBotClientTest {
                         MediaType.APPLICATION_JSON));
 
         String result = client.generateAnswer(
-                "고수봇 규칙", 1400, "gpt-5.6-luna", "high");
+                "고수봇 규칙", 1400, "gpt-6-luna", "high");
 
         assertEquals(chatJson, result);
         server.verify();
@@ -111,7 +126,7 @@ class OpenAiAssistantBotClientTest {
                 .andRespond(withSuccess(completedResponse(validStandaloneJson()),
                         MediaType.APPLICATION_JSON));
 
-        client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "low");
+        client.generateAnswer("prompt", 1400, "gpt-6-luna", "low");
 
         server.verify();
     }
@@ -124,7 +139,7 @@ class OpenAiAssistantBotClientTest {
                 .andRespond(withSuccess(completedResponse(validStandaloneJson()),
                         MediaType.APPLICATION_JSON));
 
-        client.generateAnswer("prompt", 99999, "gpt-5.6-luna", "invalid");
+        client.generateAnswer("prompt", 99999, "gpt-6-luna", "invalid");
 
         server.verify();
     }
@@ -133,18 +148,18 @@ class OpenAiAssistantBotClientTest {
     void generateAnswer_rejectsDisabledCallsMissingKeyAndUntrustedUrl() {
         properties.setAllowLiveCalls(false);
         assertThrows(OpenAiAssistantBotException.class,
-                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+                () -> client.generateAnswer("prompt", 1400, "gpt-6-luna", "high"));
 
         properties.setAllowLiveCalls(true);
         properties.setApiKey(" ");
         assertThrows(OpenAiAssistantBotException.class,
-                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+                () -> client.generateAnswer("prompt", 1400, "gpt-6-luna", "high"));
 
         properties.setApiKey("test-openai-key");
         properties.setBaseUrl("https://api.openai.com.evil.example/v1/responses");
         OpenAiAssistantBotException exception = assertThrows(
                 OpenAiAssistantBotException.class,
-                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+                () -> client.generateAnswer("prompt", 1400, "gpt-6-luna", "high"));
         assertTrue(exception.getMessage().contains("trusted OpenAI HTTPS endpoint"));
         server.verify();
     }
@@ -158,7 +173,7 @@ class OpenAiAssistantBotClientTest {
 
         OpenAiAssistantBotException exception = assertThrows(
                 OpenAiAssistantBotException.class,
-                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+                () -> client.generateAnswer("prompt", 1400, "gpt-6-luna", "high"));
 
         assertTrue(exception.getMessage().contains("[redacted]"));
         assertTrue(!exception.getMessage().contains("test-openai-key"));
@@ -170,7 +185,7 @@ class OpenAiAssistantBotClientTest {
 
         OpenAiAssistantBotException exception = assertThrows(
                 OpenAiAssistantBotException.class,
-                () -> client.generateAnswer("prompt", 1400, "gpt-5.6-luna", "high"));
+                () -> client.generateAnswer("prompt", 1400, "gpt-6-luna", "high"));
 
         assertTrue(exception.getMessage().contains("Metaspace headroom is low"));
         server.verify();

@@ -1429,6 +1429,23 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void generateDraft_routesLunaToOpenAiWithoutChatSchema() throws Exception {
+        botProperties.setModel("gpt-6-luna");
+        botProperties.setReasoningEffort("max");
+        when(openAiAssistantBotClient.generateDraftAnswer(
+                anyString(), anyInt(), eq("gpt-6-luna"), eq("max")))
+                .thenReturn(validPostDraftJson());
+
+        AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(postDraftRequest());
+
+        assertEquals("draft", response.getStatus());
+        verify(openAiAssistantBotClient).generateDraftAnswer(
+                anyString(), eq(1400), eq("gpt-6-luna"), eq("max"));
+        verify(geminiClient, never()).generateAnswer(anyString(), anyInt(), anyString(), any());
+        verify(openAiAssistantBotClient, never()).generateAnswer(anyString(), anyInt(), anyString(), anyString());
+    }
+
+    @Test
     void generateDraft_blocksWhenDailyGenerateCallLimitExceeded() throws Exception {
         botProperties.setDailyGenerateCallLimit(1);
         botProperties.setMaxGenerateAttempts(1);

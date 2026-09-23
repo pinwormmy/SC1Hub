@@ -58,12 +58,12 @@ class AssistantBotApplicationPropertiesTest {
             properties.load(reader);
         }
 
-        assertEquals("gpt-5.6-luna", properties.getProperty("sc1hub.assistant.bot.model"));
+        assertEquals("gpt-6-luna", properties.getProperty("sc1hub.assistant.bot.model"));
         assertEquals("max", properties.getProperty("sc1hub.assistant.bot.reasoningEffort"));
     }
 
     @Test
-    void packagedSearchUsesOpenAiLunaAtHighReasoning() throws Exception {
+    void packagedSearchUsesOpenAiLunaAtMaxReasoning() throws Exception {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(
                 Paths.get("src/main/resources/application.properties"),
@@ -72,7 +72,7 @@ class AssistantBotApplicationPropertiesTest {
         }
 
         assertEquals("openai", properties.getProperty("sc1hub.assistant.searchProvider"));
-        assertEquals("gpt-5.6-luna", properties.getProperty("sc1hub.openai.searchModel"));
-        assertEquals("high", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
+        assertEquals("gpt-6-luna", properties.getProperty("sc1hub.openai.searchModel"));
+        assertEquals("max", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
     }
 }
