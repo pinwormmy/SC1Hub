@@ -32,6 +32,7 @@ import java.util.Set;
 public class BoardServiceImpl implements BoardService {
 
     private static final String DEFAULT_BOARD_SEARCH_TYPE = "title";
+    private static final Set<String> BOARD_SEARCH_TYPES = Set.of("title", "content", "titleAndContent");
     private static final int BOARD_DISPLAY_POST_LIMIT = 15;
     private static final int DEFAULT_PAGESET_LIMIT = 10;
     private static final Set<String> ADMIN_ONLY_BOARDS = new HashSet<>(Arrays.asList(
@@ -77,7 +78,7 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public List<BoardDTO> showPostList(String boardTitle, PageDTO page) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        return boardMapper.showPostList(boardTitle, page);
+        return boardMapper.showPostList(boardTitle, normalizeSearchPage(page));
     }
 
     @Override
@@ -150,7 +151,7 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public PageDTO pageSetting(String boardTitle, PageDTO page) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        page = PageUtils.normalize(page, DEFAULT_BOARD_SEARCH_TYPE);
+        page = normalizeSearchPage(page);
         return PageUtils.calculate(page, countTotalPost(boardTitle, page), BOARD_DISPLAY_POST_LIMIT, DEFAULT_PAGESET_LIMIT);
     }
 
@@ -205,7 +206,7 @@ public class BoardServiceImpl implements BoardService {
     @Override
     public int countTotalPost(String boardTitle, PageDTO page) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        return boardMapper.countTotalPost(boardTitle, page);
+        return boardMapper.countTotalPost(boardTitle, normalizeSearchPage(page));
     }
 
     @Override
@@ -325,6 +326,14 @@ public class BoardServiceImpl implements BoardService {
     public List<BoardDTO> getSitemapPosts(String boardTitle) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         return boardMapper.selectSitemapPosts(boardTitle);
+    }
+
+    private PageDTO normalizeSearchPage(PageDTO page) {
+        PageDTO normalized = PageUtils.normalize(page, DEFAULT_BOARD_SEARCH_TYPE);
+        if (!BOARD_SEARCH_TYPES.contains(normalized.getSearchType())) {
+            normalized.setSearchType(DEFAULT_BOARD_SEARCH_TYPE);
+        }
+        return normalized;
     }
 
     private void preparePostForPersistence(BoardDTO post) {

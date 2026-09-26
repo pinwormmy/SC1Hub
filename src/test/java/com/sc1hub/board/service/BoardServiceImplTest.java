@@ -260,6 +260,25 @@ class BoardServiceImplTest {
     }
 
     @Test
+    void searchEntryPointsNormalizeUnsupportedTypesAndPreserveKeyword() throws Exception {
+        PageDTO page = new PageDTO();
+        page.setSearchType("unsupported");
+        page.setKeyword("뮤탈");
+        boardService.pageSetting("funboard", page);
+        assertEquals("title", page.getSearchType());
+        assertEquals("뮤탈", page.getKeyword());
+
+        page.setSearchType("unsupported");
+        boardService.showPostList("funboard", page);
+        assertEquals("title", page.getSearchType());
+
+        page.setSearchType("unsupported");
+        boardService.countTotalPost("funboard", page);
+        assertEquals("title", page.getSearchType());
+        assertEquals("뮤탈", page.getKeyword());
+    }
+
+    @Test
     void pageSetting_setsDefaults_andCalculates() throws Exception {
         PageDTO page = new PageDTO();
         page.setRecentPage(0);

@@ -2,6 +2,7 @@ package com.sc1hub.common.exception;
 
 import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.board.support.InvalidBoardException;
+import com.sc1hub.common.dto.PageDTO;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ExtendedModelMap;
@@ -9,6 +10,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -18,6 +20,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
@@ -110,6 +113,39 @@ class GlobalExceptionHandlerTest {
 
         mockMvc.perform(get("/boards/funboard"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void invalidNumericParametersReturn400InsteadOf500() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new InvalidInputController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
+        mockMvc.perform(get("/test-read").param("postNum", "invalid-private-input"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"))
+                .andExpect(model().attribute("msg", "요청 값의 형식이 올바르지 않습니다."))
+                .andExpect(view().name("alert"));
+
+        mockMvc.perform(get("/test-list").param("recentPage", "2147483648"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"))
+                .andExpect(model().attribute("msg", "요청 값의 형식이 올바르지 않습니다."))
+                .andExpect(view().name("alert"));
+    }
+
+    @RestController
+    private static class InvalidInputController {
+
+        @GetMapping("/test-read")
+        String read(@RequestParam int postNum) {
+            return "ok";
+        }
+
+        @GetMapping("/test-list")
+        String list(PageDTO page) {
+            return "ok";
+        }
     }
 
     @RestController

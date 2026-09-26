@@ -3,10 +3,12 @@ package com.sc1hub.common.exception;
 import com.sc1hub.board.support.InvalidBoardException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.nio.file.AccessDeniedException;
 import jakarta.servlet.http.HttpServletResponse;
@@ -80,6 +82,16 @@ public class GlobalExceptionHandler {
         response.setHeader("X-Robots-Tag", ERROR_ROBOTS);
         log.warn("MissingServletRequestParameterException: {}", e.getMessage());
         prepareErrorModel(model, "필수 정보가 빠진 요청입니다.", "/");
+        return "alert";
+    }
+
+    @ExceptionHandler({BindException.class, MethodArgumentTypeMismatchException.class})
+    public String handleInvalidRequestValue(Exception e, Model model, HttpServletResponse response) {
+        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        response.setHeader("X-Robots-Tag", ERROR_ROBOTS);
+        // 바인딩 예외 메시지에는 원본 입력값이 포함되므로 로그와 응답에 노출하지 않는다.
+        log.warn("Invalid request value: {}", e.getClass().getSimpleName());
+        prepareErrorModel(model, "요청 값의 형식이 올바르지 않습니다.", "/");
         return "alert";
     }
 
