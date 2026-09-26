@@ -1,0 +1,513 @@
+{
+  "date": "2026-09-05 KST",
+  "scope": "21 articles: 18 P1 core corrections and 3 related links; further enrichment remains",
+  "verifiedCount": 21,
+  "posts": [
+    {
+      "key": "teamplayguideboard/14",
+      "title": "빨무 프로토스 물량이 안 나오는 이유",
+      "url": "https://sc1hub.com/boards/teamplayguideboard/readPost?postNum=14",
+      "completedAt": "2026-09-05T00:10:36.571760+00:00",
+      "changes": [
+        "프로브는 소환 시작 후 복귀 가능",
+        "공급 확보 시점을 생산 시작으로 교정",
+        "여러 건물 동시 부대지정 문구 수정"
+      ],
+      "sources": [
+        "https://classic.battle.net/scc/protoss/units/probe.shtml"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/eca766dc-a35d-4020-bba2-505ea6223350_ZmFzdGVzdC1wcm90b3NzLW1hc3MtcHJvZHVjdGlvbg.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "44532177b7d7405dc1fe185497a5bcaaaa3cb88064a4e1cd1c992cc0ef29db29",
+      "afterHash": "270b16ee379c2e619e921bb5be8cb88c0d6286c37e6f9731677c36badf410d2d"
+    },
+    {
+      "key": "zvstboard/22",
+      "title": "저그도 전면전 잘한다! 가드라 빌드",
+      "url": "https://sc1hub.com/boards/zvstboard/readPost?postNum=22",
+      "completedAt": "2026-09-05T00:11:35.080866+00:00",
+      "changes": [
+        "레어→스파이어 선행 순서 교정",
+        "중반 요약과 생략 항목 명시",
+        "방업 완료 조건 명시"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=b9eefeaf-3bd2-47f9-8e31-6ff4efc1a9c9&fileName=%EA%B0%80%EB%93%9C%EB%9D%BC.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "eb7496a09e27f6a1ca2436d8c97cbbb194e8447851d4435685037aa997c32a80",
+      "afterHash": "f04430718215daf617652344aadea243da8275dec40e0a6bffeeaea997e7fc30"
+    },
+    {
+      "key": "tipboard/4",
+      "title": "스타1 빌드 타임 - 건물, 유닛, 업그레이드 시간 정리",
+      "url": "https://sc1hub.com/boards/tipboard/readPost?postNum=4",
+      "completedAt": "2026-09-05T00:12:24.518732+00:00",
+      "changes": [
+        "저그 업그레이드 2·3단계 오기 수정",
+        "스카웃 오타 수정"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=747f26b2-8d76-4c52-a9f7-3bba415fff5e&fileName=스타 빌드 타임 예시 이미지.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 0,
+      "beforeHash": "8047d22aafb5491cc01cdca8b539e5396642d1b0d637360040472fddfec229bd",
+      "afterHash": "3c832084e7c7a4e89236ec4e0076c8048047a9fd5058e37869fb707cce90dd2f"
+    },
+    {
+      "key": "pvspboard/9",
+      "title": "난 그냥 프프전 하기 싫다. 센터99게이트",
+      "url": "https://sc1hub.com/boards/pvspboard/readPost?postNum=9",
+      "completedAt": "2026-09-05T00:16:37.154759+00:00",
+      "changes": [
+        "9마리 동원 오기→인구수 9·전진 프로브 1기",
+        "프로브 출발 표현과 파일런 위치 명확화",
+        "러시 거리 절반·동일 거리 단정 수정"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 0,
+      "beforeHash": "0a63abb0fb77e72576d01752652b578d362ba15b1bc6c1aef8b28645a3f28557",
+      "afterHash": "0c8fc82bcfec9ad25e7c5984eaa18e8e6896a7a2e27644aa376fd2d0f912908f"
+    },
+    {
+      "key": "tipboard/23",
+      "title": "스타1 유닛 상성 실전 분석!",
+      "url": "https://sc1hub.com/boards/tipboard/readPost?postNum=23",
+      "completedAt": "2026-09-05T00:17:35.297597+00:00",
+      "changes": [
+        "스팀 마린과 드라군 이동속도 설명 교정",
+        "체력 피해와 실드 피해 구분",
+        "질럿·저글링 타격 횟수의 공방업 조건 명시"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp",
+        "https://classic.battle.net/scc/terran/um.shtml",
+        "https://classic.battle.net/scc/GS/damage.shtml"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 0,
+      "beforeHash": "2b6dd693a1216f185dc59afb9886b31990709ea3d6f0cb475b1a0ec651d2e65a",
+      "afterHash": "46ae84dd14b15b23eabf2dd2e7d64995eb07aaa84c0e58ac7f05ad554e2ca951"
+    },
+    {
+      "key": "pvszboard/19",
+      "title": "저그전 공방업 업그레이드 순서",
+      "url": "https://sc1hub.com/boards/pvszboard/readPost?postNum=19",
+      "completedAt": "2026-09-05T00:17:58.280126+00:00",
+      "changes": [
+        "플레이그 피해 상한·실드 구분",
+        "처치 횟수의 공방업·재생 조건 명시",
+        "방3업 고정 순서를 조합별 선택으로 교정"
+      ],
+      "sources": [
+        "https://classic.battle.net/scc/zerg/units/defiler.shtml",
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/WeaponType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 0,
+      "beforeHash": "e54cc109f138e9ae6344e194f3f4ae674cbd963a5f401423ddbf18be70aeed1f",
+      "afterHash": "d0c9cca89b265a1d0bc150a4f5cc788ac7e1abab2e7ee5122f8bbe5ae5bd7441"
+    },
+    {
+      "key": "tipboard/13",
+      "title": "스타크래프트1 무료 다운로드 사이트",
+      "url": "https://sc1hub.com/boards/tipboard/readPost?postNum=13",
+      "completedAt": "2026-09-05T00:17:58.991084+00:00",
+      "changes": [
+        "무료화 시점과 리마스터 출시 시점 구분",
+        "확인되지 않은 고정 가격 대신 현재 공식 상점 안내",
+        "캠페인 오타 수정"
+      ],
+      "sources": [
+        "https://news.blizzard.com/en-us/article/20674424/starcraft-brood-war-patch-1-18-patch-notes",
+        "https://us.shop.battle.net/ko-kr/product/starcraft"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=de8aef69-dc20-4755-89ec-032993cb3b04&fileName=스타그래픽_기본.jpg",
+          "status": 200
+        },
+        {
+          "url": "/ckImgSubmit?uid=d3d62e4f-44ef-4339-b725-8551cab37206&fileName=스타그래픽_리마스터.jpg",
+          "status": 200
+        },
+        {
+          "url": "/ckImgSubmit?uid=596c0903-9a4b-483f-b5e3-ba424f054fa3&fileName=카봇모드.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 0,
+      "beforeHash": "f7d8aa3db6629b19ab7d9a3ba5095e46b1f78601257afa806d64fb7f67405f63",
+      "afterHash": "76708518d8fd3e7d63d5d9914580c8ea492dd41db4a671bdc2aa2dde00644ae8"
+    },
+    {
+      "key": "tvszboard/11",
+      "title": "자주 상대하게 되는, 미친 저그 상대법",
+      "url": "https://sc1hub.com/boards/tvszboard/readPost?postNum=11",
+      "completedAt": "2026-09-05T00:17:59.607711+00:00",
+      "changes": [
+        "울트라 방5업 표현→최대 총 방어력 6",
+        "레어·챔버만으로 전략 확정하는 문장 수정",
+        "무조건 패배 단정 제거"
+      ],
+      "sources": [
+        "https://classic.battle.net/scc/zerg/units/ultralisk.shtml",
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=8721682b-72d1-4f13-b1d2-b872ee5ae700&fileName=미친 저그 주사놓기.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "b169d30a6dc00462014e824122dfbf09fd29c661edce5e26d99c71e27ffd83e7",
+      "afterHash": "9f71fd35375aedafa54d1a3af6cc5f436745a2e94452c18886f098f499919ce9"
+    },
+    {
+      "key": "zvstboard/16",
+      "title": "꼭 숙지필요!! 더러운 8배럭 막는 법",
+      "url": "https://sc1hub.com/boards/zvstboard/readPost?postNum=16",
+      "completedAt": "2026-09-05T00:18:00.162609+00:00",
+      "changes": [
+        "미네랄 이동의 충돌 예외와 공중 유닛 판정 구분",
+        "명령 전환 설명 보완",
+        "드론 손실만으로 패배 단정 제거"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=b0e12c6e-2a85-40f8-af04-aaed34a34073&fileName=벙커링에 빡친 드론.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "53e5bf5a54a05988c261a2665277e44b963dcada0eb3ea9a2ab46e6d33814771",
+      "afterHash": "1e52dd1b9b375da14c87d5a0983a94ee99c08e2cc2b8142007fc008023d78fb9"
+    },
+    {
+      "key": "pvstboard/13",
+      "title": "짤막 성공! 테란 초반 찌르기 수비 후엔 뭘할까?",
+      "url": "https://sc1hub.com/boards/pvstboard/readPost?postNum=13",
+      "completedAt": "2026-09-05T00:18:00.575975+00:00",
+      "changes": [
+        "초반 수비 후 2차 러시 불가 단정 제거",
+        "상대 확장·생산시설·병력에 따른 트리플/수비 분기"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 0,
+      "beforeHash": "0ea4742fcda8853abbd853e63e5ff98091f3681820f00527b7fefc9f52add26d",
+      "afterHash": "a00248f026f6857ed398495002a10800ce4ec907c6c54a83761ba7cd81f1a44c"
+    },
+    {
+      "key": "tvstboard/12",
+      "title": "테테전 드랍십 운영: 탱크 두 기로 자리 싸움 뒤집는 법",
+      "url": "https://sc1hub.com/boards/tvstboard/readPost?postNum=12",
+      "completedAt": "2026-09-05T00:23:58.248097+00:00",
+      "changes": [
+        "출처 없는 드랍십 중앙값·사분위 통계 제거",
+        "첫 출발 고정 시간 대신 확인 가능한 건설·생산 소요시간",
+        "세 번째 커맨드 고정 시각을 정찰 조건으로 교체"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/c8494c51-e94d-48be-b649-1315dee065e7_dHZzdC1kcm9wc2hpcC10d28tdGFua3MtaGVybw.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "3ec55da85a84b552f41c2b1cb14a60ccf198dd445812c3838a745b66a1250a3b",
+      "afterHash": "4293ebc4c1e3b4aa9b6a2c71ff31c9cd70192f5f91db00d0eed4605ed0461908"
+    },
+    {
+      "key": "tvstboard/13",
+      "title": "상대 레이스가 보였다: 터렛과 골리앗은 얼마나 준비해야 할까?",
+      "url": "https://sc1hub.com/boards/tvstboard/readPost?postNum=13",
+      "completedAt": "2026-09-05T00:23:58.843594+00:00",
+      "changes": [
+        "출처 없는 레이스·골리앗 통계 제거",
+        "5:30~6분 고정 수비 마감 제거",
+        "엔베→터렛 약 57초 및 이동 여유로 준비 기준 교정"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/9fec4016-7215-49b0-baf0-6e335498d524_dHZzdC13cmFpdGgtZGVmZW5zZS1oZXJv.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "1994f3107257ea3a8b554331e9951611f1f2360be2aa34029f8a309c4a9b012e",
+      "afterHash": "fd3dc835689bad385580fb7c27784064dfe6c740c6dcb1a9c5fd64f046dd9db5"
+    },
+    {
+      "key": "tvszboard/20",
+      "title": "뮤짤에 미쳤냐!? 530 뮤탈 빌드 대처",
+      "url": "https://sc1hub.com/boards/tvszboard/readPost?postNum=20",
+      "completedAt": "2026-09-05T00:23:59.495260+00:00",
+      "changes": [
+        "오버풀과 12풀 구분",
+        "링 수·레어 시각만으로 100% 판정하는 단정 제거",
+        "터렛 착공/완성 시점 교정 및 소요시간 근거 추가"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=0849f720-81a7-4fab-9083-24ef5d46ce8f&fileName=뮤탈 대처하려는 마린.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "8d9b1f0455726ff12e8c7fcdcd0dbdf0f461be06120d1b1f79c9499ae0bc90dd",
+      "afterHash": "f670de75b80bf166452f625f86a32947cb5f475fe88fbb2c20fe28056a759da5"
+    },
+    {
+      "key": "zvspboard/14",
+      "title": "공업이냐 방업이냐? 저프전 저그 업그레이드 순서 정리",
+      "url": "https://sc1hub.com/boards/zvspboard/readPost?postNum=14",
+      "completedAt": "2026-09-05T00:24:00.110794+00:00",
+      "changes": [
+        "973 원공1업 필수 단정 제거",
+        "원거리/근접 공업 적용 조합 구분",
+        "타격 횟수의 단순 계산 조건 명시",
+        "초반 챔버 고정 시점 제거"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/480cef85-89ce-4b72-a0a4-893a5ba8201e_enZzcGJvYXJkLXBvc3QxNC11cGdyYWRlLW9yZGVyLXYy.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "81d7148ae379269d5108b3d029e860198305fde8f9718ed81db70ed6f98a3917",
+      "afterHash": "f5740c1c5639641919b8559df5333dc3b2fa06ba7d69d966fe6b355c73dc0c0f"
+    },
+    {
+      "key": "zvszboard/9",
+      "title": "3분 정찰로 보는 저저전 빌드 판별법",
+      "url": "https://sc1hub.com/boards/zvszboard/readPost?postNum=9",
+      "completedAt": "2026-09-05T00:24:00.719586+00:00",
+      "changes": [
+        "0~1분 정찰 도달 보장 제거",
+        "관전자 알 생산 정보와 플레이어가 확인한 유닛 구분",
+        "건물 진행도·시계만으로 오프닝 확정하지 않도록 교정"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/d816d942-fc5e-4a4c-8b39-1f6264d39c54_enZ6LTNtaW4tc2NvdXRpbmc.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "8eb09b7bd7111d9f71260da7318c4e46f53612208525acade9f5598b575a3e95",
+      "afterHash": "60d5605b423abffad06f6903683ea53f2e9643277c6aa4ce8ee5fab21da31118"
+    },
+    {
+      "key": "tvstboard/7",
+      "title": "부유한 배럭더블 운영",
+      "url": "https://sc1hub.com/boards/tvstboard/readPost?postNum=7",
+      "completedAt": "2026-09-05T00:27:35.131453+00:00",
+      "changes": [
+        "첫 서플 11→9, 배럭 11로 교정",
+        "원 영상에 맞게 커맨드→가스 순서 복구",
+        "잘못된 전체 시간표를 직접 확인한 영상/게임 시계 체크포인트로 교체"
+      ],
+      "sources": [
+        "https://classic.battle.net/scc/terran/basic.shtml",
+        "https://www.youtube.com/watch?v=FF8vbIpe_fQ"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/uploadedImg/22a2ef40-15f5-4c6b-90aa-a3d2e8b3cb15_aGVybw.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "8c43646ddacc283b426be2b2b7e236a4e57dddcf26e3626e25288efe72582347",
+      "afterHash": "99ff773c485995a569b7523b220a7fa4c855d061a2c4ed212a86fe1b89f5bf28"
+    },
+    {
+      "key": "tvspboard/7",
+      "title": "이 시간에 이 물량!? 5팩 타이밍 빌드",
+      "url": "https://sc1hub.com/boards/tvspboard/readPost?postNum=7",
+      "completedAt": "2026-09-05T00:27:35.614505+00:00",
+      "changes": [
+        "5팩과 공1업 완료를 구분",
+        "본문에 없는 아머리·공업을 전제로 한 해석 차단",
+        "검증되지 않은 8:30 표준 출발 단정 제거"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=d23c4e14-ec66-4c1c-93e4-e32f197c89be&fileName=5팩토리.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "12019384a3cf052ca76a85282cbd67425898b6e47a76231cbc4c7084e7a25d42",
+      "afterHash": "680bb5e9aef41cc74030c19b06bd48a9c9f2b022195634c229f4ad7a461aa225"
+    },
+    {
+      "key": "tvspboard/3",
+      "title": "테란의 찌르기, 타이밍 러쉬 빌드 정리",
+      "url": "https://sc1hub.com/boards/tvspboard/readPost?postNum=3",
+      "completedAt": "2026-09-05T00:27:36.107171+00:00",
+      "changes": [
+        "연결 대상에 없는 공1업 고정 표기 수정"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=2c0f087d-9121-4897-835e-d169b299efcf&fileName=벌처 레이싱.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "bf8ab710b0f5fb8a3d47a0738f8ab95a95771e63f9f50928c0adf5e323225027",
+      "afterHash": "94da0872a64afad776ba46f128769ab95ddec50f4ed1d10476a9a99f2db76085"
+    },
+    {
+      "key": "tvspboard/11",
+      "title": "안전한 정석 시작, 팩더블 빌드",
+      "url": "https://sc1hub.com/boards/tvspboard/readPost?postNum=11",
+      "completedAt": "2026-09-05T00:27:36.520297+00:00",
+      "changes": [
+        "5팩 연결 글을 공1업 확정 빌드로 소개하는 문구 수정"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 1,
+      "beforeHash": "92880ab5963c1bcf5ac39dad49617fffa2ddd05b612ba1c7d0c130c87b5cb059",
+      "afterHash": "32488991ef7f47e64948fd74a06bac391c42e61cb8df505c57a0f014c96a3327"
+    },
+    {
+      "key": "pvstboard/11",
+      "title": "테란의 원기옥? 5팩 타이밍 막는 법!",
+      "url": "https://sc1hub.com/boards/pvstboard/readPost?postNum=11",
+      "completedAt": "2026-09-05T00:27:36.917789+00:00",
+      "changes": [
+        "공1업형 영상과 무업형 위협을 구분",
+        "5팩 완성 확인 뒤에만 대응하는 오해 방지"
+      ],
+      "sources": [],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [],
+      "videoCount": 1,
+      "beforeHash": "6c180b46cf0ab03e7214adb52ca24f660458ee49a6038c9a0884aed87c6fb6c7",
+      "afterHash": "10705ceb2ea4b86e666ea0003e8d08cb5d480114c59ac19552ecb11f58545b77"
+    },
+    {
+      "key": "zvstboard/10",
+      "title": "3해처리 뮤탈 운영. 이제 안 쓰는 이유",
+      "url": "https://sc1hub.com/boards/zvstboard/readPost?postNum=10",
+      "completedAt": "2026-09-05T00:34:19.355830+00:00",
+      "changes": [
+        "첫 오버로드와 누락된 레어 선행 과정 보완",
+        "원 강의의 레어 완성·스파이어 공사 장면과 영상·게임 시각 구분",
+        "스파이어의 레어 완료 조건과 인구수 예시 조건 명시",
+        "3해처리 완전 사장 단정을 선택 조건으로 완화"
+      ],
+      "sources": [
+        "https://github.com/bwapi/bwapi/blob/main/bwapi/BWAPILIB/Source/UnitType.cpp",
+        "https://www.youtube.com/watch?v=gKCPDgS6WQk&t=335"
+      ],
+      "apiReadback": "PASS",
+      "publicStatus": 200,
+      "titleWriterMediaPreserved": true,
+      "images": [
+        {
+          "url": "/ckImgSubmit?uid=cc7319d4-92e6-49f9-ae2d-05e3b7e34049&fileName=3해처리 짤.jpg",
+          "status": 200
+        }
+      ],
+      "videoCount": 1,
+      "beforeHash": "a89ace86187d7723c1df8e3c92e9ea0ecb2df22c6947dc366495b13307f5fc75",
+      "afterHash": "323e455974346d7c13c545d06511d4a162b0dd9f61f1ce3d31afd60366906ced"
+    }
+  ]
+}
