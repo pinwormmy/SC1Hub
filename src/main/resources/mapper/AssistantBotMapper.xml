@@ -106,6 +106,13 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updateStatusIfCurrent">
+        UPDATE assistant_bot_generation_history
+        SET status = #{status}
+        WHERE id = #{id}
+          AND status = #{expectedStatus}
+    </update>
+
     <select id="countPublishedSinceByMode" resultType="int">
         SELECT count(*)
         FROM assistant_bot_generation_history

@@ -2,6 +2,7 @@ package com.sc1hub.assistant.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sc1hub.assistant.config.AssistantBotProperties;
 import com.sc1hub.assistant.config.AssistantBotProperties.PersonaProperties;
 import com.sc1hub.assistant.config.AssistantProperties;
@@ -46,6 +47,7 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
 @Service
@@ -60,6 +62,8 @@ public class AssistantBotService {
     private static final String STATUS_SKIPPED = "skipped";
     private static final String STATUS_PUBLISHED = "published";
     private static final String OUTCOME_FAILED = "failed";
+    private static final String ALREADY_PUBLISHING_ERROR = "이미 발행되었거나 다른 요청이 발행 중인 초안입니다.";
+    private static final String AUTO_PUBLISH_ALREADY_RUNNING = "auto_publish_already_running";
     private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^가-힣a-z0-9]");
     private static final Pattern TITLE_COMMENT_COUNT_PATTERN = Pattern.compile("\\s*\\(\\s*\\d+\\s*\\)\\s*$");
     private static final String TOPIC_LANE_STAR_CHAT = "스타수다";
@@ -95,6 +99,7 @@ public class AssistantBotService {
     private final ObjectMapper objectMapper;
     private final ChatRoomService chatRoomService;
     private final Clock clock;
+    private final ReentrantLock autoPublishLock = new ReentrantLock();
     private LocalDate generateCallBudgetDate;
     private int generateCallBudgetUsed;
 
@@ -317,6 +322,9 @@ public class AssistantBotService {
             return response;
         }
 
+        // 발행 선점(claim) 후 실제 게시/댓글 등록 전에 실패하면 원래 상태로 되돌린다.
+        String claimedFromStatus = null;
+        boolean submitted = false;
         try {
             AssistantBotHistoryDTO history = assistantBotMapper.selectHistoryById(historyId);
             if (history == null) {
@@ -356,8 +364,14 @@ public class AssistantBotService {
                     response.setError("발행할 게시글 제목 또는 본문이 비어 있습니다.");
                     return response;
                 }
+                if (!claimDraftForPublish(historyId, history.getStatus())) {
+                    response.setError(ALREADY_PUBLISHING_ERROR);
+                    return response;
+                }
+                claimedFromStatus = history.getStatus();
                 boardService.submitPost(history.getBoardTitle(), post);
-                BoardDTO created = findPublishedPost(history.getBoardTitle(), post.getTitle(), persona.getName());
+                submitted = true;
+                BoardDTO created = findPublishedPost(history.getBoardTitle(), post, persona.getName());
                 Integer publishedPostNum = created == null ? null : created.getPostNum();
                 markPublished(historyId, publishedPostNum);
                 populatePublishedResponse(response, publishedPostNum,
@@ -367,6 +381,10 @@ public class AssistantBotService {
 
             boolean shouldReply = resolveShouldReply(history.getGenerationMode(), result);
             if (!shouldReply) {
+                if (!claimDraftForPublish(historyId, history.getStatus())) {
+                    response.setError(ALREADY_PUBLISHING_ERROR);
+                    return response;
+                }
                 markPublished(historyId, history.getTargetPostNum());
                 populatePublishedResponse(response, history.getTargetPostNum(),
                         buildReadPostRedirectUrl(history.getBoardTitle(), history.getTargetPostNum()));
@@ -392,13 +410,22 @@ public class AssistantBotService {
                 response.setError("발행할 댓글 본문이 비어 있습니다.");
                 return response;
             }
+            if (!claimDraftForPublish(historyId, history.getStatus())) {
+                response.setError(ALREADY_PUBLISHING_ERROR);
+                return response;
+            }
+            claimedFromStatus = history.getStatus();
             boardService.addComment(history.getBoardTitle(), comment);
+            submitted = true;
             markPublished(historyId, history.getTargetPostNum());
             populatePublishedResponse(response, history.getTargetPostNum(),
                     buildReadPostRedirectUrl(history.getBoardTitle(), history.getTargetPostNum()));
             return response;
         } catch (Exception e) {
             log.error("봇 초안 발행 실패. historyId={}", historyId, e);
+            if (claimedFromStatus != null && !submitted) {
+                releasePublishClaim(historyId, claimedFromStatus);
+            }
             response.setError("봇 초안 발행 중 오류가 발생했습니다.");
             return response;
         }
@@ -570,6 +597,20 @@ public class AssistantBotService {
         assistantBotMapper.updateStatus(historyId, STATUS_PUBLISHED, publishedPostNum);
     }
 
+    // 상태 확인과 발행 사이의 경쟁을 막기 위해, 읽어 둔 상태 그대로일 때만 published로 원자적으로 바꾼다.
+    // 동시에 들어온 다른 발행 요청은 0행 갱신으로 실패하므로 같은 초안이 두 번 게시되지 않는다.
+    private boolean claimDraftForPublish(long historyId, String currentStatus) {
+        return assistantBotMapper.updateStatusIfCurrent(historyId, currentStatus, STATUS_PUBLISHED) == 1;
+    }
+
+    private void releasePublishClaim(long historyId, String originalStatus) {
+        try {
+            assistantBotMapper.updateStatusIfCurrent(historyId, STATUS_PUBLISHED, originalStatus);
+        } catch (Exception e) {
+            log.error("봇 초안 발행 선점 해제 실패. historyId={}", historyId, e);
+        }
+    }
+
     private void populatePublishedResponse(AssistantBotPublishResponseDTO response,
                                            Integer publishedPostNum,
                                            String redirectUrl) {
@@ -603,11 +644,20 @@ public class AssistantBotService {
             return Collections.singletonList(AutoPublishResult.skipped("no_enabled_persona"));
         }
 
-        List<AutoPublishResult> results = new ArrayList<>();
-        for (PersonaProperties persona : personas) {
-            results.add(autoPublishOnce(persona.getName()));
+        // 스케줄러와 관리자 수동 실행이 겹치면 둘 다 미발행(0건)으로 판단해 중복 발행한다.
+        // 단일 인스턴스 배포이므로 프로세스 내 락으로 한 번에 하나의 실행만 허용한다.
+        if (!autoPublishLock.tryLock()) {
+            return Collections.singletonList(AutoPublishResult.skipped(AUTO_PUBLISH_ALREADY_RUNNING));
         }
-        return results;
+        try {
+            List<AutoPublishResult> results = new ArrayList<>();
+            for (PersonaProperties persona : personas) {
+                results.add(autoPublishOnce(persona.getName()));
+            }
+            return results;
+        } finally {
+            autoPublishLock.unlock();
+        }
     }
 
     private AutoPublishResult summarizeAutoPublishResults(List<AutoPublishResult> results) {
@@ -891,10 +941,21 @@ public class AssistantBotService {
         history.setTopic("고양이 울음");
         history.setDraftTitle(null);
         history.setDraftBody(body);
-        history.setRawJson(null);
+        // raw_json 컬럼이 NOT NULL이라 null을 넣으면 strict 모드에서 INSERT가 실패한다.
+        // 채팅 초안과 같은 모양의 최소 JSON을 남겨 이력 조회/파싱과도 호환되게 한다.
+        history.setRawJson(buildLocalMeowRawJson(body));
         history.setStatus(STATUS_PUBLISHED);
         assistantBotMapper.insertHistory(history);
         return AutoPublishResult.published(persona.getName(), MODE_CHAT, history.getId(), null, null);
+    }
+
+    private String buildLocalMeowRawJson(String body) {
+        ObjectNode root = objectMapper.createObjectNode();
+        ObjectNode analysis = root.putObject("analysis");
+        analysis.put("topic", "고양이 울음");
+        analysis.put("source", "local_meow");
+        root.putObject("chat").put("body", body);
+        return root.toString();
     }
 
     private List<Integer> resolveChatAutoPublishSlots(PersonaProperties persona, LocalDate date, int dailyLimit) {
@@ -1982,7 +2043,8 @@ public class AssistantBotService {
         if (historyId == null) {
             return;
         }
-        assistantBotMapper.updateStatus(historyId, STATUS_SKIPPED, null);
+        // 이미 게시가 끝나 published로 선점된 이력은 skipped로 덮어쓰지 않는다.
+        assistantBotMapper.updateStatusIfCurrent(historyId, STATUS_DRAFT, STATUS_SKIPPED);
     }
 
     private DuplicateCheck findDuplicateIssue(String mode,
@@ -2355,7 +2417,12 @@ public class AssistantBotService {
         return grams;
     }
 
-    private BoardDTO findPublishedPost(String boardTitle, String title, String writer) throws Exception {
+    private BoardDTO findPublishedPost(String boardTitle, BoardDTO submittedPost, String writer) throws Exception {
+        // submitPost는 useGeneratedKeys로 postNum을 채우므로 있으면 그대로 쓰고, 없을 때만 최근 글에서 찾는다.
+        if (submittedPost.getPostNum() > 0) {
+            return submittedPost;
+        }
+        String title = submittedPost.getTitle();
         List<BoardDTO> latest = safeList(boardMapper.selectRecentPostsForBot(boardTitle, 5));
         for (BoardDTO post : latest) {
             if (post == null) {

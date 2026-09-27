@@ -27,6 +27,10 @@ public interface AssistantBotMapper {
                       @Param("status") String status,
                       @Param("publishedPostNum") Integer publishedPostNum);
 
+    int updateStatusIfCurrent(@Param("id") long id,
+                              @Param("expectedStatus") String expectedStatus,
+                              @Param("status") String status);
+
     int countPublishedSinceByMode(@Param("personaName") String personaName,
                                   @Param("boardTitle") String boardTitle,
                                   @Param("generationMode") String generationMode,

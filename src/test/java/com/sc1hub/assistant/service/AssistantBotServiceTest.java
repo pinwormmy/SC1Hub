@@ -8,6 +8,7 @@ import com.sc1hub.assistant.dto.AssistantBotAutoPublishStatusDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftRequestDTO;
 import com.sc1hub.assistant.dto.AssistantBotDraftResponseDTO;
 import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
+import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.mapper.AssistantBotMapper;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
@@ -36,6 +37,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -43,10 +46,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -811,8 +816,128 @@ class AssistantBotServiceTest {
                 "야옹봇".equals(history.getPersonaName())
                         && "chat".equals(history.getGenerationMode())
                         && "고양이 울음".equals(history.getTopic())
-                        && history.getRawJson() == null
+                        && history.getRawJson() != null
+                        && history.getRawJson().contains("\"source\":\"local_meow\"")
+                        && history.getRawJson().contains("\"body\":\"" + history.getDraftBody() + "\"")
                         && "published".equals(history.getStatus())));
+    }
+
+    @Test
+    void publishDraft_claimsDraftAtomicallyAndUsesGeneratedPostNum() throws Exception {
+        when(assistantBotMapper.selectHistoryById(5L)).thenReturn(postDraftHistory(5L));
+        when(assistantBotMapper.updateStatusIfCurrent(5L, "draft", "published")).thenReturn(1);
+        doAnswer(invocation -> {
+            BoardDTO post = invocation.getArgument(1);
+            post.setPostNum(777);
+            return null;
+        }).when(boardService).submitPost(eq("funboard"), any(BoardDTO.class));
+
+        AssistantBotPublishResponseDTO response = assistantBotService.publishDraft(5L);
+
+        assertNull(response.getError());
+        assertEquals("published", response.getStatus());
+        assertEquals(Integer.valueOf(777), response.getPublishedPostNum());
+        assertEquals("/boards/funboard/readPost?postNum=777", response.getRedirectUrl());
+        verify(boardMapper, never()).selectRecentPostsForBot(anyString(), anyInt());
+        verify(assistantBotMapper).updateStatus(5L, "published", 777);
+    }
+
+    @Test
+    void publishDraft_doesNotSubmitWhenAnotherRequestAlreadyClaimedDraft() throws Exception {
+        when(assistantBotMapper.selectHistoryById(5L)).thenReturn(postDraftHistory(5L));
+        when(assistantBotMapper.updateStatusIfCurrent(5L, "draft", "published")).thenReturn(0);
+
+        AssistantBotPublishResponseDTO response = assistantBotService.publishDraft(5L);
+
+        assertTrue(response.getError() != null && !response.getError().isEmpty());
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+        verify(assistantBotMapper, never()).updateStatus(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void publishDraft_releasesClaimWhenSubmitFails() throws Exception {
+        when(assistantBotMapper.selectHistoryById(5L)).thenReturn(postDraftHistory(5L));
+        when(assistantBotMapper.updateStatusIfCurrent(5L, "draft", "published")).thenReturn(1);
+        when(assistantBotMapper.updateStatusIfCurrent(5L, "published", "draft")).thenReturn(1);
+        doThrow(new RuntimeException("db down")).when(boardService).submitPost(eq("funboard"), any(BoardDTO.class));
+
+        AssistantBotPublishResponseDTO response = assistantBotService.publishDraft(5L);
+
+        assertTrue(response.getError() != null && !response.getError().isEmpty());
+        verify(assistantBotMapper).updateStatusIfCurrent(5L, "published", "draft");
+        verify(assistantBotMapper, never()).updateStatus(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void publishDraft_fallsBackToRecentPostLookupWhenGeneratedKeyMissing() throws Exception {
+        when(assistantBotMapper.selectHistoryById(5L)).thenReturn(postDraftHistory(5L));
+        when(assistantBotMapper.updateStatusIfCurrent(5L, "draft", "published")).thenReturn(1);
+        AtomicReference<String> submittedTitle = new AtomicReference<>();
+        doAnswer(invocation -> {
+            BoardDTO post = invocation.getArgument(1);
+            submittedTitle.set(post.getTitle());
+            return null;
+        }).when(boardService).submitPost(eq("funboard"), any(BoardDTO.class));
+        when(boardMapper.selectRecentPostsForBot("funboard", 5)).thenAnswer(invocation -> {
+            BoardDTO created = new BoardDTO();
+            created.setPostNum(778);
+            created.setTitle(submittedTitle.get());
+            created.setWriter("프징징봇");
+            return Collections.singletonList(created);
+        });
+
+        AssistantBotPublishResponseDTO response = assistantBotService.publishDraft(5L);
+
+        assertNull(response.getError());
+        assertEquals(Integer.valueOf(778), response.getPublishedPostNum());
+        verify(assistantBotMapper).updateStatus(5L, "published", 778);
+    }
+
+    @Test
+    void autoPublishAllPersonas_skipsWhenAnotherRunIsInProgress() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AssistantBotService blockingService = new AssistantBotService(
+                botProperties,
+                new AssistantProperties(),
+                boardService,
+                boardMapper,
+                assistantBotMapper,
+                geminiClient,
+                openAiAssistantBotClient,
+                new ObjectMapper(),
+                chatRoomService,
+                Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul"))
+        ) {
+            @Override
+            AutoPublishResult autoPublishOnce(String personaName) {
+                entered.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return AutoPublishResult.skipped(personaName, "no_due_candidate");
+            }
+        };
+
+        AtomicReference<List<AssistantBotService.AutoPublishResult>> firstRun = new AtomicReference<>();
+        Thread runner = new Thread(() -> firstRun.set(blockingService.autoPublishAllPersonas()));
+        runner.start();
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        List<AssistantBotService.AutoPublishResult> concurrent = blockingService.autoPublishAllPersonas();
+        AssistantBotService.AutoPublishResult summarized = blockingService.autoPublishOnce();
+
+        release.countDown();
+        runner.join(5000);
+
+        assertEquals(1, concurrent.size());
+        assertEquals("skipped", concurrent.get(0).getOutcome());
+        assertEquals("auto_publish_already_running", concurrent.get(0).getDetail());
+        assertEquals("auto_publish_already_running", summarized.getDetail());
+        assertEquals(4, firstRun.get().size());
+        assertEquals(4, blockingService.autoPublishAllPersonas().size());
     }
 
     @Test
@@ -1770,6 +1895,16 @@ class AssistantBotServiceTest {
         persona.setReasoningEffort("high");
         persona.setMaxOutputTokens(3000);
         return persona;
+    }
+
+    private AssistantBotHistoryDTO postDraftHistory(long id) {
+        AssistantBotHistoryDTO history = history("post", "스타수다", "프로토스 래더 한 판만 더 해야지", "본문");
+        history.setId(id);
+        history.setPersonaName("프징징봇");
+        history.setBoardTitle("funboard");
+        history.setStatus("draft");
+        history.setRawJson(validPostDraftJson());
+        return history;
     }
 
     private AssistantBotDraftRequestDTO postDraftRequest() {
