@@ -347,7 +347,6 @@ textarea { padding: 8px 12px; line-height: 1.5; }
 #sidebar a[aria-current="page"]::after {
     content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 4px; border-radius: 2px; background: var(--sc-accent-emphasis);
 }
-#sidebar .menu-toggle-hint { clear: both; text-align: left; padding: 2px 8px; font-size: 12px; }
 #sidebar .menu-content a.sc-menu-link::before { content: ""; display: inline-block; flex-shrink: 0; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: var(--sc-cyan); border: 1px solid rgba(31, 35, 40, 0.15); }
 #sidebar .menu-content a.sc-menu-link--zerg::before { background: var(--sc-magenta); }
 #sidebar .menu-content a.sc-menu-link--protoss::before { background: var(--sc-protoss); }

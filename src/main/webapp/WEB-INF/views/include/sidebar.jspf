@@ -16,13 +16,6 @@
 .menu-content {
     display: none; /* 초기에 모든 메뉴 내용을 숨김 처리 */
 }
-.menu-toggle-hint {
-    display: block; /* 토글 힌트 항상 표시 */
-    color: var(--sc-text-dim);
-    text-align: center;
-    margin: 0 0 0.25rem;
-    font-size: 0.82rem;
-}
 .menu-header {
     cursor: pointer;
 }
@@ -42,9 +35,6 @@
         font-size: 1rem;
         padding: 6px 4px;
     }
-    .menu-toggle-hint {
-        font-size: 12px;
-    }
     .menu-content ul {
         padding-left: 0.35rem;
         margin: 0;
@@ -63,9 +53,6 @@
         font-size: 1rem;
         padding: 6px 4px;
     }
-    .menu-toggle-hint {
-        font-size: 13px;
-    }
     .menu-content ul {
         padding-left: 0.35rem;
         margin: 0;
@@ -82,7 +69,6 @@
     <div id="sidebar" class="sidebar">
         <fieldset id="basicMenu" class="basic-menu">
             <legend><button type="button" class="menu-header" aria-expanded="true" aria-controls="basicMenuContent" onclick="toggleMenu('basicMenuContent')">커뮤니티 <span aria-hidden="true">⌄</span></button></legend>
-            <p class="menu-toggle-hint">게시판 펼치기</p>
             <div id="basicMenuContent" class="menu-content" style="display: block;">
                 <ul>
                     <li><a href="/" accesskey="n">둘러보기(N)</a></li>
@@ -95,7 +81,6 @@
         </fieldset>
         <fieldset id="strategyMenu" class="menu-section">
             <legend><button type="button" class="menu-header" aria-expanded="false" aria-controls="strategyMenuContent" onclick="toggleMenu('strategyMenuContent')">공략게시판 <span aria-hidden="true">⌄</span></button></legend>
-            <p class="menu-toggle-hint">게시판 펼치기</p>
             <div id="strategyMenuContent" class="menu-content">
                 <ul>
                     <li><a href="/boards/tvszboard" class="sc-menu-link sc-menu-link--terran">테저전 게시판</a></li>
@@ -117,25 +102,25 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 데스크톱은 두 메뉴를 펼치고 모바일은 커뮤니티만 펼친다.
-    if(window.innerWidth > 768) {
-        document.getElementById('basicMenuContent').style.display = "block";
-        document.querySelector('#basicMenu .menu-toggle-hint').style.display = "none";
-        document.getElementById('strategyMenuContent').style.display = "block";
-        document.querySelector('#strategyMenu .menu-toggle-hint').style.display = "none";
-    } else {
-        // 모바일에서는 공략게시판을 접어 본문 접근을 빠르게 한다.
-        document.querySelectorAll('.menu-content').forEach(function(menu) {
-            var isBasicMenu = menu.id === 'basicMenuContent';
-            menu.style.display = isBasicMenu ? "block" : "none";
-            var hint = menu.previousElementSibling;
-            if (hint && hint.classList.contains('menu-toggle-hint')) {
-                hint.style.display = isBasicMenu ? "none" : "block";
-            }
-        });
-    }
+    // 데스크톱은 두 메뉴를 펼친다. 모바일은 공략게시판에서는 공략게시판만,
+    // 그 밖의 페이지에서는 커뮤니티만 펼쳐 본문 접근을 빠르게 한다.
+    var openAll = window.innerWidth > 768;
+    var openMenuId = isStrategyBoardPage() ? 'strategyMenuContent' : 'basicMenuContent';
+    document.querySelectorAll('.menu-content').forEach(function(menu) {
+        menu.style.display = (openAll || menu.id === openMenuId) ? "block" : "none";
+    });
     syncMenuExpandedState();
 });
+
+function isStrategyBoardPage() {
+    var path = window.location.pathname;
+    return Array.prototype.some.call(
+        document.querySelectorAll('#strategyMenuContent a[href^="/boards/"]'),
+        function(link) {
+            var boardPath = link.getAttribute('href');
+            return path === boardPath || path.indexOf(boardPath + '/') === 0;
+        });
+}
 
 function syncMenuExpandedState() {
     document.querySelectorAll('.menu-header[aria-controls]').forEach(function(button) {
@@ -146,23 +131,15 @@ function syncMenuExpandedState() {
 
 function toggleMenu(menuId) {
     var menu = document.getElementById(menuId);
-    var hint = menu.previousElementSibling; // 메뉴 토글 힌트 선택
 
     document.querySelectorAll('.menu-content').forEach(function(otherMenu) {
         if (otherMenu.id !== menuId) {
             otherMenu.style.display = 'none'; // 다른 메뉴 숨기기
-            otherMenu.previousElementSibling.style.display = "block"; // 다른 메뉴의 힌트 보이기
         }
     });
 
     // 현재 클릭한 메뉴의 표시 상태 토글
-    if (menu.style.display === "none" || menu.style.display === "") {
-        menu.style.display = "block"; // 메뉴 보이기
-        hint.style.display = "none"; // 힌트 숨기기
-    } else {
-        menu.style.display = "none"; // 메뉴 숨기기
-        hint.style.display = "block"; // 힌트 보이기
-    }
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
     syncMenuExpandedState();
 }
 </script>
