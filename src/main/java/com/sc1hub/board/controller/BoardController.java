@@ -15,7 +15,9 @@ import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.DuplicateContentGuard;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.common.util.IpService;
+import com.sc1hub.common.util.SafeTextValidator;
 import com.sc1hub.member.dto.MemberDTO;
+import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
 import com.sc1hub.seo.SeoMetadataService;
 import lombok.extern.slf4j.Slf4j;
@@ -57,8 +59,11 @@ public class BoardController {
     private static final String GUEST_NICKNAME_CONFLICT_MESSAGE = "기존 가입자 닉네임은 비회원이 사용할 수 없습니다.";
     private static final String INVALID_COMMENT_MESSAGE = "댓글 내용을 확인해주세요.";
     private static final String GUEST_COMMENT_CREDENTIALS_MESSAGE = "닉네임과 비밀번호를 확인해주세요.";
+    private static final String GUEST_NICKNAME_INVALID_MESSAGE =
+            "닉네임은 " + SafeTextValidator.MAX_NICKNAME_LENGTH + "자 이내로, < > \" ' & ` 기호와 제어문자 없이 입력해주세요.";
+    private static final String GUEST_PASSWORD_THROTTLED_MESSAGE = "비밀번호 확인 시도가 너무 많습니다. 5분 후 다시 시도해 주세요.";
     private static final int COMMENT_CONTENT_MAX_LENGTH = 500;
-    private static final int COMMENT_NICKNAME_MAX_LENGTH = 50;
+    private static final int COMMENT_NICKNAME_MAX_LENGTH = SafeTextValidator.MAX_NICKNAME_LENGTH;
     private static final int COMMENT_PASSWORD_MAX_LENGTH = 100;
 
     private static final String DUPLICATE_POST_MESSAGE = "같은 내용의 글을 짧은 시간에 반복 등록할 수 없습니다.";
@@ -78,11 +83,12 @@ public class BoardController {
     private final AttackContentDetector attackContentDetector;
     private final OffenderTracker offenderTracker;
     private final GuestPasswordHasher guestPasswordHasher;
+    private final LoginAttemptGuard guestPasswordAttemptGuard;
 
     public BoardController(BoardService boardService, MemberService memberService,
                            SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard,
                            AttackContentDetector attackContentDetector, OffenderTracker offenderTracker,
-                           GuestPasswordHasher guestPasswordHasher) {
+                           GuestPasswordHasher guestPasswordHasher, LoginAttemptGuard guestPasswordAttemptGuard) {
         this.boardService = boardService;
         this.memberService = memberService;
         this.seoMetadataService = seoMetadataService;
@@ -90,6 +96,7 @@ public class BoardController {
         this.attackContentDetector = attackContentDetector;
         this.offenderTracker = offenderTracker;
         this.guestPasswordHasher = guestPasswordHasher;
+        this.guestPasswordAttemptGuard = guestPasswordAttemptGuard;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -182,6 +189,12 @@ public class BoardController {
             model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
             return "alert";
         }
+        if (member == null && !SafeTextValidator.isAcceptableNickname(post.getWriter(),
+                SafeTextValidator.MAX_NICKNAME_LENGTH)) {
+            model.addAttribute("msg", GUEST_NICKNAME_INVALID_MESSAGE);
+            model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
+            return "alert";
+        }
         if (member == null && isRegisteredMemberNickname(post.getWriter())) {
             model.addAttribute("msg", GUEST_NICKNAME_CONFLICT_MESSAGE);
             model.addAttribute("url", buildSubmitDeniedUrl(boardTitle));
@@ -222,8 +235,17 @@ public class BoardController {
             return "redirect:/boards/" + boardTitle;
         }
 
+        boolean guestPasswordChecked = isGuestPost(existingPost) && !isAdmin(member);
+        String attemptKey = guestPostAttemptKey(boardTitle, existingPost.getPostNum());
         try {
+            if (guestPasswordChecked && guestPasswordAttemptGuard.isBlocked(attemptKey)) {
+                redirectAttributes.addFlashAttribute("msg", GUEST_PASSWORD_THROTTLED_MESSAGE);
+                return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + existingPost.getPostNum();
+            }
             if (!canDeletePost(boardTitle, existingPost, member, post.getGuestPassword())) {
+                if (guestPasswordChecked && isGuestWritableBoard(boardTitle)) {
+                    recordGuestPasswordFailure(request, member, attemptKey);
+                }
                 redirectAttributes.addFlashAttribute("msg", buildDeleteDeniedMessage(existingPost));
                 return "redirect:/boards/" + boardTitle + "/readPost?postNum=" + existingPost.getPostNum();
             }
@@ -248,7 +270,8 @@ public class BoardController {
     @PostMapping("/{boardTitle}/verifyGuestPostPassword")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> verifyGuestPostPassword(@PathVariable String boardTitle,
-            @RequestParam int postNum, @RequestParam String guestPassword, HttpSession session) throws Exception {
+            @RequestParam int postNum, @RequestParam String guestPassword, HttpSession session,
+            HttpServletRequest request) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         Map<String, Object> response = new HashMap<>();
         BoardDTO post = boardService.readPost(boardTitle, postNum);
@@ -258,13 +281,22 @@ public class BoardController {
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
         }
 
+        String attemptKey = guestPostAttemptKey(boardTitle, postNum);
+        if (guestPasswordAttemptGuard.isBlocked(attemptKey)) {
+            response.put("valid", false);
+            response.put("message", GUEST_PASSWORD_THROTTLED_MESSAGE);
+            return new ResponseEntity<>(response, HttpStatus.TOO_MANY_REQUESTS);
+        }
+
         boolean valid = guestPasswordMatches(post, guestPassword);
         response.put("valid", valid);
         if (valid) {
             // 성공한 검증만 서버 세션에 수정 권한을 부여한다. 이후 수정 화면은 URL 비밀번호가 아니라
             // 이 세션 권한으로만 접근하므로 GET 으로 비밀번호를 시험하는 경로가 사라진다.
+            guestPasswordAttemptGuard.reset(attemptKey);
             authorizeGuestPost(session, boardTitle, postNum);
         } else {
+            recordGuestPasswordFailure(request, getMember(session), attemptKey);
             response.put("message", "비밀번호가 일치하지 않습니다.");
         }
         return new ResponseEntity<>(response, HttpStatus.OK);
@@ -360,6 +392,9 @@ public class BoardController {
                     || exceedsCodePointLimit(comment.getPassword(), COMMENT_PASSWORD_MAX_LENGTH)) {
                 return commentResponse(HttpStatus.BAD_REQUEST, GUEST_COMMENT_CREDENTIALS_MESSAGE);
             }
+            if (!SafeTextValidator.isAcceptableNickname(comment.getNickname(), COMMENT_NICKNAME_MAX_LENGTH)) {
+                return commentResponse(HttpStatus.BAD_REQUEST, GUEST_NICKNAME_INVALID_MESSAGE);
+            }
             if (isRegisteredMemberNickname(comment.getNickname())) {
                 return commentResponse(HttpStatus.BAD_REQUEST, GUEST_NICKNAME_CONFLICT_MESSAGE);
             }
@@ -399,12 +434,25 @@ public class BoardController {
     public ResponseEntity<Map<String, String>> deleteComment(@PathVariable String boardTitle,
             @RequestParam int commentNum,
             @RequestParam(required = false) String password,
-            @SessionAttribute(name = "member", required = false) MemberDTO member) throws Exception {
+            @SessionAttribute(name = "member", required = false) MemberDTO member,
+            HttpServletRequest request) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
+        // 비밀번호를 보낸 요청만 비회원 댓글 비밀번호 대입 시도로 센다(회원 본인·관리자 삭제는 비밀번호가 없다).
+        boolean guestPasswordAttempt = trimToNull(password) != null && !isCommentAdmin(member);
+        String attemptKey = guestCommentAttemptKey(boardTitle, commentNum);
+        if (guestPasswordAttempt && guestPasswordAttemptGuard.isBlocked(attemptKey)) {
+            return commentResponse(HttpStatus.TOO_MANY_REQUESTS, GUEST_PASSWORD_THROTTLED_MESSAGE);
+        }
         try {
             boardService.deleteComment(boardTitle, commentNum, member, password);
+            if (guestPasswordAttempt) {
+                guestPasswordAttemptGuard.reset(attemptKey);
+            }
             return commentResponse(HttpStatus.OK, "댓글이 삭제되었습니다.");
         } catch (AccessDeniedException e) {
+            if (guestPasswordAttempt) {
+                recordGuestPasswordFailure(request, member, attemptKey);
+            }
             return commentResponse(HttpStatus.FORBIDDEN, "댓글 삭제 권한이 없습니다.");
         } catch (IllegalArgumentException e) {
             return commentResponse(HttpStatus.NOT_FOUND, "존재하지 않는 댓글입니다.");
@@ -607,6 +655,27 @@ public class BoardController {
 
     private boolean guestPasswordMatches(BoardDTO post, String guestPassword) {
         return guestPasswordHasher.matches(trimToNull(guestPassword), post.getGuestPassword());
+    }
+
+    /**
+     * 비회원 글·댓글 비밀번호 불일치 1회를 기록한다. 대상(글/댓글)별로 로그인과 같은 규칙(5회 실패 시 5분 잠금)을
+     * 적용해 한 대상에 대한 대입을 끊고, {@link OffenderTracker} 스트라이크로 여러 대상을 돌아가며 시도하는
+     * 주소는 자동 차단으로 이어지게 한다. 한두 번 잘못 입력하는 정상 사용자는 막히지 않는다.
+     */
+    private void recordGuestPasswordFailure(HttpServletRequest request, MemberDTO member, String attemptKey) {
+        guestPasswordAttemptGuard.recordFailure(attemptKey);
+        offenderTracker.strike(IpService.getRemoteIP(request), IpService.hasForwardedClient(request),
+                member == null ? null : member.getId(), member == null ? null : member.getNickName(),
+                "비회원 비밀번호 불일치");
+    }
+
+    /** 회원 ID 형식(영문 소문자·숫자)과 겹치지 않도록 구분자가 들어간 잠금 키를 쓴다. */
+    private String guestPostAttemptKey(String boardTitle, int postNum) {
+        return "guest-post:" + normalizeBoardTitle(boardTitle) + ":" + postNum;
+    }
+
+    private String guestCommentAttemptKey(String boardTitle, int commentNum) {
+        return "guest-comment:" + normalizeBoardTitle(boardTitle) + ":" + commentNum;
     }
 
     private boolean isGuestPost(BoardDTO post) {

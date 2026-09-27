@@ -11,6 +11,7 @@ import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.DuplicateContentGuard;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
+import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,6 +79,9 @@ class BoardControllerTest {
 
     @Spy
     private GuestPasswordHasher guestPasswordHasher = new GuestPasswordHasher(new BCryptPasswordEncoder(4));
+
+    @Spy
+    private LoginAttemptGuard guestPasswordAttemptGuard = new LoginAttemptGuard();
 
     @InjectMocks
     private BoardController boardController;
@@ -320,9 +324,11 @@ class BoardControllerTest {
         post.setGuestPassword(guestPasswordHasher.hash("1234"));
         when(boardService.readPost("funboard", 8)).thenReturn(post);
 
-        assertEquals(Boolean.TRUE, boardController.verifyGuestPostPassword("funBoard", 8, "1234", new MockHttpSession())
+        assertEquals(Boolean.TRUE, boardController.verifyGuestPostPassword("funBoard", 8, "1234", new MockHttpSession(),
+                new MockHttpServletRequest())
                 .getBody().get("valid"));
-        assertEquals(Boolean.FALSE, boardController.verifyGuestPostPassword("funBoard", 8, "4321", new MockHttpSession())
+        assertEquals(Boolean.FALSE, boardController.verifyGuestPostPassword("funBoard", 8, "4321", new MockHttpSession(),
+                new MockHttpServletRequest())
                 .getBody().get("valid"));
     }
 
@@ -336,7 +342,8 @@ class BoardControllerTest {
         when(boardService.readPost("funboard", 7)).thenReturn(post);
 
         ResponseEntity<Map<String, Object>> response =
-                boardController.verifyGuestPostPassword("funBoard", 7, "1234", session);
+                boardController.verifyGuestPostPassword("funBoard", 7, "1234", session,
+                        new MockHttpServletRequest());
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(Boolean.TRUE, response.getBody().get("valid"));
 
@@ -626,7 +633,7 @@ class BoardControllerTest {
                 .when(boardService).deleteComment("funboard", 9, null, null);
 
         ResponseEntity<Map<String, String>> response =
-                boardController.deleteComment("FunBoard", 9, null, null);
+                boardController.deleteComment("FunBoard", 9, null, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals("댓글 삭제 권한이 없습니다.", response.getBody().get("message"));
@@ -638,7 +645,7 @@ class BoardControllerTest {
                 .when(boardService).deleteComment("funboard", 404, null, null);
 
         ResponseEntity<Map<String, String>> response =
-                boardController.deleteComment("FunBoard", 404, null, null);
+                boardController.deleteComment("FunBoard", 404, null, null, new MockHttpServletRequest());
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals("존재하지 않는 댓글입니다.", response.getBody().get("message"));
@@ -654,6 +661,123 @@ class BoardControllerTest {
                 .andExpect(status().isOk());
 
         verify(boardService).deleteComment("funboard", 9, null, "secret");
+    }
+
+    @Test
+    void verifyGuestPostPassword_toleratesAFewTyposButLocksRepeatedGuessing() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(8);
+        post.setGuestPassword(guestPasswordHasher.hash("1234"));
+        when(boardService.readPost("funboard", 8)).thenReturn(post);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Forwarded-For", "203.0.113.70");
+
+        // 한두 번의 오타 뒤에는 올바른 비밀번호로 통과해야 하고, 성공하면 실패 카운터가 초기화된다.
+        for (int i = 0; i < 2; i++) {
+            assertEquals(Boolean.FALSE, boardController.verifyGuestPostPassword("funBoard", 8, "0000",
+                    new MockHttpSession(), request).getBody().get("valid"));
+        }
+        assertEquals(Boolean.TRUE, boardController.verifyGuestPostPassword("funBoard", 8, "1234",
+                new MockHttpSession(), request).getBody().get("valid"));
+        verify(offenderTracker, org.mockito.Mockito.times(2)).strike(eq("203.0.113.70"), eq(true), isNull(), isNull(),
+                anyString());
+
+        // 연속 5회 실패하면 올바른 비밀번호도 잠금 시간 동안 거부된다.
+        for (int i = 0; i < 5; i++) {
+            boardController.verifyGuestPostPassword("funBoard", 8, "guess" + i, new MockHttpSession(), request);
+        }
+        ResponseEntity<Map<String, Object>> locked = boardController.verifyGuestPostPassword("funBoard", 8, "1234",
+                new MockHttpSession(), request);
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, locked.getStatusCode());
+        assertEquals(Boolean.FALSE, locked.getBody().get("valid"));
+    }
+
+    @Test
+    void deletePost_countsWrongGuestPasswordAndLocksRepeatedGuessing() throws Exception {
+        BoardDTO existingPost = new BoardDTO();
+        existingPost.setPostNum(7);
+        existingPost.setWriter("비회원작성자");
+        existingPost.setGuestPassword(guestPasswordHasher.hash("1234"));
+        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
+
+        for (int i = 0; i < 5; i++) {
+            BoardDTO attempt = new BoardDTO();
+            attempt.setPostNum(7);
+            attempt.setGuestPassword("guess" + i);
+            boardController.deletePost("funBoard", attempt, new MockHttpServletRequest(),
+                    new RedirectAttributesModelMap());
+        }
+        BoardDTO correct = new BoardDTO();
+        correct.setPostNum(7);
+        correct.setGuestPassword("1234");
+        RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
+
+        String view = boardController.deletePost("funBoard", correct, new MockHttpServletRequest(), redirectAttributes);
+
+        assertEquals("redirect:/boards/funboard/readPost?postNum=7", view);
+        assertTrue(String.valueOf(redirectAttributes.getFlashAttributes().get("msg")).contains("너무 많습니다"));
+        verify(offenderTracker, org.mockito.Mockito.times(5)).strike(any(), anyBoolean(), isNull(), isNull(),
+                anyString());
+        verify(boardService, never()).deletePost(anyString(), anyInt());
+    }
+
+    @Test
+    void deleteComment_countsWrongGuestPasswordAndLocksRepeatedGuessing() throws Exception {
+        doThrow(new java.nio.file.AccessDeniedException("denied"))
+                .when(boardService).deleteComment(eq("funboard"), eq(9), isNull(), anyString());
+
+        for (int i = 0; i < 5; i++) {
+            assertEquals(HttpStatus.FORBIDDEN, boardController.deleteComment("FunBoard", 9, "guess" + i, null,
+                    new MockHttpServletRequest()).getStatusCode());
+        }
+        ResponseEntity<Map<String, String>> locked =
+                boardController.deleteComment("FunBoard", 9, "secret", null, new MockHttpServletRequest());
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, locked.getStatusCode());
+        verify(offenderTracker, org.mockito.Mockito.times(5)).strike(any(), anyBoolean(), isNull(), isNull(),
+                anyString());
+        verify(boardService, never()).deleteComment("funboard", 9, null, "secret");
+    }
+
+    @Test
+    void deleteComment_doesNotCountRequestsWithoutPassword() throws Exception {
+        doThrow(new java.nio.file.AccessDeniedException("denied"))
+                .when(boardService).deleteComment("funboard", 9, null, null);
+
+        boardController.deleteComment("FunBoard", 9, null, null, new MockHttpServletRequest());
+
+        verify(offenderTracker, never()).strike(any(), anyBoolean(), any(), any(), anyString());
+    }
+
+    @Test
+    void submitPost_rejectsGuestWriterWithMarkupOrQuoteCharacters() throws Exception {
+        for (String writer : new String[]{"<b>x</b>", "a\"b", "a'b", "a&b", "a`b", "a\u0000b", "a\u202Eb",
+                repeat("닉", 51)}) {
+            BoardDTO post = new BoardDTO();
+            post.setWriter(writer);
+            post.setGuestPassword("1234");
+            post.setTitle("제목");
+            post.setContent("내용");
+            Model model = new ExtendedModelMap();
+
+            assertEquals("alert", boardController.submitPost("funBoard", post, new MockHttpServletRequest(), model),
+                    writer);
+            assertTrue(String.valueOf(model.asMap().get("msg")).contains("닉네임"), writer);
+        }
+        verify(boardService, never()).submitPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
+    void addComment_rejectsGuestNicknameWithMarkupOrQuoteCharacters() throws Exception {
+        for (String nickname : new String[]{"\"><svg>", "it's", "a&b", "a`b", "a\tb"}) {
+            CommentDTO comment = guestComment("댓글", nickname, "secret");
+
+            ResponseEntity<Map<String, String>> response =
+                    boardController.addComment("FunBoard", comment, null, new MockHttpServletRequest());
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode(), nickname);
+        }
+        verify(boardService, never()).addComment(anyString(), any(CommentDTO.class));
     }
 
     private CommentDTO guestComment(String content, String nickname, String password) {

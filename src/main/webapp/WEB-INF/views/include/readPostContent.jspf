@@ -69,7 +69,7 @@
             <c:if test="${canManageMemberPost}">
                 <form action="/boards/${boardTitle}/deletePost" method="post" onsubmit="return confirm('정말 이 글을 삭제할까요?');" style="margin: 0;">
                     <input type="hidden" name="postNum" value="${post.postNum}">
-                    <input type="hidden" name="writer" value="${post.writer}">
+                    <input type="hidden" name="writer" value="<c:out value='${post.writer}'/>">
                     <button type="submit" class="btn btn-right cancel-btn" style="height:auto; float: none;">삭제</button>
                 </form>
                 <a class="btn btn-right cancel-btn" style="float: none;" href="/boards/${boardTitle}/modifyPost?postNum=${post.postNum}">수정</a>

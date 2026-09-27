@@ -167,6 +167,17 @@ class MemberServiceImplTest {
     }
 
     @Test
+    void signUpRejectsNicknameContainingQuotesOrBacktick() throws Exception {
+        for (String nickName : new String[]{"a\"b", "it's", "a`b"}) {
+            MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+            signUp.setNickName(nickName);
+
+            assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp), nickName);
+        }
+        verify(memberMapper, never()).submitSignUp(any());
+    }
+
+    @Test
     void modifyMyInfoRejectsEmailContainingAngleBrackets() throws Exception {
         MemberDTO modify = loginAttempt(RAW_PASSWORD);
         modify.setNickName("tester");

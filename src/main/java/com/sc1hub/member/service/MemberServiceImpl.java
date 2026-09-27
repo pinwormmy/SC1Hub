@@ -2,6 +2,7 @@ package com.sc1hub.member.service;
 
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.util.PageUtils;
+import com.sc1hub.common.util.SafeTextValidator;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.dto.VisitorsDTO;
 import com.sc1hub.member.mapper.MemberMapper;
@@ -28,7 +29,7 @@ public class MemberServiceImpl implements MemberService {
     // BCrypt는 72바이트를 넘는 입력의 뒷부분을 무시한다(CVE-2025-22228). 새/변경 비밀번호를
     // UTF-8 72바이트 이내로 제한해 서로 다른 긴 비밀번호가 같은 것으로 처리되는 문제를 차단한다.
     private static final int MAX_PASSWORD_BYTES = 72;
-    private static final int MAX_NICKNAME_LENGTH = 50;
+    private static final int MAX_NICKNAME_LENGTH = SafeTextValidator.MAX_NICKNAME_LENGTH;
     private static final int MAX_REALNAME_LENGTH = 30;
     private static final int MAX_EMAIL_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 50;
@@ -219,7 +220,7 @@ public class MemberServiceImpl implements MemberService {
 
     /**
      * 회원정보 필드의 길이와 마크업 삽입을 서버측에서 검증한다. 출력단 이스케이프와 함께 저장형 XSS를
-     * 이중으로 막는다({@code <}, {@code >}, 제어문자 금지).
+     * 이중으로 막는다({@code <}, {@code >}, 제어문자 금지. 별명은 따옴표·{@code &}·백틱도 금지).
      */
     private void validateProfileFields(MemberDTO member, boolean requireNickname) {
         if (member == null) {
@@ -229,7 +230,7 @@ public class MemberServiceImpl implements MemberService {
         if (requireNickname && !StringUtils.hasText(nickName)) {
             throw new IllegalArgumentException("별명을 입력해주세요.");
         }
-        validateSafeText(nickName, "별명", MAX_NICKNAME_LENGTH);
+        validateSafeText(nickName, "별명", MAX_NICKNAME_LENGTH, true);
         validateSafeText(member.getRealName(), "이름", MAX_REALNAME_LENGTH);
         validateSafeText(member.getEmail(), "이메일", MAX_EMAIL_LENGTH);
         validateSafeText(member.getPhone(), "연락처", MAX_PHONE_LENGTH);
@@ -246,20 +247,22 @@ public class MemberServiceImpl implements MemberService {
     }
 
     private void validateSafeText(String value, String fieldLabel, int maxLength) {
+        validateSafeText(value, fieldLabel, maxLength, false);
+    }
+
+    /** {@code nickname} 이면 따옴표·{@code &}·백틱과 모든 제어문자까지 막는 별명 규칙을 적용한다. */
+    private void validateSafeText(String value, String fieldLabel, int maxLength, boolean nickname) {
         if (value == null || value.isEmpty()) {
             return;
         }
         if (value.length() > maxLength) {
             throw new IllegalArgumentException(fieldLabel + "은(는) " + maxLength + "자 이내여야 합니다.");
         }
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c == '<' || c == '>') {
-                throw new IllegalArgumentException(fieldLabel + "에 사용할 수 없는 문자가 포함되어 있습니다.");
-            }
-            if (Character.isISOControl(c) && c != '\t') {
-                throw new IllegalArgumentException(fieldLabel + "에 사용할 수 없는 문자가 포함되어 있습니다.");
-            }
+        boolean unsafe = nickname
+                ? SafeTextValidator.containsUnsafeNicknameChar(value)
+                : SafeTextValidator.containsUnsafeTextChar(value);
+        if (unsafe) {
+            throw new IllegalArgumentException(fieldLabel + "에 사용할 수 없는 문자가 포함되어 있습니다.");
         }
     }
 
