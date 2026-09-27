@@ -84,6 +84,11 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperty 'java.awt.headless', 'true'
+	// Keep test workers locale-independent: with an empty LANG, sun.jnu.encoding falls back
+	// to ASCII and Korean upload filenames throw InvalidPathException.
+	environment 'LANG', 'C.UTF-8'
+	environment 'LC_ALL', 'C.UTF-8'
+	systemProperty 'file.encoding', 'UTF-8'
 }
 
 tasks.named('processResources') {

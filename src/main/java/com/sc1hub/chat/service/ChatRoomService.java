@@ -43,6 +43,10 @@ public class ChatRoomService {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final int MAX_DELETION_EVENTS = 50;
     private static final int MAX_FLUSH_BATCH = 100;
+    static final int MAX_FLUSH_ATTEMPTS = 3;
+    static final int MAX_PENDING_WRITES = 5000;
+    private static final int MAX_SHUTDOWN_FLUSH_ROUNDS = MAX_PENDING_WRITES / MAX_FLUSH_BATCH + MAX_FLUSH_ATTEMPTS;
+    private static final long SHUTDOWN_FLUSH_BUDGET_MILLIS = 10_000L;
     private static final int MAX_FLOOD_ENTRIES = 1000;
 
     private final ChatMapper chatMapper;
@@ -58,6 +62,9 @@ public class ChatRoomService {
     private final ConcurrentLinkedQueue<ChatMessageDTO> pendingWrites = new ConcurrentLinkedQueue<>();
     private final Map<String, Long> lastPostAt = new ConcurrentHashMap<>();
     private final Random random = new Random();
+    private final Object flushLock = new Object();
+    private List<ChatMessageDTO> retryBatch;
+    private int retryAttempts;
 
     public ChatRoomService(ChatMapper chatMapper,
                            ChatProperties chatProperties,
@@ -347,28 +354,78 @@ public class ChatRoomService {
 
     @PreDestroy
     public void shutdownFlush() {
-        flush();
+        // 종료 시에는 큐가 빌 때까지 반복 저장하되, 라운드 수와 시간 예산으로 종료가 멈추지 않게 한다.
+        long deadline = System.currentTimeMillis() + SHUTDOWN_FLUSH_BUDGET_MILLIS;
+        int rounds = 0;
+        while (hasPendingWrites()
+                && rounds < MAX_SHUTDOWN_FLUSH_ROUNDS
+                && System.currentTimeMillis() < deadline) {
+            flush();
+            rounds++;
+        }
+        if (hasPendingWrites()) {
+            log.warn("종료 시 채팅 메시지 저장을 끝내지 못했습니다. 약 {}건 유실", countPendingWrites());
+        }
+    }
+
+    boolean hasPendingWrites() {
+        synchronized (flushLock) {
+            return retryBatch != null || !pendingWrites.isEmpty();
+        }
+    }
+
+    int countPendingWrites() {
+        synchronized (flushLock) {
+            return (retryBatch == null ? 0 : retryBatch.size()) + pendingWrites.size();
+        }
     }
 
     private void flush() {
-        if (pendingWrites.isEmpty()) {
+        synchronized (flushLock) {
+            List<ChatMessageDTO> batch = retryBatch;
+            if (batch == null) {
+                batch = new ArrayList<>();
+                ChatMessageDTO next;
+                while (batch.size() < MAX_FLUSH_BATCH && (next = pendingWrites.poll()) != null) {
+                    batch.add(next);
+                }
+            }
+            if (batch.isEmpty()) {
+                return;
+            }
+            try {
+                chatMapper.insertMessages(batch);
+                retryBatch = null;
+                retryAttempts = 0;
+            } catch (Exception e) {
+                retryAttempts++;
+                if (retryAttempts >= MAX_FLUSH_ATTEMPTS) {
+                    // Give up after a few attempts: a poison message would otherwise block
+                    // every following flush. Chat delivery is unaffected.
+                    log.error("채팅 메시지 저장 중 오류 발생. {}회 실패로 {}건 유실", retryAttempts, batch.size(), e);
+                    retryBatch = null;
+                    retryAttempts = 0;
+                } else {
+                    log.warn("채팅 메시지 저장 중 오류 발생. {}건 재시도 예정 ({}/{})",
+                            batch.size(), retryAttempts, MAX_FLUSH_ATTEMPTS, e);
+                    retryBatch = batch;
+                }
+                trimPendingWrites();
+            }
+        }
+    }
+
+    /** DB 장애가 길어져도 대기 큐가 무한히 커지지 않도록 가장 오래된 메시지부터 버린다. */
+    private void trimPendingWrites() {
+        int excess = pendingWrites.size() - MAX_PENDING_WRITES;
+        if (excess <= 0) {
             return;
         }
-        List<ChatMessageDTO> batch = new ArrayList<>();
-        ChatMessageDTO next;
-        while (batch.size() < MAX_FLUSH_BATCH && (next = pendingWrites.poll()) != null) {
-            batch.add(next);
+        int dropped = 0;
+        while (dropped < excess && pendingWrites.poll() != null) {
+            dropped++;
         }
-        if (batch.isEmpty()) {
-            return;
-        }
-        try {
-            chatMapper.insertMessages(batch);
-        } catch (Exception e) {
-            // Drop the batch rather than re-queueing forever: a poison message would
-            // otherwise block every following flush. Chat delivery is unaffected.
-            log.error("채팅 메시지 저장 중 오류 발생. {}건 유실", batch.size(), e);
-        }
+        log.error("채팅 메시지 저장 대기열 상한 초과. 오래된 메시지 {}건 유실", dropped);
     }
 
     private ChatMessageDTO appendMessage(String memberId, String nickname, String role, String ip, String content) {

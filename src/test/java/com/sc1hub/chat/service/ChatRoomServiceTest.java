@@ -13,6 +13,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class ChatRoomServiceTest {
@@ -92,5 +99,63 @@ class ChatRoomServiceTest {
         assertEquals(50, recent.size());
         assertEquals("유저11", recent.get(0).getNickname());
         assertEquals("유저60", recent.get(49).getNickname());
+    }
+
+    @Test
+    void shutdownFlush_drainsEveryPendingMessageBeyondOneBatch() {
+        List<Integer> batchSizes = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            batchSizes.add(invocation.<List<ChatMessageDTO>>getArgument(0).size());
+            return null;
+        }).when(chatMapper).insertMessages(anyList());
+        for (int index = 0; index < 250; index += 1) {
+            chatRoomService.postBotMessage("유저" + index, "메시지" + index);
+        }
+
+        chatRoomService.shutdownFlush();
+
+        assertEquals(List.of(100, 100, 50), batchSizes);
+        assertFalse(chatRoomService.hasPendingWrites());
+    }
+
+    @Test
+    void flushPendingWrites_retriesFailedBatchOnNextRun() {
+        doThrow(new RuntimeException("db down")).doNothing().when(chatMapper).insertMessages(anyList());
+        chatRoomService.postBotMessage("유저A", "첫 메시지");
+        chatRoomService.postBotMessage("유저B", "두 번째 메시지");
+
+        chatRoomService.flushPendingWrites();
+        assertTrue(chatRoomService.hasPendingWrites(), "실패한 배치는 다시 저장을 시도한다");
+        assertEquals(2, chatRoomService.countPendingWrites());
+
+        chatRoomService.flushPendingWrites();
+        assertFalse(chatRoomService.hasPendingWrites());
+        verify(chatMapper, times(2)).insertMessages(anyList());
+    }
+
+    @Test
+    void flushPendingWrites_dropsBatchAfterMaxAttempts() {
+        doThrow(new RuntimeException("poison")).when(chatMapper).insertMessages(anyList());
+        chatRoomService.postBotMessage("유저A", "저장 안 되는 메시지");
+
+        for (int attempt = 0; attempt < ChatRoomService.MAX_FLUSH_ATTEMPTS; attempt += 1) {
+            chatRoomService.flushPendingWrites();
+        }
+
+        assertFalse(chatRoomService.hasPendingWrites(), "영구 실패 배치가 다음 저장을 막지 않는다");
+        verify(chatMapper, times(ChatRoomService.MAX_FLUSH_ATTEMPTS)).insertMessages(anyList());
+    }
+
+    @Test
+    void shutdownFlush_terminatesWhenDatabaseKeepsFailing() {
+        doThrow(new RuntimeException("db down")).when(chatMapper).insertMessages(anyList());
+        for (int index = 0; index < 250; index += 1) {
+            chatRoomService.postBotMessage("유저" + index, "메시지" + index);
+        }
+
+        chatRoomService.shutdownFlush();
+
+        assertFalse(chatRoomService.hasPendingWrites());
+        verify(chatMapper, times(3 * ChatRoomService.MAX_FLUSH_ATTEMPTS)).insertMessages(anyList());
     }
 }

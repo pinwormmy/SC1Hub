@@ -31,8 +31,8 @@ public class ChatModerationService {
     private final ChatProperties chatProperties;
     private final AssistantProperties assistantProperties;
 
-    private final Map<String, LocalDateTime> mutedMembers = new ConcurrentHashMap<>();
-    private final Map<String, LocalDateTime> blockedIps = new ConcurrentHashMap<>();
+    // 재로딩 중에도 제재가 잠시 사라지지 않도록 새 맵을 만든 뒤 참조를 한 번에 교체한다.
+    private volatile SanctionCache sanctionCache = new SanctionCache();
 
     public ChatModerationService(ChatMapper chatMapper,
                                  ChatProperties chatProperties,
@@ -43,22 +43,21 @@ public class ChatModerationService {
     }
 
     @PostConstruct
-    public void reloadSanctions() {
+    public synchronized void reloadSanctions() {
         try {
             List<ChatSanctionDTO> sanctions = chatMapper.selectActiveSanctions();
-            mutedMembers.clear();
-            blockedIps.clear();
-            if (sanctions == null) {
-                return;
-            }
-            for (ChatSanctionDTO sanction : sanctions) {
-                LocalDateTime expiry = sanction.getExpiresAt() == null ? PERMANENT : sanction.getExpiresAt();
-                if (TYPE_MUTE.equals(sanction.getSanctionType()) && StringUtils.hasText(sanction.getMemberId())) {
-                    mutedMembers.merge(sanction.getMemberId(), expiry, (a, b) -> a.isAfter(b) ? a : b);
-                } else if (TYPE_BLOCK_IP.equals(sanction.getSanctionType()) && StringUtils.hasText(sanction.getIp())) {
-                    blockedIps.merge(sanction.getIp(), expiry, (a, b) -> a.isAfter(b) ? a : b);
+            SanctionCache next = new SanctionCache();
+            if (sanctions != null) {
+                for (ChatSanctionDTO sanction : sanctions) {
+                    LocalDateTime expiry = sanction.getExpiresAt() == null ? PERMANENT : sanction.getExpiresAt();
+                    if (TYPE_MUTE.equals(sanction.getSanctionType()) && StringUtils.hasText(sanction.getMemberId())) {
+                        next.mutedMembers.merge(sanction.getMemberId(), expiry, (a, b) -> a.isAfter(b) ? a : b);
+                    } else if (TYPE_BLOCK_IP.equals(sanction.getSanctionType()) && StringUtils.hasText(sanction.getIp())) {
+                        next.blockedIps.merge(sanction.getIp(), expiry, (a, b) -> a.isAfter(b) ? a : b);
+                    }
                 }
             }
+            sanctionCache = next;
         } catch (Exception e) {
             log.error("채팅 제재 목록 로딩 중 오류 발생", e);
         }
@@ -79,12 +78,13 @@ public class ChatModerationService {
      * @return null if allowed, otherwise a user-facing restriction message.
      */
     public String checkRestricted(String memberId, String ip) {
+        SanctionCache cache = sanctionCache;
         LocalDateTime expiry = null;
         if (StringUtils.hasText(memberId)) {
-            expiry = activeExpiry(mutedMembers, memberId);
+            expiry = activeExpiry(cache.mutedMembers, memberId);
         }
         if (expiry == null && StringUtils.hasText(ip)) {
-            expiry = activeExpiry(blockedIps, ip);
+            expiry = activeExpiry(cache.blockedIps, ip);
         }
         if (expiry == null) {
             return null;
@@ -132,5 +132,10 @@ public class ChatModerationService {
             return null;
         }
         return expiry;
+    }
+
+    private static final class SanctionCache {
+        private final Map<String, LocalDateTime> mutedMembers = new ConcurrentHashMap<>();
+        private final Map<String, LocalDateTime> blockedIps = new ConcurrentHashMap<>();
     }
 }

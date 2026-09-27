@@ -72,7 +72,7 @@ class VisitorCountServiceImplTest {
         assertTrue(cookie.isHttpOnly());
         verify(visitorCountMapper).upsertDailyCount(LocalDate.of(2026, 3, 9));
         verify(visitorCountMapper).incrementTotalCount();
-        verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 9));
+        verify(visitorCountMapper, never()).deleteDailyVisitorsBefore(any(LocalDate.class));
     }
 
     @Test
@@ -141,7 +141,7 @@ class VisitorCountServiceImplTest {
     }
 
     @Test
-    void processVisitor_cleansOldIdentitiesOnlyOncePerDay() {
+    void processVisitor_doesNotRunIdentityCleanupInsideTheVisitRequest() {
         when(visitorCountMapper.insertDailyVisitor(eq(LocalDate.of(2026, 3, 9)), any(String.class))).thenReturn(1);
 
         visitorCountService.processVisitor(browserRequest("203.0.113.40"), new MockHttpServletResponse());
@@ -149,7 +149,18 @@ class VisitorCountServiceImplTest {
 
         verify(visitorCountMapper, times(2)).upsertDailyCount(LocalDate.of(2026, 3, 9));
         verify(visitorCountMapper, times(2)).incrementTotalCount();
+        verify(visitorCountMapper, never()).deleteDailyVisitorsBefore(any(LocalDate.class));
+    }
+
+    @Test
+    void cleanupOldIdentities_deletesIdentitiesBeforeTodayAndSwallowsErrors() {
+        visitorCountService.cleanupOldIdentities();
         verify(visitorCountMapper).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 9));
+
+        org.mockito.Mockito.doThrow(new RuntimeException("db down"))
+                .when(visitorCountMapper).deleteDailyVisitorsBefore(any(LocalDate.class));
+        visitorCountService.cleanupOldIdentities();
+        verify(visitorCountMapper, times(2)).deleteDailyVisitorsBefore(LocalDate.of(2026, 3, 9));
     }
 
     @Test

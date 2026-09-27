@@ -380,6 +380,9 @@ public class BoardServiceImpl implements BoardService {
     public void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         BoardDTO originalPost = readPost(boardTitle, postNum);
+        if (originalPost == null) {
+            throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
+        }
         String originalContent = originalPost.getContent();
 
         String newContent = "이 게시글은 " + getKoreanTitle(targetBoardTitle) + "으로 이동되었습니다.";

@@ -4,6 +4,7 @@ import com.sc1hub.common.util.IpService;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +40,6 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
     private final VisitorCountMapper visitorCountMapper;
     private final Clock clock;
-    private LocalDate lastIdentityCleanupDate;
 
     @Autowired
     public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
@@ -83,7 +83,6 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
         if (visitorCountMapper.insertDailyVisitor(today, visitorHash) == 1) {
             incrementVisitorCount();
-            cleanupOldIdentitiesOnce(today);
         }
     }
 
@@ -137,12 +136,19 @@ public class VisitorCountServiceImpl implements VisitorCountService {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private synchronized void cleanupOldIdentitiesOnce(LocalDate today) {
-        if (today.equals(lastIdentityCleanupDate)) {
-            return;
+    /**
+     * 지난 날짜의 방문자 식별값을 한산한 새벽에 한 번 지운다. 방문 요청 트랜잭션(누적 카운트 행 잠금)
+     * 안에서 대량 삭제를 돌리지 않기 위해 별도 스케줄 작업으로 분리했다.
+     */
+    @Override
+    @Scheduled(cron = "0 17 4 * * *", zone = "Asia/Seoul")
+    public void cleanupOldIdentities() {
+        LocalDate today = LocalDate.now(clock);
+        try {
+            visitorCountMapper.deleteDailyVisitorsBefore(today);
+        } catch (Exception e) {
+            log.error("지난 방문자 식별값 정리 중 오류 발생. before={}", today, e);
         }
-        visitorCountMapper.deleteDailyVisitorsBefore(today);
-        lastIdentityCleanupDate = today;
     }
 
     private int secondsUntilTomorrow() {

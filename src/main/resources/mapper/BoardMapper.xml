@@ -58,7 +58,7 @@
     <update id="submitModifyPost">
         update ${boardTitle}
             set title=#{board.title}, content=#{board.content}, writer=#{board.writer}, notice=#{board.notice},
-                search_terms=#{board.searchTerms}, reg_date=now()
+                search_terms=#{board.searchTerms}
             where post_num=#{board.postNum}
     </update>
 

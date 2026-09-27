@@ -544,6 +544,31 @@ class BoardServiceImplTest {
     }
 
     @Test
+    void submitModifyPost_mapperDoesNotRewriteCreationDate() throws Exception {
+        String mapperXml = new String(java.nio.file.Files.readAllBytes(
+                java.nio.file.Paths.get("src/main/resources/mapper/BoardMapper.xml")),
+                java.nio.charset.StandardCharsets.UTF_8);
+        int start = mapperXml.indexOf("<update id=\"submitModifyPost\">");
+        int end = mapperXml.indexOf("</update>", start);
+        assertTrue(start >= 0 && end > start);
+
+        assertFalse(mapperXml.substring(start, end).contains("reg_date"),
+                "수정은 작성일(reg_date)을 바꾸지 않아야 작성자 확인(가입일 비교)이 유지된다");
+    }
+
+    @Test
+    void movePost_throwsWhenOriginalPostIsMissing() throws Exception {
+        when(boardMapper.readPost("funboard", 404)).thenReturn(null);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> boardService.movePost("funBoard", 404, "tipboard"));
+
+        assertEquals("존재하지 않는 게시글입니다.", error.getMessage());
+        verify(boardMapper, never()).submitModifyPost(anyString(), any(BoardDTO.class));
+        verify(boardMapper, never()).submitPost(anyString(), any(BoardDTO.class));
+    }
+
+    @Test
     void deletePost_throwsWhenNoRowWasDeleted() throws Exception {
         int postNum = 123;
         BoardDTO post = new BoardDTO();
