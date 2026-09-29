@@ -33,6 +33,7 @@ class ProductionSafetyScriptTest {
         assertTrue(deployScript.contains("metaspace-history.log"));
         assertFalse(deployScript.contains("-ge 60000"));
         assertTrue(deployScript.contains("rollback_and_restart"));
+        assertTrue(deployScript.contains("ROLLBACK_REQUIRES_LEGACY_RUNTIME:-false"));
     }
 
     @Test

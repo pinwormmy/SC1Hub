@@ -41,7 +41,9 @@ REMOTE_DROP_SUPPORTBOARD_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_supportboard.sql"
 REMOTE_DROP_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_one_line_strategy.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
 REMOTE_HTTP_PORT="${REMOTE_HTTP_PORT:-8645}"
-ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-true}"
+# true only when the previous WAR targets another runtime (the 2026-08-31 Tomcat 8.5 -> 10 cutover):
+# rollback then restores it without starting Tomcat. Every release since then runs on Tomcat 10 / JDK 17.
+ROLLBACK_REQUIRES_LEGACY_RUNTIME="${ROLLBACK_REQUIRES_LEGACY_RUNTIME:-false}"
 
 echo "Building and verifying release WAR..."
 ./gradlew clean build </dev/null

@@ -42,8 +42,10 @@ Do not deploy until all of the following are true:
    `deploy.sh` refuses the release otherwise, because a Jakarta WAR cannot start
    on Tomcat 8.5 — and, symmetrically, the previous javax WAR cannot start on
    Tomcat 10. Rolling back therefore means changing the Cafe24 server
-   environment back first; `ROLLBACK_REQUIRES_LEGACY_RUNTIME` stops the script
-   from restarting the old WAR on the wrong runtime.
+   environment back first; `ROLLBACK_REQUIRES_LEGACY_RUNTIME=true` stops the
+   script from restarting the old WAR on the wrong runtime. It defaults to
+   `false` since the cutover: the previous WAR is always a Tomcat 10 / JDK 17
+   release, so a failed deployment restores and restarts it automatically.
 
 ## Metaspace budget
 
