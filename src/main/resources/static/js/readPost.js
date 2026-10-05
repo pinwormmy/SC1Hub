@@ -1,3 +1,24 @@
+(() => {
+    function openCoupangLinksInNewTab(root) {
+        root.querySelectorAll('a[href]').forEach((anchor) => {
+            let url;
+            try {
+                url = new URL(anchor.getAttribute('href'), document.baseURI);
+            } catch {
+                return;
+            }
+            if (!['http:', 'https:'].includes(url.protocol)
+                || (url.hostname !== 'coupang.com' && !url.hostname.endsWith('.coupang.com'))) {
+                return;
+            }
+            anchor.target = '_blank';
+            anchor.relList.add('noopener');
+        });
+    }
+
+    document.querySelectorAll('.post-content').forEach(openCoupangLinksInNewTab);
+})();
+
 showCommentList();
 
 // 공통 fetch 함수
