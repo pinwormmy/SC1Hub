@@ -100,6 +100,8 @@ sc1hub.assistant.bot.personas[5].autoPublishChatMaxAttemptsPerDay=5
 sc1hub.assistant.bot.autoPublishEnabled=false
 sc1hub.openai.apiKey=${OPENAI_API_KEY:}
 sc1hub.openai.allowLiveCalls=false
+sc1hub.anthropic.apiKey=${ANTHROPIC_API_KEY:}
+sc1hub.anthropic.allowLiveCalls=false
 
 # RAG (벡터 검색, 로컬 파일 인덱스)
 sc1hub.assistant.rag.enabled=false

@@ -5,6 +5,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.assistant.search.AssistantQueryParseResult;
@@ -36,6 +37,7 @@ class AssistantServiceRelatedPostsTest {
         BoardMapper boardMapper = mock(BoardMapper.class);
         GeminiClient geminiClient = mock(GeminiClient.class);
         OpenAiAssistantBotClient openAiAssistantBotClient = mock(OpenAiAssistantBotClient.class);
+        AnthropicAssistantClient anthropicAssistantClient = mock(AnthropicAssistantClient.class);
         AssistantRagSearchService ragSearchService = mock(AssistantRagSearchService.class);
         AssistantQueryParser queryParser = mock(AssistantQueryParser.class);
 
@@ -53,6 +55,7 @@ class AssistantServiceRelatedPostsTest {
                 boardMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 assistantProperties,
                 ragSearchService,
                 ragProperties,

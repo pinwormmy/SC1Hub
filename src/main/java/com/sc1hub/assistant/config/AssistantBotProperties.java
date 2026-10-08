@@ -236,6 +236,10 @@ public class AssistantBotProperties {
                 && resolvedModel.trim().toLowerCase(Locale.ROOT).startsWith("gpt-")) {
             return "openai";
         }
+        if (StringUtils.hasText(resolvedModel)
+                && resolvedModel.trim().toLowerCase(Locale.ROOT).startsWith("claude-")) {
+            return "anthropic";
+        }
         return "gemini";
     }
 

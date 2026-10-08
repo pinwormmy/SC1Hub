@@ -50,7 +50,7 @@ class AssistantBotApplicationPropertiesTest {
     }
 
     @Test
-    void packagedChatBotsUseOpenAiLunaAtMaxReasoning() throws Exception {
+    void packagedChatBotsUseClaudeHaikuAtMaxEffort() throws Exception {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(
                 Paths.get("src/main/resources/application.properties"),
@@ -58,12 +58,12 @@ class AssistantBotApplicationPropertiesTest {
             properties.load(reader);
         }
 
-        assertEquals("gpt-6-luna", properties.getProperty("sc1hub.assistant.bot.model"));
+        assertEquals("claude-haiku-5-5", properties.getProperty("sc1hub.assistant.bot.model"));
         assertEquals("max", properties.getProperty("sc1hub.assistant.bot.reasoningEffort"));
     }
 
     @Test
-    void packagedSearchUsesOpenAiLunaAtMaxReasoning() throws Exception {
+    void packagedSearchUsesClaudeHaikuAtMaxEffort() throws Exception {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(
                 Paths.get("src/main/resources/application.properties"),
@@ -71,8 +71,8 @@ class AssistantBotApplicationPropertiesTest {
             properties.load(reader);
         }
 
-        assertEquals("openai", properties.getProperty("sc1hub.assistant.searchProvider"));
-        assertEquals("gpt-6-luna", properties.getProperty("sc1hub.openai.searchModel"));
-        assertEquals("max", properties.getProperty("sc1hub.openai.searchReasoningEffort"));
+        assertEquals("anthropic", properties.getProperty("sc1hub.assistant.searchProvider"));
+        assertEquals("claude-haiku-5-5", properties.getProperty("sc1hub.anthropic.searchModel"));
+        assertEquals("max", properties.getProperty("sc1hub.anthropic.searchEffort"));
     }
 }

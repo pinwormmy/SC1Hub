@@ -15,6 +15,8 @@ import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.gemini.GeminiException;
 import com.sc1hub.assistant.mapper.AssistantBotMapper;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantException;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotException;
 import com.sc1hub.board.dto.BoardDTO;
@@ -77,6 +79,7 @@ public class AssistantBotService {
     private static final String CHAT_RETRY_COOLDOWN = "chat_retry_cooldown";
     private static final String CHAT_RETRY_LIMIT_REACHED = "chat_retry_limit_reached";
     private static final String PROVIDER_OPENAI = "openai";
+    private static final String PROVIDER_ANTHROPIC = "anthropic";
     private static final String GOSU_BOT_NAME = "고수봇";
     private static final int GOSU_CHAT_CONTEXT_MESSAGE_LIMIT = 3;
     private static final int GOSU_CHAT_BODY_MAX_CHARS = 120;
@@ -96,6 +99,7 @@ public class AssistantBotService {
     private final AssistantBotMapper assistantBotMapper;
     private final GeminiClient geminiClient;
     private final OpenAiAssistantBotClient openAiAssistantBotClient;
+    private final AnthropicAssistantClient anthropicAssistantClient;
     private final ObjectMapper objectMapper;
     private final ChatRoomService chatRoomService;
     private final Clock clock;
@@ -111,10 +115,11 @@ public class AssistantBotService {
                                AssistantBotMapper assistantBotMapper,
                                GeminiClient geminiClient,
                                OpenAiAssistantBotClient openAiAssistantBotClient,
+                               AnthropicAssistantClient anthropicAssistantClient,
                                ObjectMapper objectMapper,
                                ChatRoomService chatRoomService) {
         this(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper,
-                geminiClient, openAiAssistantBotClient, objectMapper, chatRoomService,
+                geminiClient, openAiAssistantBotClient, anthropicAssistantClient, objectMapper, chatRoomService,
                 Clock.systemDefaultZone());
     }
 
@@ -125,6 +130,7 @@ public class AssistantBotService {
                                AssistantBotMapper assistantBotMapper,
                                GeminiClient geminiClient,
                                OpenAiAssistantBotClient openAiAssistantBotClient,
+                               AnthropicAssistantClient anthropicAssistantClient,
                                ObjectMapper objectMapper,
                                ChatRoomService chatRoomService,
                                Clock clock) {
@@ -135,6 +141,7 @@ public class AssistantBotService {
         this.assistantBotMapper = assistantBotMapper;
         this.geminiClient = geminiClient;
         this.openAiAssistantBotClient = openAiAssistantBotClient;
+        this.anthropicAssistantClient = anthropicAssistantClient;
         this.objectMapper = objectMapper;
         this.chatRoomService = chatRoomService;
         this.clock = clock;
@@ -242,11 +249,17 @@ public class AssistantBotService {
                 }
                 String prompt = buildPrompt(persona, mode, boardTitle, targetPost, recentPosts, recentComments, recentHistory, retryFeedback, attempt, maxAttempts);
                 int maxOutputTokens = resolveMaxOutputTokens(persona);
-                String rawJson = usesOpenAi(persona)
-                        ? openAiAssistantBotClient.generateDraftAnswer(
-                                prompt, maxOutputTokens, resolveModel(persona), resolveReasoningEffort(persona))
-                        : geminiClient.generateAnswer(
-                                prompt, maxOutputTokens, resolveModel(persona), resolveGeminiThinkingLevel(persona));
+                String rawJson;
+                if (usesProvider(persona, PROVIDER_ANTHROPIC)) {
+                    rawJson = anthropicAssistantClient.generateDraftAnswer(
+                            prompt, maxOutputTokens, resolveModel(persona), resolveReasoningEffort(persona));
+                } else if (usesProvider(persona, PROVIDER_OPENAI)) {
+                    rawJson = openAiAssistantBotClient.generateDraftAnswer(
+                            prompt, maxOutputTokens, resolveModel(persona), resolveReasoningEffort(persona));
+                } else {
+                    rawJson = geminiClient.generateAnswer(
+                            prompt, maxOutputTokens, resolveModel(persona), resolveGeminiThinkingLevel(persona));
+                }
                 JsonNode result = parseJson(rawJson);
                 CandidateDraft candidate = validateCandidate(persona, mode, result, recentPosts, recentComments, recentHistory);
                 if (candidate.accepted) {
@@ -284,7 +297,7 @@ public class AssistantBotService {
             response.setRecentHistoryCount(recentHistory.size());
             response.setResult(acceptedDraft.result);
             return response;
-        } catch (GeminiException | OpenAiAssistantBotException e) {
+        } catch (GeminiException | OpenAiAssistantBotException | AnthropicAssistantException e) {
             log.error("봇 초안 AI 호출 실패", e);
             response.setError("AI 호출에 실패했습니다.");
             return response;
@@ -888,6 +901,10 @@ public class AssistantBotService {
             log.error("봇 채팅 OpenAI 호출 실패. personaName={}", persona.getName(), e);
             insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_openai_error");
             return AutoPublishResult.failed(persona.getName(), "chat_openai_error");
+        } catch (AnthropicAssistantException e) {
+            log.error("봇 채팅 Anthropic 호출 실패. personaName={}", persona.getName(), e);
+            insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_anthropic_error");
+            return AutoPublishResult.failed(persona.getName(), "chat_anthropic_error");
         } catch (Exception e) {
             log.error("봇 채팅 발행 실패. personaName={}", persona.getName(), e);
             return AutoPublishResult.failed(persona.getName(), "chat_error");
@@ -905,7 +922,14 @@ public class AssistantBotService {
 
     private String generateChatAnswer(PersonaProperties persona, String prompt) {
         int maxOutputTokens = resolveMaxOutputTokens(persona);
-        if (usesOpenAi(persona)) {
+        if (usesProvider(persona, PROVIDER_ANTHROPIC)) {
+            return anthropicAssistantClient.generateAnswer(
+                    prompt,
+                    maxOutputTokens,
+                    resolveModel(persona),
+                    resolveReasoningEffort(persona));
+        }
+        if (usesProvider(persona, PROVIDER_OPENAI)) {
             return openAiAssistantBotClient.generateAnswer(
                     prompt,
                     maxOutputTokens,
@@ -2310,10 +2334,10 @@ public class AssistantBotService {
         return botProperties.getModel();
     }
 
-    private boolean usesOpenAi(PersonaProperties persona) {
+    private boolean usesProvider(PersonaProperties persona, String expected) {
         return persona != null
                 && StringUtils.hasText(persona.getProvider())
-                && PROVIDER_OPENAI.equals(persona.getProvider().trim().toLowerCase(Locale.ROOT));
+                && expected.equals(persona.getProvider().trim().toLowerCase(Locale.ROOT));
     }
 
     private String resolveReasoningEffort(PersonaProperties persona) {

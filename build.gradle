@@ -41,6 +41,7 @@ dependencies {
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.jsoup:jsoup:1.23.1'
+	implementation 'com.anthropic:anthropic-java:2.34.0'
 	// JSTL 2.0 is the Jakarta EE 9 release matching JSP 3.0. JSTL 3.0 targets EE 10 and
 	// renames every taglib URI to jakarta.tags.*, which Tomcat 10.0 cannot resolve.
 	// Its transitive Servlet/JSP/EL APIs are container-provided; Boot's dependency

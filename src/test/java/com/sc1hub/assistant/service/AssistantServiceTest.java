@@ -4,6 +4,7 @@ import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
@@ -47,6 +48,9 @@ class AssistantServiceTest {
     private OpenAiAssistantBotClient openAiAssistantBotClient;
 
     @Mock
+    private AnthropicAssistantClient anthropicAssistantClient;
+
+    @Mock
     private AssistantRagSearchService ragSearchService;
 
     @Mock
@@ -70,7 +74,7 @@ class AssistantServiceTest {
         ragProperties = new AssistantRagProperties();
         ragProperties.setEnabled(false);
         ObjectMapper objectMapper = new ObjectMapper();
-        assistantService = new AssistantService(boardMapper, geminiClient, openAiAssistantBotClient, assistantProperties, ragSearchService, ragProperties, queryParser, objectMapper);
+        assistantService = new AssistantService(boardMapper, geminiClient, openAiAssistantBotClient, anthropicAssistantClient, assistantProperties, ragSearchService, ragProperties, queryParser, objectMapper);
         lenient().when(queryParser.parse(anyString()))
                 .thenAnswer(invocation -> buildParseResult(invocation.getArgument(0)));
     }
@@ -86,6 +90,20 @@ class AssistantServiceTest {
 
         assertEquals("{\"answer\":\"ok\"}", result);
         verify(geminiClient, times(0)).generateSearchAnswer(anyString(), any());
+    }
+
+    @Test
+    void generateSearchLlmAnswer_routesToAnthropicWhenConfigured() {
+        assistantProperties.setSearchProvider("anthropic");
+        when(anthropicAssistantClient.generateSearchAnswer("검색 프롬프트", 512))
+                .thenReturn("{\"answer\":\"claude\"}");
+
+        String result = ReflectionTestUtils.invokeMethod(
+                assistantService, "generateSearchLlmAnswer", "검색 프롬프트", 512);
+
+        assertEquals("{\"answer\":\"claude\"}", result);
+        verify(geminiClient, times(0)).generateSearchAnswer(anyString(), any());
+        verify(openAiAssistantBotClient, times(0)).generateSearchAnswer(anyString(), any());
     }
 
     @Test

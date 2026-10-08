@@ -12,6 +12,7 @@ import org.springframework.web.client.RestTemplate;
         AssistantRagProperties.class,
         GeminiProperties.class,
         OpenAiProperties.class,
+        AnthropicProperties.class,
         AssistantBotProperties.class
 })
 public class AssistantConfig {

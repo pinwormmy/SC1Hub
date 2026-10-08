@@ -5,6 +5,8 @@ import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.dto.AssistantChatResponseDTO;
 import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantException;
 import com.sc1hub.assistant.gemini.GeminiException;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotException;
@@ -49,6 +51,7 @@ public class AssistantService {
     private final BoardMapper boardMapper;
     private final GeminiClient geminiClient;
     private final OpenAiAssistantBotClient openAiAssistantBotClient;
+    private final AnthropicAssistantClient anthropicAssistantClient;
     private final AssistantProperties assistantProperties;
     private final AssistantRagSearchService ragSearchService;
     private final AssistantRagProperties ragProperties;
@@ -70,6 +73,7 @@ public class AssistantService {
     public AssistantService(BoardMapper boardMapper,
                             GeminiClient geminiClient,
                             OpenAiAssistantBotClient openAiAssistantBotClient,
+                            AnthropicAssistantClient anthropicAssistantClient,
                             AssistantProperties assistantProperties,
                             AssistantRagSearchService ragSearchService,
                             AssistantRagProperties ragProperties,
@@ -78,6 +82,7 @@ public class AssistantService {
         this.boardMapper = boardMapper;
         this.geminiClient = geminiClient;
         this.openAiAssistantBotClient = openAiAssistantBotClient;
+        this.anthropicAssistantClient = anthropicAssistantClient;
         this.assistantProperties = assistantProperties;
         this.ragSearchService = ragSearchService;
         this.ragProperties = ragProperties;
@@ -86,17 +91,22 @@ public class AssistantService {
     }
 
     private static final String SEARCH_PROVIDER_OPENAI = "openai";
+    private static final String SEARCH_PROVIDER_ANTHROPIC = "anthropic";
 
     /**
      * AI 검색 계열 LLM 호출의 단일 진입점. searchProvider 설정에 따라
-     * Gemini(searchModel/searchThinkingLevel) 또는 OpenAI(searchModel/searchReasoningEffort)로 보낸다.
+     * Gemini(searchModel/searchThinkingLevel), OpenAI(searchModel/searchReasoningEffort),
+     * Anthropic(searchModel/searchEffort) 중 하나로 보낸다.
      */
     private String generateSearchLlmAnswer(String prompt) {
         return generateSearchLlmAnswer(prompt, null);
     }
 
     private String generateSearchLlmAnswer(String prompt, Integer maxOutputTokens) {
-        if (usesOpenAiSearch()) {
+        if (usesSearchProvider(SEARCH_PROVIDER_ANTHROPIC)) {
+            return anthropicAssistantClient.generateSearchAnswer(prompt, maxOutputTokens);
+        }
+        if (usesSearchProvider(SEARCH_PROVIDER_OPENAI)) {
             return openAiAssistantBotClient.generateSearchAnswer(prompt, maxOutputTokens);
         }
         return maxOutputTokens == null
@@ -104,10 +114,10 @@ public class AssistantService {
                 : geminiClient.generateSearchAnswer(prompt, maxOutputTokens);
     }
 
-    private boolean usesOpenAiSearch() {
+    private boolean usesSearchProvider(String expected) {
         String provider = assistantProperties.getSearchProvider();
         return StringUtils.hasText(provider)
-                && SEARCH_PROVIDER_OPENAI.equals(provider.trim().toLowerCase(Locale.ROOT));
+                && expected.equals(provider.trim().toLowerCase(Locale.ROOT));
     }
 
     public AssistantChatResponseDTO chat(String message, MemberDTO member) {
@@ -189,7 +199,7 @@ public class AssistantService {
             }
             response.setAnswer(answer);
             response.setUsedPostIds(answerResult.getUsedPostIds());
-        } catch (GeminiException | OpenAiAssistantBotException e) {
+        } catch (GeminiException | OpenAiAssistantBotException | AnthropicAssistantException e) {
             log.error("AI 검색 LLM 호출 실패", e);
             response.setError("AI 설정 또는 API 호출에 실패했습니다. 관리자에게 문의해주세요.");
             return response;

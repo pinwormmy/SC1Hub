@@ -11,6 +11,7 @@ import com.sc1hub.assistant.dto.AssistantBotHistoryDTO;
 import com.sc1hub.assistant.dto.AssistantBotPublishResponseDTO;
 import com.sc1hub.assistant.gemini.GeminiClient;
 import com.sc1hub.assistant.mapper.AssistantBotMapper;
+import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
@@ -77,6 +78,9 @@ class AssistantBotServiceTest {
     private OpenAiAssistantBotClient openAiAssistantBotClient;
 
     @Mock
+    private AnthropicAssistantClient anthropicAssistantClient;
+
+    @Mock
     private ChatRoomService chatRoomService;
 
     private AssistantBotProperties botProperties;
@@ -104,6 +108,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 fixedClock
@@ -243,6 +248,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
@@ -272,6 +278,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul")),
@@ -394,6 +401,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 slotClock
@@ -454,6 +462,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone)
@@ -527,6 +536,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(ZonedDateTime.of(date, slotTime, zone).toInstant(), zone)
@@ -621,6 +631,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 slotClock
@@ -660,6 +671,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(retryTime.toInstant(), zone)
@@ -709,6 +721,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(retryTime.toInstant(), zone)
@@ -785,6 +798,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(publishTime.toInstant(), zone)
@@ -905,6 +919,7 @@ class AssistantBotServiceTest {
                 assistantBotMapper,
                 geminiClient,
                 openAiAssistantBotClient,
+                anthropicAssistantClient,
                 new ObjectMapper(),
                 chatRoomService,
                 Clock.fixed(Instant.parse("2026-03-09T00:00:00Z"), ZoneId.of("Asia/Seoul"))
@@ -1554,6 +1569,22 @@ class AssistantBotServiceTest {
     }
 
     @Test
+    void generateDraft_routesClaudeToAnthropicWithoutChatSchema() throws Exception {
+        botProperties.setModel("claude-haiku-5-5");
+        botProperties.setReasoningEffort("max");
+        when(anthropicAssistantClient.generateDraftAnswer(
+                anyString(), anyInt(), eq("claude-haiku-5-5"), eq("max")))
+                .thenReturn(validPostDraftJson());
+
+        AssistantBotDraftResponseDTO response = assistantBotService.generateDraft(postDraftRequest());
+
+        assertNull(response.getError());
+        verify(anthropicAssistantClient).generateDraftAnswer(
+                anyString(), anyInt(), eq("claude-haiku-5-5"), eq("max"));
+        verify(openAiAssistantBotClient, never()).generateDraftAnswer(anyString(), anyInt(), anyString(), anyString());
+    }
+
+    @Test
     void generateDraft_routesLunaToOpenAiWithoutChatSchema() throws Exception {
         botProperties.setModel("gpt-6-luna");
         botProperties.setReasoningEffort("max");
@@ -1991,12 +2022,13 @@ class AssistantBotServiceTest {
                                              AssistantBotMapper assistantBotMapper,
                                              GeminiClient geminiClient,
                                              OpenAiAssistantBotClient openAiAssistantBotClient,
+                                             AnthropicAssistantClient anthropicAssistantClient,
                                              ObjectMapper objectMapper,
                                              ChatRoomService chatRoomService,
                                              Clock clock,
                                              Map<String, AssistantBotService.AutoPublishResult> resultsByPersona) {
             super(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper,
-                    geminiClient, openAiAssistantBotClient, objectMapper, chatRoomService, clock);
+                    geminiClient, openAiAssistantBotClient, anthropicAssistantClient, objectMapper, chatRoomService, clock);
             this.resultsByPersona = resultsByPersona;
         }
 
