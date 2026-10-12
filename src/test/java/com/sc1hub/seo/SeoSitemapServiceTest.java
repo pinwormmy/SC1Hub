@@ -41,6 +41,10 @@ class SeoSitemapServiceTest {
         assertTrue(first.contains("<loc>https://sc1hub.com/boards/tvszboard</loc>"));
         assertTrue(first.contains("<loc>https://sc1hub.com/boards/tvszboard/readPost?postNum=3</loc>"));
         assertTrue(first.contains("<lastmod>2026-07-01</lastmod>"));
+        // 홈과 게시판 목록은 가장 최근 글의 날짜를 lastmod 로 따라간다.
+        assertTrue(first.contains("<loc>https://sc1hub.com/</loc>\n    <lastmod>2026-07-01</lastmod>"));
+        assertTrue(first.contains("<loc>https://sc1hub.com/boards/tvszboard</loc>\n    <lastmod>2026-07-01</lastmod>"));
+        assertTrue(first.contains("<loc>https://sc1hub.com/guidelines</loc>\n  </url>"));
         assertFalse(first.contains("/login"));
         assertTrue(first == second);
         verify(boardService, times(1)).getBoardList();

@@ -59,24 +59,41 @@ public class SeoSitemapService {
     }
 
     private String buildSitemapXml() {
-        List<SitemapEntry> entries = new ArrayList<>();
+        List<SitemapEntry> boardEntries = new ArrayList<>();
         Set<String> seenUrls = new LinkedHashSet<>();
-        addEntry(entries, seenUrls, SeoUrlPolicy.CANONICAL_ORIGIN + "/", null);
-        addEntry(entries, seenUrls, SeoUrlPolicy.CANONICAL_ORIGIN + "/guidelines", null);
+        String homeUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/";
+        String guidelinesUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/guidelines";
+        seenUrls.add(homeUrl);
+        seenUrls.add(guidelinesUrl);
 
         List<BoardListDTO> boards = boardService.getBoardList();
         if (boards == null) {
             boards = Collections.emptyList();
         }
+        // 홈은 최신 글 목록을 싣고 있으므로 사이트 전체에서 가장 최근 글의 날짜를 따라간다.
+        LocalDate latest = null;
         for (BoardListDTO board : boards) {
-            addBoardEntries(entries, seenUrls, board);
+            latest = later(latest, addBoardEntries(boardEntries, seenUrls, board));
         }
+
+        List<SitemapEntry> entries = new ArrayList<>(boardEntries.size() + 2);
+        entries.add(new SitemapEntry(homeUrl, latest));
+        entries.add(new SitemapEntry(guidelinesUrl, null));
+        entries.addAll(boardEntries);
         return render(entries);
     }
 
-    private void addBoardEntries(List<SitemapEntry> entries, Set<String> seenUrls, BoardListDTO board) {
+    private static LocalDate later(LocalDate a, LocalDate b) {
+        if (a == null) {
+            return b;
+        }
+        return b != null && b.isAfter(a) ? b : a;
+    }
+
+    /** 게시판 목록과 글 URL을 더하고, 그 게시판에서 가장 최근 글의 날짜를 돌려준다(없으면 null). */
+    private LocalDate addBoardEntries(List<SitemapEntry> entries, Set<String> seenUrls, BoardListDTO board) {
         if (board == null) {
-            return;
+            return null;
         }
 
         final String boardTitle;
@@ -84,26 +101,36 @@ public class SeoSitemapService {
             boardTitle = BoardTitleNormalizer.requireValid(board.getBoardTitle());
         } catch (IllegalArgumentException e) {
             log.warn("사이트맵에서 올바르지 않은 게시판 식별자를 제외합니다: {}", board.getBoardTitle());
-            return;
+            return null;
         }
 
         String boardUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/boards/" + boardTitle;
-        addEntry(entries, seenUrls, boardUrl, null);
+        List<BoardDTO> posts = null;
         try {
-            List<BoardDTO> posts = boardService.getSitemapPosts(boardTitle);
-            if (posts == null) {
-                return;
-            }
-            for (BoardDTO post : posts) {
-                if (post == null || post.getPostNum() <= 0) {
-                    continue;
-                }
-                String postUrl = boardUrl + "/readPost?postNum=" + post.getPostNum();
-                addEntry(entries, seenUrls, postUrl, toLocalDate(post.getRegDate()));
-            }
+            posts = boardService.getSitemapPosts(boardTitle);
         } catch (Exception e) {
             log.warn("사이트맵 게시글 조회에 실패했습니다. boardTitle={}", boardTitle, e);
         }
+        if (posts == null) {
+            posts = Collections.emptyList();
+        }
+
+        LocalDate latest = null;
+        for (BoardDTO post : posts) {
+            if (post != null && post.getPostNum() > 0) {
+                latest = later(latest, toLocalDate(post.getRegDate()));
+            }
+        }
+        // 게시판 목록은 새 글이 올라올 때마다 바뀌므로 가장 최근 글의 날짜를 lastmod 로 쓴다.
+        addEntry(entries, seenUrls, boardUrl, latest);
+        for (BoardDTO post : posts) {
+            if (post == null || post.getPostNum() <= 0) {
+                continue;
+            }
+            String postUrl = boardUrl + "/readPost?postNum=" + post.getPostNum();
+            addEntry(entries, seenUrls, postUrl, toLocalDate(post.getRegDate()));
+        }
+        return latest;
     }
 
     private LocalDate toLocalDate(Date date) {

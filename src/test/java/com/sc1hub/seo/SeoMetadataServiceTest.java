@@ -57,6 +57,37 @@ class SeoMetadataServiceTest {
     }
 
     @Test
+    void postAndBoardPagesCarryABreadcrumbTrail() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setTitle("973 빌드");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("canonical", "https://sc1hub.com/boards/zvspboard/readPost?postNum=2");
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        service.applyPost(model, request, "저프전 게시판", post);
+
+        var items = new ObjectMapper().readTree((String) model.get("breadcrumbDataJson")).get("itemListElement");
+        assertEquals(3, items.size());
+        assertEquals("https://sc1hub.com/", items.get(0).get("item").asText());
+        assertEquals("저프전 게시판", items.get(1).get("name").asText());
+        assertEquals("https://sc1hub.com/boards/zvspboard", items.get(1).get("item").asText());
+        assertEquals("973 빌드", items.get(2).get("name").asText());
+        assertEquals("https://sc1hub.com/boards/zvspboard/readPost?postNum=2", items.get(2).get("item").asText());
+
+        MockHttpServletRequest listRequest = new MockHttpServletRequest();
+        listRequest.setAttribute("canonical", "https://sc1hub.com/boards/zvspboard?recentPage=2");
+        ExtendedModelMap listModel = new ExtendedModelMap();
+        service.applyBoardList(listModel, listRequest, "저프전 게시판", null);
+        var listItems = new ObjectMapper().readTree((String) listModel.get("breadcrumbDataJson")).get("itemListElement");
+        assertEquals(2, listItems.size());
+        assertEquals("https://sc1hub.com/boards/zvspboard", listItems.get(1).get("item").asText());
+
+        ExtendedModelMap homeModel = new ExtendedModelMap();
+        service.applyHome(homeModel, new MockHttpServletRequest());
+        assertFalse(homeModel.containsAttribute("breadcrumbDataJson"));
+    }
+
+    @Test
     void unusableImagesFallBackToDefaultPreview() {
         BoardDTO post = new BoardDTO();
         post.setContent("<img src='javascript:alert(1)'><img src='https://user:pass@example.com/a.jpg'>");

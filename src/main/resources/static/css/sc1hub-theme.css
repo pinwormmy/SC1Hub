@@ -431,6 +431,13 @@ textarea { padding: 8px 12px; line-height: 1.5; }
 .post-navigation > hr { margin: 24px 0 12px; }
 .post-navigation .cancel-btn { float: none; margin: 0; }
 .post-navigation select.cancel-btn { padding-right: 28px; }
+.sc-neighbor-posts { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--sc-line-muted); }
+.sc-neighbor-posts__heading { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--sc-text); }
+.sc-neighbor-posts__list { margin: 0; padding: 0; list-style: none; }
+.sc-neighbor-posts__list li { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--sc-line-muted); }
+.sc-neighbor-posts__list li:last-child { border-bottom: 0; }
+.sc-neighbor-posts__list a { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-neighbor-posts__date { flex: 0 0 auto; font-size: 13px; color: var(--sc-text-dim); }
 
 /* ---------- editor ---------- */
 .sc-post-editor { --editor-accent: var(--sc-accent-emphasis); }

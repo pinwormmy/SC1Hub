@@ -19,8 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.file.AccessDeniedException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +49,7 @@ public class BoardServiceImpl implements BoardService {
     private final UploadedImageDimensionInjector uploadedImageDimensionInjector;
     private final PostContentSanitizer postContentSanitizer;
     private final PostContentLazyLoadInjector postContentLazyLoadInjector;
+    private final PostContentSeoNormalizer postContentSeoNormalizer;
     private final GuestPasswordHasher guestPasswordHasher;
 
     /**
@@ -62,12 +65,14 @@ public class BoardServiceImpl implements BoardService {
             UploadedImageDimensionInjector uploadedImageDimensionInjector,
             PostContentSanitizer postContentSanitizer,
             PostContentLazyLoadInjector postContentLazyLoadInjector,
+            PostContentSeoNormalizer postContentSeoNormalizer,
             GuestPasswordHasher guestPasswordHasher) {
         this.boardMapper = boardMapper;
         this.searchTermsService = searchTermsService;
         this.uploadedImageDimensionInjector = uploadedImageDimensionInjector;
         this.postContentSanitizer = postContentSanitizer;
         this.postContentLazyLoadInjector = postContentLazyLoadInjector;
+        this.postContentSeoNormalizer = postContentSeoNormalizer;
         this.guestPasswordHasher = guestPasswordHasher;
     }
 
@@ -323,6 +328,17 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
+    public List<BoardDTO> getNeighborPosts(String boardTitle, int postNum, int limitPerSide) throws Exception {
+        if (limitPerSide < 1 || boardTitle == null) {
+            return Collections.emptyList();
+        }
+        boardTitle = normalizeBoardTitle(boardTitle);
+        List<BoardDTO> neighbors = new ArrayList<>(boardMapper.selectNeighborPosts(boardTitle, postNum, limitPerSide));
+        neighbors.sort(Comparator.comparingInt(BoardDTO::getPostNum).reversed());
+        return neighbors;
+    }
+
+    @Override
     public List<BoardDTO> getSitemapPosts(String boardTitle) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         return boardMapper.selectSitemapPosts(boardTitle);
@@ -358,7 +374,8 @@ public class BoardServiceImpl implements BoardService {
         }
         content = uploadedImageDimensionInjector.injectMissingDimensions(content);
         // 저장본은 그대로 두고 읽을 때만 embed/이미지 로딩 힌트를 보정한다(구 글의 유튜브 즉시 로딩 방지).
-        post.setContent(postContentLazyLoadInjector.injectLazyLoading(content));
+        content = postContentLazyLoadInjector.injectLazyLoading(content);
+        post.setContent(postContentSeoNormalizer.normalize(content, post.getTitle()));
     }
 
     @Override

@@ -42,6 +42,9 @@
 <c:if test="${not empty structuredDataJson}">
     <script type="application/ld+json"><c:out value="${structuredDataJson}" escapeXml="false" /></script>
 </c:if>
+<c:if test="${not empty breadcrumbDataJson}">
+    <script type="application/ld+json"><c:out value="${breadcrumbDataJson}" escapeXml="false" /></script>
+</c:if>
 <link rel="icon" href="/favicon.ico?v=${applicationScope.assetVersion}" type="image/x-icon" sizes="16x16 32x32 48x48 64x64 128x128 256x256">
 <%-- 내부 링크 선로딩 정책: 마우스가 있는 환경(hover: hover, pointer: fine)에서만
      pointerdown 시점(conservative)에 HTML만 프리페치한다. 실제 클릭 직전에만 서버 왕복을

@@ -63,6 +63,7 @@ public class SeoMetadataService {
         String canonical = canonicalFrom(request);
         applyCommon(model, title, description,
                 buildCollectionStructuredData(title, description, canonical));
+        applyBreadcrumb(model, boardUrlFrom(canonical), normalizedTitle, null, null);
     }
 
     public void applyPost(Model model, HttpServletRequest request, String koreanTitle, BoardDTO post) {
@@ -76,6 +77,52 @@ public class SeoMetadataService {
                 buildArticleStructuredData(post, postTitle, description, canonical, image));
         model.addAttribute("socialImage", image);
         model.addAttribute("socialImageAlt", postTitle);
+        applyBreadcrumb(model, boardUrlFrom(canonical), boardName, canonical, postTitle);
+    }
+
+    /** 홈 › 게시판 › 글 경로를 검색결과의 URL 자리에 보여 줄 수 있게 BreadcrumbList 로 따로 싣는다. */
+    private void applyBreadcrumb(Model model, String boardUrl, String boardName, String postUrl, String postTitle) {
+        if (boardUrl == null) {
+            return;
+        }
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(breadcrumbItem(1, "홈", SeoUrlPolicy.CANONICAL_ORIGIN + "/"));
+        items.add(breadcrumbItem(2, boardName, boardUrl));
+        if (postUrl != null) {
+            items.add(breadcrumbItem(3, postTitle, postUrl));
+        }
+        Map<String, Object> root = contextRoot();
+        root.put("@type", "BreadcrumbList");
+        root.put("itemListElement", items);
+        String json = serializeSafely(root);
+        if (json != null) {
+            model.addAttribute("breadcrumbDataJson", json);
+        }
+    }
+
+    private Map<String, Object> breadcrumbItem(int position, String name, String url) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("@type", "ListItem");
+        item.put("position", position);
+        item.put("name", name);
+        item.put("item", url);
+        return item;
+    }
+
+    /** 정규 URL에서 게시판 목록 URL만 남긴다. 게시판 경로가 아니면 null. */
+    private String boardUrlFrom(String canonical) {
+        String prefix = SeoUrlPolicy.CANONICAL_ORIGIN + "/boards/";
+        if (canonical == null || !canonical.startsWith(prefix)) {
+            return null;
+        }
+        int end = canonical.length();
+        for (char delimiter : new char[] {'/', '?', '#'}) {
+            int index = canonical.indexOf(delimiter, prefix.length());
+            if (index >= 0 && index < end) {
+                end = index;
+            }
+        }
+        return end > prefix.length() ? canonical.substring(0, end) : null;
     }
 
     String buildBoardDescription(String koreanTitle) {
@@ -166,6 +213,7 @@ public class SeoMetadataService {
         root.put("description", description);
         root.put("image", image);
         root.put("inLanguage", "ko-KR");
+        root.put("isPartOf", reference(SeoUrlPolicy.CANONICAL_ORIGIN + "/#website"));
 
         if (post != null) {
             String authorName = defaultIfBlank(post.getWriter(), "SC1Hub 사용자");

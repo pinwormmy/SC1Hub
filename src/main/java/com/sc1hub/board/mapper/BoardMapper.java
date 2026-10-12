@@ -106,6 +106,9 @@ public interface BoardMapper {
         List<BoardDTO> selectRecentPosts(@Param("boardTitle") String boardTitle,
                         @Param("limit") int limit) throws Exception;
 
+        List<BoardDTO> selectNeighborPosts(@Param("boardTitle") String boardTitle,
+                        @Param("postNum") int postNum, @Param("limit") int limit) throws Exception;
+
         List<BoardDTO> selectSitemapPosts(@Param("boardTitle") String boardTitle) throws Exception;
 
         List<BoardDTO> selectRecentPostsForBot(@Param("boardTitle") String boardTitle,

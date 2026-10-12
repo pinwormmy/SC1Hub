@@ -62,6 +62,8 @@ public interface BoardService {
 
     List<BoardDTO> getRecentPosts(String boardTitle, int limit) throws Exception;
 
+    List<BoardDTO> getNeighborPosts(String boardTitle, int postNum, int limitPerSide) throws Exception;
+
     List<BoardDTO> getSitemapPosts(String boardTitle) throws Exception;
 
     void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception;

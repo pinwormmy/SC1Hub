@@ -1,9 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 
+<%-- 페이지 링크는 정규 URL과 같은 모양으로 낸다: 끝 슬래시 없음, 1페이지는 파라미터 없음.
+     어긋나면 페이지를 넘길 때마다 301을 한 번씩 거치고, 검색엔진은 이를 리다이렉션 URL로 따로 센다. --%>
+<c:set var="scPagingBase" value="/boards/${boardTitle}" />
 <div class="sc-paging">
     <c:if test="${page.prevPageSetPoint >= 1}">
         <a class="sc-paging__nav sc-paging__prev btn btn-theme"
-           href="/boards/${boardTitle}/?recentPage=${page.prevPageSetPoint}">이전</a>
+           href="${page.prevPageSetPoint <= 1 ? scPagingBase : scPagingBase += '?recentPage=' += page.prevPageSetPoint}">이전</a>
     </c:if>
 
     <div class="sc-paging__pages">
@@ -11,11 +14,11 @@
             <c:choose>
                 <c:when test="${countPage == page.recentPage}">
                     <a class="sc-paging__page btn btn-theme is-current"
-                       href="/boards/${boardTitle}/?recentPage=${countPage}">${countPage}</a>
+                       href="${countPage <= 1 ? scPagingBase : scPagingBase += '?recentPage=' += countPage}">${countPage}</a>
                 </c:when>
                 <c:otherwise>
                     <a class="sc-paging__page btn btn-theme"
-                       href="/boards/${boardTitle}/?recentPage=${countPage}">${countPage}</a>
+                       href="${countPage <= 1 ? scPagingBase : scPagingBase += '?recentPage=' += countPage}">${countPage}</a>
                 </c:otherwise>
             </c:choose>
         </c:forEach>
@@ -23,6 +26,6 @@
 
     <c:if test="${page.nextPageSetPoint <= page.totalPage}">
         <a class="sc-paging__nav sc-paging__next btn btn-theme"
-           href="/boards/${boardTitle}/?recentPage=${page.nextPageSetPoint}">다음</a>
+           href="${page.nextPageSetPoint <= 1 ? scPagingBase : scPagingBase += '?recentPage=' += page.nextPageSetPoint}">다음</a>
     </c:if>
 </div>

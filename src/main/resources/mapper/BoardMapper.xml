@@ -261,6 +261,22 @@
         limit #{limit}
     </select>
 
+    <!-- 글 번호 기준으로 앞뒤 글을 각각 limit개씩. 모든 글이 이웃 글로 이어지게 해서
+         목록 뒤쪽 페이지에만 있는 오래된 글도 다른 글에서 바로 닿게 한다. -->
+    <select id="selectNeighborPosts" resultType="com.sc1hub.board.dto.BoardDTO">
+        (select post_num, title, reg_date
+         from ${boardTitle}
+         where post_num &lt; #{postNum}
+         order by post_num desc
+         limit #{limit})
+        union all
+        (select post_num, title, reg_date
+         from ${boardTitle}
+         where post_num &gt; #{postNum}
+         order by post_num asc
+         limit #{limit})
+    </select>
+
     <select id="selectSitemapPosts" resultType="com.sc1hub.board.dto.BoardDTO">
         select post_num, reg_date
         from ${boardTitle}

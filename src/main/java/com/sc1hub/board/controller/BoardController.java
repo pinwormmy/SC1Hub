@@ -74,6 +74,7 @@ public class BoardController {
     private static final long DUPLICATE_COMMENT_WINDOW_MILLIS = 5 * 60 * 1000L;
     private static final String ATTACK_CONTENT_MESSAGE = "허용되지 않는 내용(스크립트·주입 구문·과다 링크 등)이 포함되어 있어 등록할 수 없습니다.";
     private static final int POST_MAX_LINKS = 5;
+    private static final int NEIGHBOR_POSTS_PER_SIDE = 3;
     private static final int COMMENT_MAX_LINKS = 3;
 
     private final BoardService boardService;
@@ -154,8 +155,20 @@ public class BoardController {
         model.addAttribute("boardTitle", boardTitle);
         model.addAttribute("guestWritable", isGuestWritableBoard(boardTitle));
         model.addAttribute("post", post);
+        model.addAttribute("neighborPosts", loadNeighborPosts(boardTitle, postNum));
         seoMetadataService.applyPost(model, request, koreanTitle, post);
         return "board/readPost";
+    }
+
+    // 이웃 글 목록은 부가 정보라서 조회가 실패해도 본문은 그대로 보여 준다.
+    private List<BoardDTO> loadNeighborPosts(String boardTitle, int postNum) {
+        try {
+            List<BoardDTO> neighbors = boardService.getNeighborPosts(boardTitle, postNum, NEIGHBOR_POSTS_PER_SIDE);
+            return neighbors == null ? Collections.emptyList() : neighbors;
+        } catch (Exception e) {
+            log.warn("이웃 글 조회에 실패했습니다. boardTitle={}, postNum={}", boardTitle, postNum, e);
+            return Collections.emptyList();
+        }
     }
 
     @GetMapping("/{boardTitle}/postData")

@@ -51,6 +51,9 @@ class BoardServiceImplTest {
     private PostContentLazyLoadInjector postContentLazyLoadInjector;
 
     @Spy
+    private PostContentSeoNormalizer postContentSeoNormalizer = new PostContentSeoNormalizer();
+
+    @Spy
     private GuestPasswordHasher guestPasswordHasher = new GuestPasswordHasher(new BCryptPasswordEncoder(4));
 
     @InjectMocks
@@ -164,6 +167,21 @@ class BoardServiceImplTest {
         BoardDTO post = boardService.readPost("PromotionBoard", 5);
 
         assertEquals("<img src=\"x\" loading=\"lazy\">", post.getContent());
+    }
+
+    @Test
+    void getNeighborPosts_returnsNewestFirstAroundThePost() throws Exception {
+        BoardDTO older = new BoardDTO();
+        older.setPostNum(4);
+        BoardDTO newer = new BoardDTO();
+        newer.setPostNum(7);
+        when(boardMapper.selectNeighborPosts("tvszboard", 5, 3)).thenReturn(java.util.List.of(older, newer));
+
+        java.util.List<BoardDTO> neighbors = boardService.getNeighborPosts("tVsZBoard", 5, 3);
+
+        assertEquals(7, neighbors.get(0).getPostNum());
+        assertEquals(4, neighbors.get(1).getPostNum());
+        assertTrue(boardService.getNeighborPosts("tvszboard", 5, 0).isEmpty());
     }
 
     @Test
