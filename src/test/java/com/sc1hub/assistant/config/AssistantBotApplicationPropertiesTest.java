@@ -73,6 +73,6 @@ class AssistantBotApplicationPropertiesTest {
 
         assertEquals("anthropic", properties.getProperty("sc1hub.assistant.searchProvider"));
         assertEquals("claude-haiku-5-5", properties.getProperty("sc1hub.anthropic.searchModel"));
-        assertEquals("max", properties.getProperty("sc1hub.anthropic.searchEffort"));
+        assertEquals("high", properties.getProperty("sc1hub.anthropic.searchEffort"));
     }
 }

@@ -27,10 +27,13 @@ import java.util.Map;
 @Slf4j
 public class AnthropicAssistantClient {
 
-    private static final int MAX_TOKENS = 16000;
+    private static final int MAX_TOKENS = 24000;
     // thinking 토큰이 max_tokens 예산을 함께 소모하므로, 답변 예산 위에 여유분을 얹어 보낸다.
-    // 여유가 모자라면 답변 없이 stop_reason=max_tokens로 끝난다.
-    private static final int THINKING_HEADROOM_TOKENS = 12000;
+    // 여유가 모자라면 답변 없이 stop_reason=max_tokens로 끝난다. max 강도에서는 근거 글이 긴 질문 하나에
+    // thinking만 11000 토큰을 넘게 쓰는 것이 실측되어(2026-10-12) 12000으로는 모자랐다.
+    private static final int THINKING_HEADROOM_TOKENS = 20000;
+    // 그래도 예산이 바닥나면 이 강도로 한 번 더 보낸다. thinking이 크게 줄어 답변까지 도달한다.
+    private static final String TRUNCATION_RETRY_EFFORT = "high";
     private static final int BOT_DEFAULT_ANSWER_TOKENS = 1400;
     private static final int SEARCH_DEFAULT_ANSWER_TOKENS = 1024;
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(120);
@@ -86,8 +89,29 @@ public class AnthropicAssistantClient {
         String validPrompt = requireText(prompt, "Assistant prompt is required.");
         String validModel = requireText(model, "Anthropic model is not configured.");
 
+        String validEffort = resolveEffort(effort);
+        try {
+            return requestText(apiKey, validPrompt, maxTokens, validModel, validEffort, botChatFormat);
+        } catch (TruncatedResponseException e) {
+            String retryEffort = resolveTruncationRetryEffort(validEffort);
+            if (retryEffort == null) {
+                throw e;
+            }
+            log.warn("Anthropic response hit max_tokens before answering. Retrying at lower effort. "
+                            + "model={}, effort={}, retryEffort={}, maxTokens={}, outputTokens={}",
+                    validModel, validEffort, retryEffort, maxTokens, e.getOutputTokens());
+            return requestText(apiKey, validPrompt, maxTokens, validModel, retryEffort, botChatFormat);
+        }
+    }
+
+    private String requestText(String apiKey,
+                               String validPrompt,
+                               int maxTokens,
+                               String validModel,
+                               String validEffort,
+                               boolean botChatFormat) {
         OutputConfig.Builder outputConfig = OutputConfig.builder()
-                .effort(OutputConfig.Effort.of(resolveEffort(effort)));
+                .effort(OutputConfig.Effort.of(validEffort));
         if (botChatFormat) {
             JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
             buildResponseSchema().forEach((key, value) -> schema.putAdditionalProperty(key, JsonValue.from(value)));
@@ -117,6 +141,9 @@ public class AnthropicAssistantClient {
         StopReason stopReason = message.stopReason().orElse(null);
         if (StopReason.REFUSAL.equals(stopReason)) {
             throw new AnthropicAssistantException("Anthropic refused the assistant request.");
+        }
+        if (StopReason.MAX_TOKENS.equals(stopReason)) {
+            throw new TruncatedResponseException(message.usage().outputTokens());
         }
         if (!StopReason.END_TURN.equals(stopReason)) {
             throw new AnthropicAssistantException("Anthropic response did not complete: "
@@ -211,6 +238,24 @@ public class AnthropicAssistantClient {
             return "high";
         }
         return normalized;
+    }
+
+    /** max_tokens로 잘렸을 때 다시 보낼 강도. 이미 그 이하 강도였다면 재시도하지 않는다(null). */
+    private String resolveTruncationRetryEffort(String effort) {
+        return "max".equals(effort) || "xhigh".equals(effort) ? TRUNCATION_RETRY_EFFORT : null;
+    }
+
+    private static final class TruncatedResponseException extends AnthropicAssistantException {
+        private final long outputTokens;
+
+        private TruncatedResponseException(long outputTokens) {
+            super("Anthropic response did not complete: max_tokens");
+            this.outputTokens = outputTokens;
+        }
+
+        private long getOutputTokens() {
+            return outputTokens;
+        }
     }
 
     private String requireText(String value, String message) {

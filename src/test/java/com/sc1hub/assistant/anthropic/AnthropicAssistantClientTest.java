@@ -12,6 +12,10 @@ import org.junit.jupiter.api.Test;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Deque;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -26,6 +30,8 @@ class AnthropicAssistantClientTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicReference<String> requestBody = new AtomicReference<>();
+    private final List<String> requestBodies = new CopyOnWriteArrayList<>();
+    private final Deque<String> queuedResponseBodies = new ConcurrentLinkedDeque<>();
     private final AtomicReference<String> requestApiKey = new AtomicReference<>();
     private final AtomicInteger requestCount = new AtomicInteger();
     private HttpServer server;
@@ -42,7 +48,9 @@ class AnthropicAssistantClientTest {
             requestCount.incrementAndGet();
             requestApiKey.set(exchange.getRequestHeaders().getFirst("x-api-key"));
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] body = responseBody.getBytes(StandardCharsets.UTF_8);
+            requestBodies.add(requestBody.get());
+            String queued = queuedResponseBodies.poll();
+            byte[] body = (queued == null ? responseBody : queued).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(responseStatus, body.length);
             exchange.getResponseBody().write(body);
@@ -65,16 +73,16 @@ class AnthropicAssistantClientTest {
     }
 
     @Test
-    void generateSearchAnswer_usesHaikuAtMaxEffortWithoutBotSchemaAndAddsThinkingHeadroom() throws Exception {
+    void generateSearchAnswer_usesHaikuAtHighEffortWithoutBotSchemaAndAddsThinkingHeadroom() throws Exception {
         String result = client.generateSearchAnswer("검색 프롬프트", 1024);
 
         assertEquals("{\"answer\":\"질럿 먼저\",\"sources\":[]}", result);
         JsonNode request = objectMapper.readTree(requestBody.get());
         assertEquals("test-anthropic-key", requestApiKey.get());
         assertEquals("claude-haiku-5-5", request.path("model").asText());
-        assertEquals("max", request.path("output_config").path("effort").asText());
-        // 요청 1024 + thinking 여유분 12000
-        assertEquals(13024, request.path("max_tokens").asInt());
+        assertEquals("high", request.path("output_config").path("effort").asText());
+        // 요청 1024 + thinking 여유분 20000
+        assertEquals(21024, request.path("max_tokens").asInt());
         assertTrue(request.path("output_config").path("format").isMissingNode());
         assertEquals("user", request.path("messages").get(0).path("role").asText());
         // Haiku 5.5는 thinking 비활성화·샘플링 파라미터를 거부하므로 보내지 않는다.
@@ -94,7 +102,7 @@ class AnthropicAssistantClientTest {
         JsonNode body = format.path("schema").path("properties").path("chat").path("properties").path("body");
         assertEquals("string", body.path("type").asText());
         assertFalse(body.has("maxLength"));
-        assertEquals(15000, request.path("max_tokens").asInt());
+        assertEquals(23000, request.path("max_tokens").asInt());
     }
 
     @Test
@@ -112,9 +120,35 @@ class AnthropicAssistantClientTest {
         assertTrue(assertThrows(AnthropicAssistantException.class,
                 () -> client.generateSearchAnswer("prompt", 512)).getMessage().contains("refused"));
 
+        // 낮춘 강도에서도 잘리면 부분 답변을 돌려주지 않고 실패로 알린다.
         respond(200, message("max_tokens", "{\"answer\":\"잘린"));
         assertTrue(assertThrows(AnthropicAssistantException.class,
                 () -> client.generateSearchAnswer("prompt", 512)).getMessage().contains("max_tokens"));
+    }
+
+    @Test
+    void truncatedMaxEffortResponseIsRetriedOnceAtHighEffort() throws Exception {
+        properties.setSearchEffort("max");
+        queuedResponseBodies.add(message("max_tokens", ""));
+
+        String result = client.generateSearchAnswer("prompt", 1024);
+
+        assertEquals("{\"answer\":\"질럿 먼저\",\"sources\":[]}", result);
+        assertEquals(2, requestBodies.size());
+        assertEquals("max", objectMapper.readTree(requestBodies.get(0)).path("output_config").path("effort").asText());
+        JsonNode retry = objectMapper.readTree(requestBodies.get(1));
+        assertEquals("high", retry.path("output_config").path("effort").asText());
+        assertEquals(21024, retry.path("max_tokens").asInt());
+    }
+
+    @Test
+    void truncatedResponseAtHighEffortOrBelowIsNotRetried() {
+        respond(200, message("max_tokens", ""));
+
+        assertThrows(AnthropicAssistantException.class,
+                () -> client.generateDraftAnswer("prompt", 1400, "claude-haiku-5-5", "high"));
+
+        assertEquals(1, requestBodies.size());
     }
 
     @Test

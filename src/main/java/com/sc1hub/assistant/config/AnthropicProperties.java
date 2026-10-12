@@ -12,5 +12,5 @@ public class AnthropicProperties {
     private String baseUrl = "";
     private boolean allowLiveCalls = false;
     private String searchModel = "claude-haiku-5-5";
-    private String searchEffort = "max";
+    private String searchEffort = "high";
 }
