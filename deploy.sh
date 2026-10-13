@@ -37,6 +37,7 @@ REMOTE_CLEANUP_SCRIPT="$REMOTE_SCRIPT_DIR/cleanup-hosting-storage.sh"
 REMOTE_OOM_RECOVERY_SCRIPT="$REMOTE_SCRIPT_DIR/restart-tomcat-after-oom.sh"
 REMOTE_VISITOR_COUNT_SQL="$REMOTE_SCRIPT_DIR/20260711_create_visitor_daily_identity.sql"
 REMOTE_RESET_TOKEN_SQL="$REMOTE_SCRIPT_DIR/20260901_drop_member_reset_token.sql"
+REMOTE_POST_MOD_DATE_SQL="$REMOTE_SCRIPT_DIR/20261013_add_post_mod_date.sql"
 REMOTE_DROP_SUPPORTBOARD_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_supportboard.sql"
 REMOTE_DROP_ONE_LINE_STRATEGY_SQL="$REMOTE_SCRIPT_DIR/20260907_drop_one_line_strategy.sql"
 REMOTE_ONLINE_PROPS="$REMOTE_CONFIG_DIR/application-online.properties"
@@ -72,6 +73,7 @@ scp "$ROOT_DIR/scripts/cleanup-hosting-storage.sh" "$REMOTE:$REMOTE_CLEANUP_SCRI
 scp "$ROOT_DIR/scripts/restart-tomcat-after-oom.sh" "$REMOTE:$REMOTE_OOM_RECOVERY_SCRIPT"
 scp "$ROOT_DIR/src/main/resources/sql/20260711_create_visitor_daily_identity.sql" "$REMOTE:$REMOTE_VISITOR_COUNT_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260901_drop_member_reset_token.sql" "$REMOTE:$REMOTE_RESET_TOKEN_SQL"
+scp "$ROOT_DIR/src/main/resources/sql/20261013_add_post_mod_date.sql" "$REMOTE:$REMOTE_POST_MOD_DATE_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260907_drop_supportboard.sql" "$REMOTE:$REMOTE_DROP_SUPPORTBOARD_SQL"
 scp "$ROOT_DIR/src/main/resources/sql/20260907_drop_one_line_strategy.sql" "$REMOTE:$REMOTE_DROP_ONE_LINE_STRATEGY_SQL"
 
@@ -170,6 +172,8 @@ ssh "$REMOTE" \
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_VISITOR_COUNT_SQL\"
    echo 'Dropping dead member.reset_token column (idempotent)...'
    MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_RESET_TOKEN_SQL\"
+   echo 'Adding the post mod_date column (idempotent)...'
+   MYSQL_PWD=\"\$DB_PASS\" mysql -u \"\$DB_USER\" \"\$DB_NAME\" < \"\$REMOTE_POST_MOD_DATE_SQL\"
    if [ ! -s \"\$REMOTE_UPLOAD_PATH\" ]; then
      echo \"Uploaded WAR is missing or empty: \$REMOTE_UPLOAD_PATH\" >&2
      exit 1

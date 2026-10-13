@@ -344,6 +344,15 @@ public class BoardServiceImpl implements BoardService {
         return boardMapper.selectSitemapPosts(boardTitle);
     }
 
+    @Override
+    public List<BoardDTO> getFeedPosts(String boardTitle, int limit) throws Exception {
+        if (limit < 1 || boardTitle == null) {
+            return Collections.emptyList();
+        }
+        boardTitle = normalizeBoardTitle(boardTitle);
+        return boardMapper.selectFeedPosts(boardTitle, limit);
+    }
+
     private PageDTO normalizeSearchPage(PageDTO page) {
         PageDTO normalized = PageUtils.normalize(page, DEFAULT_BOARD_SEARCH_TYPE);
         if (!BOARD_SEARCH_TYPES.contains(normalized.getSearchType())) {

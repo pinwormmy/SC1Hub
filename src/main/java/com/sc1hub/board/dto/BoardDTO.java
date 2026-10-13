@@ -16,6 +16,9 @@ public class BoardDTO {
     private String guestPassword;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date regDate;
+    // 마지막 수정 시각. 수정한 적 없는 글은 null.
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date modDate;
     private int views;
     private int commentCount;
     private int notice;

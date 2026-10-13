@@ -225,6 +225,11 @@ public class SeoMetadataService {
             if (published != null) {
                 root.put("datePublished", published);
             }
+            // 수정일은 실제로 고친 글에만 싣는다(작성일을 수정일로 재사용하지 않는다).
+            if (post.getModDate() != null && post.getRegDate() != null
+                    && post.getModDate().after(post.getRegDate())) {
+                root.put("dateModified", formatArticleDate(post.getModDate()));
+            }
         }
 
         Map<String, Object> publisher = new LinkedHashMap<>();

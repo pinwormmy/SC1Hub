@@ -1,0 +1,18 @@
+-- 게시글 수정 시각. 글을 고쳐도 reg_date 는 그대로라 검색엔진에 "내용이 바뀌었다"는 신호
+-- (사이트맵 lastmod, Article dateModified)를 줄 방법이 없었다. 수정한 적 없는 글은 NULL.
+-- 옛 코드는 이 컬럼을 읽지도 쓰지도 않으므로 롤백해도 그대로 둬도 된다.
+ALTER TABLE zvstboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE tvstboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE tvszboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE tvspboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE zvszboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE zvspboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE pvstboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE pvszboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE pvspboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE videolinkboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE promotionboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE teamplayguideboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE funboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE tipboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;
+ALTER TABLE noticeboard ADD COLUMN IF NOT EXISTS mod_date DATETIME NULL;

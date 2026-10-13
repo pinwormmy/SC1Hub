@@ -66,6 +66,8 @@ public interface BoardService {
 
     List<BoardDTO> getSitemapPosts(String boardTitle) throws Exception;
 
+    List<BoardDTO> getFeedPosts(String boardTitle, int limit) throws Exception;
+
     void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception;
 
     void increaseViewCount(String boardTitle, int postNum, String ip) throws Exception;

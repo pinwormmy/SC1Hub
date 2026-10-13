@@ -11,6 +11,9 @@
 <div class="info-row">
     <span>작성자 <c:out value="${post.writer}"/></span>
     <span><fmt:formatDate value="${post.regDate}" pattern="yyyy-MM-dd HH:mm"/></span>
+    <c:if test="${not empty post.modDate and post.modDate.time > post.regDate.time}">
+        <span>수정 <fmt:formatDate value="${post.modDate}" pattern="yyyy-MM-dd"/></span>
+    </c:if>
     <span>조회 ${post.views}</span>
 </div>
 <div class="row">

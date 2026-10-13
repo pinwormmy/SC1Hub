@@ -13,10 +13,22 @@ public class SeoController {
 
     private static final MediaType SITEMAP_MEDIA_TYPE = MediaType.parseMediaType("application/xml;charset=UTF-8");
 
-    private final SeoSitemapService sitemapService;
+    private static final MediaType RSS_MEDIA_TYPE = MediaType.parseMediaType("application/rss+xml;charset=UTF-8");
 
-    public SeoController(SeoSitemapService sitemapService) {
+    private final SeoSitemapService sitemapService;
+    private final SeoFeedService feedService;
+
+    public SeoController(SeoSitemapService sitemapService, SeoFeedService feedService) {
         this.sitemapService = sitemapService;
+        this.feedService = feedService;
+    }
+
+    @GetMapping(value = "/rss.xml", produces = "application/rss+xml;charset=UTF-8")
+    public ResponseEntity<String> rss() {
+        return ResponseEntity.ok()
+                .contentType(RSS_MEDIA_TYPE)
+                .cacheControl(CacheControl.maxAge(SeoFeedService.CACHE_MINUTES, TimeUnit.MINUTES).cachePublic())
+                .body(feedService.getRssXml());
     }
 
     @GetMapping(value = "/sitemap.xml", produces = "application/xml;charset=UTF-8")

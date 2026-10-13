@@ -35,6 +35,11 @@
                     pattern="yyyy-MM-dd'T'HH:mm:ssXXX" timeZone="Asia/Seoul" />
     <meta property="article:published_time" content="${scArticlePublished}">
 </c:if>
+<c:if test="${not empty post.modDate and post.modDate.time > post.regDate.time}">
+    <fmt:formatDate var="scArticleModified" value="${post.modDate}"
+                    pattern="yyyy-MM-dd'T'HH:mm:ssXXX" timeZone="Asia/Seoul" />
+    <meta property="article:modified_time" content="${scArticleModified}">
+</c:if>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="<c:out value='${scMetaTitle}'/>">
 <meta name="twitter:description" content="<c:out value='${scMetaDescription}'/>">
@@ -45,6 +50,7 @@
 <c:if test="${not empty breadcrumbDataJson}">
     <script type="application/ld+json"><c:out value="${breadcrumbDataJson}" escapeXml="false" /></script>
 </c:if>
+<link rel="alternate" type="application/rss+xml" title="SC1Hub 새 글" href="https://sc1hub.com/rss.xml">
 <link rel="icon" href="/favicon.ico?v=${applicationScope.assetVersion}" type="image/x-icon" sizes="16x16 32x32 48x48 64x64 128x128 256x256">
 <%-- 내부 링크 선로딩 정책: 마우스가 있는 환경(hover: hover, pointer: fine)에서만
      pointerdown 시점(conservative)에 HTML만 프리페치한다. 실제 클릭 직전에만 서버 왕복을

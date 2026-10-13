@@ -52,6 +52,26 @@ class SeoSitemapServiceTest {
     }
 
     @Test
+    void getSitemapXml_usesTheModifiedDateOfEditedPosts() throws Exception {
+        BoardService boardService = mock(BoardService.class);
+        BoardListDTO board = new BoardListDTO();
+        board.setBoardTitle("tipboard");
+        BoardDTO edited = new BoardDTO();
+        edited.setPostNum(7);
+        edited.setRegDate(Date.from(Instant.parse("2025-01-01T00:00:00Z")));
+        edited.setModDate(Date.from(Instant.parse("2026-10-13T00:00:00Z")));
+        when(boardService.getBoardList()).thenReturn(Collections.singletonList(board));
+        when(boardService.getSitemapPosts("tipboard")).thenReturn(Collections.singletonList(edited));
+        Clock clock = Clock.fixed(Instant.parse("2026-10-14T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
+        String xml = new SeoSitemapService(boardService, clock).getSitemapXml();
+
+        assertTrue(xml.contains("readPost?postNum=7</loc>\n    <lastmod>2026-10-13</lastmod>"));
+        assertTrue(xml.contains("<loc>https://sc1hub.com/boards/tipboard</loc>\n    <lastmod>2026-10-13</lastmod>"));
+        assertFalse(xml.contains("2025-01-01"));
+    }
+
+    @Test
     void getSitemapXml_refreshesAfterTenMinutes() throws Exception {
         BoardService boardService = mock(BoardService.class);
         Clock clock = mock(Clock.class);

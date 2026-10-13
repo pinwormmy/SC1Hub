@@ -57,6 +57,20 @@ class SeoMetadataServiceTest {
     }
 
     @Test
+    void editedPostsReportWhenTheyWereModified() throws Exception {
+        BoardDTO post = new BoardDTO();
+        post.setTitle("973 빌드");
+        post.setRegDate(new Date(0));
+        post.setModDate(new Date(86_400_000L));
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        service.applyPost(model, new MockHttpServletRequest(), "저프전", post);
+
+        var json = new ObjectMapper().readTree((String) model.get("structuredDataJson"));
+        assertEquals("1970-01-02T09:00:00+09:00", json.get("dateModified").asText());
+    }
+
+    @Test
     void postAndBoardPagesCarryABreadcrumbTrail() throws Exception {
         BoardDTO post = new BoardDTO();
         post.setTitle("973 빌드");

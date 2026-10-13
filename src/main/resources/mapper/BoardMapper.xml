@@ -58,7 +58,7 @@
     <update id="submitModifyPost">
         update ${boardTitle}
             set title=#{board.title}, content=#{board.content}, writer=#{board.writer}, notice=#{board.notice},
-                search_terms=#{board.searchTerms}
+                search_terms=#{board.searchTerms}, mod_date=now()
             where post_num=#{board.postNum}
     </update>
 
@@ -278,9 +278,17 @@
     </select>
 
     <select id="selectSitemapPosts" resultType="com.sc1hub.board.dto.BoardDTO">
-        select post_num, reg_date
+        select post_num, reg_date, mod_date
         from ${boardTitle}
         order by post_num asc
+    </select>
+
+    <select id="selectFeedPosts" resultType="com.sc1hub.board.dto.BoardDTO">
+        select post_num, title, writer, reg_date, content
+        from ${boardTitle}
+        where notice=0
+        order by reg_date desc, post_num desc
+        limit #{limit}
     </select>
 
     <select id="selectRecentPostsForBot" resultType="com.sc1hub.board.dto.BoardDTO">

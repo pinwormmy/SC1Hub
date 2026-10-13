@@ -65,7 +65,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns(patterns("/**"))
                 .excludePathPatterns(patterns(
                         "/css/**", "/js/**", "/images/**",
-                        "/favicon.ico", "/robots.txt", "/ads.txt", "/sitemap.xml",
+                        "/favicon.ico", "/robots.txt", "/ads.txt", "/sitemap.xml", "/rss.xml",
                         "/img/**", "/uploadedImg/**", "/ckImgSubmit"));
         // 게시판 쓰기 경로는 반드시 PathPatternParser 가 받아들이는 형태로만 등록한다. 예전의
         // "/**/writePost" 처럼 ** 가 가운데 오는 패턴은 파서가 거부해 MappedInterceptor 가 조용히

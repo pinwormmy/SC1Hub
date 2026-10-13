@@ -118,7 +118,7 @@ public class SeoSitemapService {
         LocalDate latest = null;
         for (BoardDTO post : posts) {
             if (post != null && post.getPostNum() > 0) {
-                latest = later(latest, toLocalDate(post.getRegDate()));
+                latest = later(latest, lastChanged(post));
             }
         }
         // 게시판 목록은 새 글이 올라올 때마다 바뀌므로 가장 최근 글의 날짜를 lastmod 로 쓴다.
@@ -128,9 +128,14 @@ public class SeoSitemapService {
                 continue;
             }
             String postUrl = boardUrl + "/readPost?postNum=" + post.getPostNum();
-            addEntry(entries, seenUrls, postUrl, toLocalDate(post.getRegDate()));
+            addEntry(entries, seenUrls, postUrl, lastChanged(post));
         }
         return latest;
+    }
+
+    /** 글을 고친 적이 있으면 수정일, 없으면 작성일. */
+    private LocalDate lastChanged(BoardDTO post) {
+        return later(toLocalDate(post.getRegDate()), toLocalDate(post.getModDate()));
     }
 
     private LocalDate toLocalDate(Date date) {
