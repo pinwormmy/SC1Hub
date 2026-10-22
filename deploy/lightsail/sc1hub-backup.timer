@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the SC1Hub backup every night
+
+[Timer]
+# 04:40 KST: after the 04:17 visitor rollup, before the morning bot slots.
+OnCalendar=*-*-* 04:40:00
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

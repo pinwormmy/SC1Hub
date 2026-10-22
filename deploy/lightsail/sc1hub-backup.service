@@ -1,0 +1,10 @@
+[Unit]
+Description=SC1Hub daily backup (database, uploads, RAG index)
+After=mariadb.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/sc1hub/backup.env
+ExecStart=/usr/local/sbin/sc1hub-backup.sh
+Nice=10
+IOSchedulingClass=idle

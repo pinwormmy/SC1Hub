@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SC1Hub CATALINA_BASE server.xml on the Lightsail host (installed by provision.sh).
+  Tomcat listens only on loopback; nginx terminates TLS in front of it.
+  The shutdown port is disabled: systemd stops Tomcat with SIGTERM.
+-->
+<Server port="-1" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+  <Service name="sc1hub">
+    <Connector port="8645" address="127.0.0.1" protocol="HTTP/1.1"
+               connectionTimeout="20000"
+               maxThreads="64"
+               URIEncoding="UTF-8"
+               server="sc1hub" />
+
+    <Engine name="sc1hub" defaultHost="localhost">
+      <!-- autoDeploy off: releases restart the service, so a half-copied WAR is never picked up. -->
+      <Host name="localhost" appBase="webapps" unpackWARs="true" autoDeploy="false">
+        <Valve className="org.apache.catalina.valves.AccessLogValve"
+               directory="logs" prefix="access" suffix=".log" maxDays="30"
+               pattern='%{X-Forwarded-For}i %t "%m %U %H" %s %b %D' />
+      </Host>
+    </Engine>
+  </Service>
+</Server>

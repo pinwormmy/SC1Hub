@@ -1,0 +1,14 @@
+# SC1Hub MariaDB tuning for a 1 GB Lightsail host. Installed as
+# /etc/mysql/mariadb.conf.d/90-sc1hub.cnf by provision.sh.
+[mysqld]
+bind-address = 127.0.0.1
+skip-name-resolve
+character-set-server = utf8mb4
+collation-server = utf8mb4_general_ci
+# SYSTEM follows the host time zone (Asia/Seoul), like Cafe24's MariaDB.
+default-time-zone = SYSTEM
+innodb_buffer_pool_size = 128M
+innodb_log_file_size = 48M
+performance_schema = OFF
+max_connections = 30
+max_allowed_packet = 64M

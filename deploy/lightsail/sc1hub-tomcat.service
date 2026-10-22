@@ -1,0 +1,33 @@
+[Unit]
+Description=SC1Hub on Apache Tomcat 10.1
+Wants=network-online.target
+After=network-online.target mariadb.service
+
+[Service]
+Type=simple
+User=sc1hub
+Group=sc1hub
+Environment=CATALINA_HOME=/opt/tomcat/current
+Environment=CATALINA_BASE=/home/hosting_users/sc1hub/tomcat
+# The RAG index and other relative paths resolve against CATALINA_BASE, as on Cafe24.
+WorkingDirectory=/home/hosting_users/sc1hub/tomcat
+# setenv.sh in CATALINA_BASE/bin supplies JAVA_HOME, the Spring profile and the JVM options.
+ExecStart=/opt/tomcat/current/bin/catalina.sh run
+# 143 = SIGTERM, the normal stop path.
+SuccessExitStatus=143
+# -XX:+ExitOnOutOfMemoryError ends the JVM; systemd brings it back.
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+UMask=0027
+LimitNOFILE=65536
+
+NoNewPrivileges=true
+# No PrivateTmp: jstat/jinfo in the release check find the JVM through /tmp/hsperfdata_sc1hub.
+# Tomcat already points java.io.tmpdir at CATALINA_BASE/temp.
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/hosting_users/sc1hub/tomcat
+
+[Install]
+WantedBy=multi-user.target
