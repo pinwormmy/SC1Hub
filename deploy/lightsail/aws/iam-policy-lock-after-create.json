@@ -1,0 +1,15 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "NoNewBillableLightsailResources",
+            "Effect": "Deny",
+            "Action": [
+                "lightsail:CreateInstances",
+                "lightsail:CreateInstancesFromSnapshot",
+                "lightsail:AllocateStaticIp"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

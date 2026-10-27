@@ -83,6 +83,35 @@ class LightsailDeployScriptTest {
         assertTrue(backup.contains("gzip -t"));
     }
 
+    @Test
+    void awsCliPolicyCannotCreateAnythingOutsideSeoulLightsail() throws Exception {
+        String policy = read(DIR.resolve("aws/iam-policy-sc1hub-cli.json"));
+        String lock = read(DIR.resolve("aws/iam-policy-lock-after-create.json"));
+
+        assertTrue(policy.contains("\"aws:RequestedRegion\": \"ap-northeast-2\""));
+        assertFalse(policy.contains("\"lightsail:*\""));
+        assertFalse(policy.contains("\"*:*\""));
+        assertFalse(policy.contains("ec2:Run"));
+        assertFalse(policy.contains("iam:Create"));
+        assertTrue(policy.contains("arn:aws:budgets::*:budget/sc1hub-monthly"));
+        assertTrue(lock.contains("\"Effect\": \"Deny\""));
+        assertTrue(lock.contains("lightsail:CreateInstances\""));
+    }
+
+    @Test
+    void billingCheckUsesFreeBudgetApiAndFlagsIdleCharges() throws Exception {
+        String check = read(Paths.get("scripts/aws-billing-check.sh"));
+        String budget = read(Paths.get("scripts/aws-budget-setup.sh"));
+
+        // Cost Explorer API calls cost $0.01 each; Budgets reads are free.
+        assertFalse(check.contains("aws ce "));
+        assertTrue(check.contains("aws budgets describe-budget"));
+        assertTrue(check.contains("is unattached"));
+        assertTrue(check.contains("a stopped instance is still billed"));
+        assertTrue(budget.contains("[[\"ACTUAL\", 80], [\"ACTUAL\", 100], [\"FORECASTED\", 100]]"));
+        assertTrue(budget.contains("SC1HUB_BUDGET_LIMIT_USD:-10"));
+    }
+
     private String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }

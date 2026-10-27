@@ -1,0 +1,54 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "LightsailWritesInSeoulOnly",
+            "Effect": "Allow",
+            "Action": [
+                "lightsail:CreateInstances",
+                "lightsail:ImportKeyPair",
+                "lightsail:AllocateStaticIp",
+                "lightsail:AttachStaticIp",
+                "lightsail:PutInstancePublicPorts",
+                "lightsail:OpenInstancePublicPorts",
+                "lightsail:CloseInstancePublicPorts",
+                "lightsail:StartInstance",
+                "lightsail:StopInstance",
+                "lightsail:RebootInstance",
+                "lightsail:CreateInstanceSnapshot",
+                "lightsail:DeleteInstanceSnapshot",
+                "lightsail:TagResource"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "aws:RequestedRegion": "ap-northeast-2"
+                }
+            }
+        },
+        {
+            "Sid": "ReadEverywhereForBillingCheck",
+            "Effect": "Allow",
+            "Action": [
+                "lightsail:Get*",
+                "ec2:DescribeRegions",
+                "ec2:DescribeInstances",
+                "ec2:DescribeVolumes",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeNatGateways",
+                "ec2:DescribeSnapshots",
+                "rds:DescribeDBInstances",
+                "budgets:ViewBudget",
+                "iam:GetAccountSummary",
+                "sts:GetCallerIdentity"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ManageTheSc1hubBudgetOnly",
+            "Effect": "Allow",
+            "Action": "budgets:ModifyBudget",
+            "Resource": "arn:aws:budgets::*:budget/sc1hub-monthly"
+        }
+    ]
+}

@@ -61,6 +61,22 @@
 - `scripts/aws-billing-check.sh`: 모든 리전의 Lightsail 인스턴스·고정 IP·스냅샷·디스크와 EC2 잔재, 이번 달 누적 금액을 한 번에 보여 준다. 월 1회 실행.
 - 액세스 키는 저장소에 넣지 않는다. `aws configure`는 사용자가 직접 입력한다.
 
+### 6-1. 준비해 둔 파일과 가입 후 순서 (10/27 작성, AWS 없이 스텁으로만 검증)
+
+| 파일 | 내용 |
+|---|---|
+| `deploy/lightsail/aws/iam-policy-sc1hub-cli.json` | CLI 사용자 권한. 쓰기는 **서울 리전 Lightsail의 인스턴스·고정 IP·방화벽·키·스냅샷만**. 삭제 권한은 일부러 뺐다(삭제는 콘솔에서). 나머지는 과금 점검용 읽기와 `sc1hub-monthly` 예산 관리뿐. EC2·RDS·IAM 생성은 불가 |
+| `deploy/lightsail/aws/iam-policy-lock-after-create.json` | 인스턴스를 만든 뒤 붙이는 Deny 정책. 인스턴스·고정 IP 추가 생성을 막는다 |
+| `scripts/aws-budget-setup.sh <메일>` | 월 $10 예산 + 실제 80%·100%, 예상 100% 메일 알림. 이미 있으면 건드리지 않는다 |
+| `scripts/aws-billing-check.sh` | 루트 MFA, 예산 대비 금액, 전 리전 Lightsail·EC2·RDS 잔재 점검. "서울 sc1hub 인스턴스 1개 + 붙어 있는 고정 IP 1개" 외에는 전부 경고, 경고가 있으면 종료 코드 2. 비용은 무료인 Budgets API로만 읽는다(Cost Explorer API는 요청당 $0.01) |
+
+가입 후 순서:
+1. (사용자, 루트) 가입·카드 → 루트 MFA → IAM에서 사용자 `sc1hub-cli` 생성(콘솔 접근 없음) → 인라인 정책으로 `iam-policy-sc1hub-cli.json` 내용 붙여 넣기 → 액세스 키 발급 → Mac에서 `aws configure`(리전 `ap-northeast-2`). 루트 액세스 키는 만들지 않는다.
+2. (나) `scripts/aws-budget-setup.sh <메일>` → 알림 구독 확인 메일이 오면 사용자가 승인. 권한 오류가 나면 루트 계정 설정의 "IAM 사용자의 결제 정보 액세스"를 켠다.
+3. (나) `scripts/aws-billing-check.sh`로 빈 계정 상태 확인.
+4. (나) 인스턴스·고정 IP 생성 후 (사용자) `iam-policy-lock-after-create.json`을 같은 사용자에 두 번째 인라인 정책으로 추가.
+5. 이후 월 1회 `aws-billing-check.sh`.
+
 ## 7. 일정
 
 ### 1단계: 준비 (10/22~10/25)
