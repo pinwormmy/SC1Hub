@@ -66,10 +66,18 @@ else
     warn "budget '$BUDGET_NAME' not found — run scripts/aws-budget-setup.sh <email>"
 fi
 
+# Opt-in regions the account has not enabled reject every call and cannot hold resources, so only enabled ones are checked.
+ENABLED_REGIONS="$(aws ec2 describe-regions --region "$HOME_REGION" --query 'Regions[].RegionName' --output text | tr '\t' ' ')"
+
 echo
-echo "== Lightsail (all regions)"
+echo "== Lightsail (all enabled regions)"
 found_instance=0
+skipped=()
 for region in $(aws lightsail get-regions --region "$HOME_REGION" --query 'regions[].name' --output text); do
+    if [[ " $ENABLED_REGIONS " != *" $region "* ]]; then
+        skipped+=("$region")
+        continue
+    fi
     while IFS=$'\t' read -r name bundle state autosnap; do
         [[ -z "$name" ]] && continue
         echo "  $region instance $name ($bundle, $state, auto-snapshot $autosnap)"
@@ -111,10 +119,11 @@ for region in $(aws lightsail get-regions --region "$HOME_REGION" --query 'regio
     )
 done
 [[ "$found_instance" == "1" ]] || echo "  (no $INSTANCE_NAME instance in $HOME_REGION yet)"
+[[ ${#skipped[@]} -eq 0 ]] || echo "  (not enabled for this account, skipped: ${skipped[*]})"
 
 echo
 echo "== EC2 / RDS (all enabled regions, should be empty)"
-for region in $(aws ec2 describe-regions --region "$HOME_REGION" --query 'Regions[].RegionName' --output text); do
+for region in $ENABLED_REGIONS; do
     while IFS= read -r line; do
         [[ -n "$line" ]] && warn "$region $line"
     done < <(
@@ -128,9 +137,13 @@ for region in $(aws ec2 describe-regions --region "$HOME_REGION" --query 'Region
     )
 done
 
-while IFS= read -r line; do
-    warn "$line"
-done <"$DENIED_LOG"
+if [[ -s "$DENIED_LOG" ]]; then
+    echo
+    echo "== Access problems"
+    while IFS= read -r line; do
+        warn "$line"
+    done <"$DENIED_LOG"
+fi
 
 echo
 if [[ "$warnings" -eq 0 ]]; then

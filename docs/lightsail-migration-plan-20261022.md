@@ -37,7 +37,7 @@
 
 ## 4. 코드·빌드에서 바뀌는 것 (최소)
 
-1. `build.gradle`의 `ext['tomcat.version'] = '10.0.27'` → 10.1.x. 미리 컴파일한 JSP 클래스가 Jasper 런타임 버전에 묶일 수 있어 리허설로 확인했고, 10.0 빌드와 10.1 빌드 모두 Tomcat 10.1에서 정상이었다(8-1절). Boot 3.1의 기본값이 원래 10.1이라 고정만 푸는 셈이다. 이 변경은 카페24(10.0)에서는 동작을 보장하지 않으므로 **전환 직전까지 main에 넣지 않는다.**
+1. `build.gradle`의 `ext['tomcat.version'] = '10.0.27'` → 10.1.x. 미리 컴파일한 JSP 클래스가 Jasper 런타임 버전에 묶일 수 있어 리허설로 확인했고, 10.0 빌드와 10.1 빌드 모두 Tomcat 10.1에서 정상이었다(8-1절). Boot 3.1의 기본값이 원래 10.1이라 고정만 푸는 셈이다. 이 변경은 카페24(10.0)에서는 동작을 보장하지 않으므로 **전환이 안정된 뒤 일반 배포로 넣는다**(11/3 결정). 그때까지는 10.0 빌드 WAR를 Tomcat 10.1에서 그대로 쓴다(8-1절 A). 전환 새벽에 바뀌는 것이 하나 줄고, 카페24 되돌리기용 WAR를 따로 둘 필요가 없다.
 2. `deploy.sh`: Tomcat 10.0 사전 점검을 10.1로 바꾸고, 대상 호스트·재시작 방식(systemd)을 새 서버에 맞춘다. 카페24 전용 단계(setenv.sh 덧붙이기, OOM 복구 스크립트)는 정리한다. **배포 게이트(`origin/main`에 있는 커밋만 배포)는 유지한다.**
 3. 나머지 Java 코드와 JSP는 바꾸지 않는다.
 
@@ -69,6 +69,8 @@
 | `deploy/lightsail/aws/iam-policy-lock-after-create.json` | 인스턴스를 만든 뒤 붙이는 Deny 정책. 인스턴스·고정 IP 추가 생성을 막는다 |
 | `scripts/aws-budget-setup.sh <메일>` | 월 $10 예산 + 실제 80%·100%, 예상 100% 메일 알림. 이미 있으면 건드리지 않는다 |
 | `scripts/aws-billing-check.sh` | 루트 MFA, 예산 대비 금액, 전 리전 Lightsail·EC2·RDS 잔재 점검. "서울 sc1hub 인스턴스 1개 + 붙어 있는 고정 IP 1개" 외에는 전부 경고, 경고가 있으면 종료 코드 2. 비용은 무료인 Budgets API로만 읽는다(Cost Explorer API는 요청당 $0.01) |
+
+가입은 반드시 **"Sign up for AWS (advanced)"**(`signup?request_type=register`)로 한다. "Sign up for AWS (new)"나 구글 로그인으로 만든 계정은 주소가 한국이면 리전이 시드니로 고정되어 서울을 쓸 수 없다(10/30 확인).
 
 가입 후 순서:
 1. (사용자, 루트) 가입·카드 → 루트 MFA → IAM에서 사용자 `sc1hub-cli` 생성(콘솔 접근 없음) → 인라인 정책으로 `iam-policy-sc1hub-cli.json` 내용 붙여 넣기 → 액세스 키 발급 → Mac에서 `aws configure`(리전 `ap-northeast-2`). 루트 액세스 키는 만들지 않는다.
@@ -119,6 +121,13 @@
 7. 백업 스크립트 첫 실행, Google Drive에서 확인.
 8. 과금 점검 스크립트 실행, 예산 알림 설정 확인.
 
+진행 기록 (11/3):
+- 계정 `sc1hub`(171178671508): 루트 MFA, IAM `sc1hub-cli`에 인라인 정책 2개(쓰기 정책, 생성 후 잠금), 예산 `sc1hub-monthly` $10, 과금 점검 통과. 계정에서 켜지 않은 옵트인 리전 4곳은 모든 호출을 거부하므로 점검에서 건너뛴다.
+- 인스턴스 `sc1hub`(`micro_3_0`, ap-northeast-2a), 고정 IP `sc1hub-ip` 3.34.22.112, 방화벽 22·80·443. SSH 별칭 `sc1hub-lightsail`(키 로그인만).
+- `provision.sh` 실서버 실행 통과: OpenJDK 17.0.20, MariaDB 10.11.14, nginx 1.24, Tomcat 10.1.61.
+- 데이터 리허설 복사: 설정 원본은 서버 `config/application-online.properties.cafe24`에 두고, 활성 설정은 봇 자동 발행·RAG 자동 갱신·AI 실제 호출을 끈다(전환 때 원본으로 되돌림). DB 덤프(utf8mb4) 복원 후 71개 테이블 행 수 일치, 이미지 356개, RAG 인덱스 해시 일치.
+- Let's Encrypt 인증서(sc1hub.com, www.sc1hub.com) 발급, 만료 2027-02-01, 갱신 dry-run 통과.
+
 ### 4단계: 전환 (11/3~11/5 중 하루, 새벽 4시 전후)
 
 1. 전날: Cloudflare에서 A 레코드 TTL을 300초로 낮춘다.
@@ -168,7 +177,7 @@
 | 보안 헤더·쿠키 | HSTS, CSP, X-Frame-Options, nosniff 정상. 세션 쿠키 `Secure; HttpOnly; SameSite=Lax` (Tomcat 10.1에서도 context.xml CookieProcessor 동작) |
 | 메모리 | JVM `-Xmx256m -XX:MaxMetaspaceSize=192m`에서 힙 약 90MB, Metaspace 59MB, 프로세스 RSS 약 200MB. 1GB 서버에 충분 |
 
-**결론**: 지금 WAR 그대로도 Tomcat 10.1에서 동작하고, 10.1로 다시 빌드해도 문제없다. 전환 커밋에서 `tomcat.version`을 10.1로 올리고, 카페24 되돌리기용으로는 10.0으로 빌드한 WAR를 따로 보관한다.
+**결론**: 지금 WAR 그대로도 Tomcat 10.1에서 동작하고, 10.1로 다시 빌드해도 문제없다. 전환은 10.0 빌드 WAR로 하고, `tomcat.version`은 전환이 안정된 뒤 10.1로 올린다(4절, 11/3 결정).
 
 **남은 리허설**: nginx 설정 문법 검사(`nginx -t`)와 실제 TLS 경유 확인, 세션 로그인(브라우저), 메일 발송. 서버 구성 스크립트를 쓴 뒤 새 서버에서 진행한다.
 
@@ -195,7 +204,7 @@
 
 | 항목 | 금액 |
 |---|---|
-| 라이트세일 $7 번들 | 약 10,200원/월 (부가세 포함 추정, 환율 1,325원 기준). 신규 계정은 처음 3개월 무료 |
+| 라이트세일 $7 번들 | 약 10,200원/월 (부가세 포함 추정, 환율 1,325원 기준). 첫 달부터 과금: 과거 AWS 계정과 연결돼 신규 크레딧 대상이 아니고(10/30 가입 화면), 3개월 무료는 현재 공식 페이지에 없다 |
 | 도메인 (Cloudflare) | 약 $11/년 |
 | 인증서 | 0원 (Let's Encrypt) |
 | 백업 | 0원 (Google Drive 기존 용량) |

@@ -108,6 +108,8 @@ class LightsailDeployScriptTest {
         assertTrue(check.contains("aws budgets describe-budget"));
         assertTrue(check.contains("is unattached"));
         assertTrue(check.contains("a stopped instance is still billed"));
+        // Opt-in regions the account has not enabled reject every call; they are skipped, not reported as denials.
+        assertTrue(check.contains("not enabled for this account, skipped"));
         assertTrue(budget.contains("[[\"ACTUAL\", 80], [\"ACTUAL\", 100], [\"FORECASTED\", 100]]"));
         assertTrue(budget.contains("SC1HUB_BUDGET_LIMIT_USD:-10"));
     }
