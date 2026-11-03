@@ -104,9 +104,10 @@ if [[ ! -d "$TOMCAT_DIR" ]]; then
   [[ -n "$expected" && "$expected" == "$actual" ]] || die "SHA-512 mismatch for $name"
   mkdir -p "$TOMCAT_ROOT"
   tar -xzf "$work/$name" -C "$TOMCAT_ROOT"
-  chown -R root:root "$TOMCAT_DIR"
-  chmod -R go-w "$TOMCAT_DIR"
 fi
+# The tarball ships bin/ and lib/ as owner-only; the service account runs Tomcat but must not rewrite it.
+chown -R root:"$APP_USER" "$TOMCAT_DIR"
+chmod -R u=rwX,g=rX,o= "$TOMCAT_DIR"
 ln -sfn "$TOMCAT_DIR" "$TOMCAT_ROOT/current"
 
 for file in catalina.properties context.xml logging.properties web.xml; do

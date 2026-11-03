@@ -51,6 +51,9 @@ class LightsailDeployScriptTest {
         assertTrue(provision.contains("-Duser.timezone=Asia/Seoul"));
         assertTrue(provision.contains("-XX:+ExitOnOutOfMemoryError"));
         assertTrue(provision.contains("SHA-512 mismatch"));
+        // The tarball's bin/ and lib/ are owner-only, so the service account needs group read access.
+        assertTrue(provision.contains("chown -R root:\"$APP_USER\" \"$TOMCAT_DIR\""));
+        assertTrue(provision.contains("chmod -R u=rwX,g=rX,o= \"$TOMCAT_DIR\""));
         assertTrue(provision.contains("CERTBOT_AGREE_TOS:-}\" == \"yes\""));
         assertTrue(provision.contains("APT::Periodic::Unattended-Upgrade \"1\";"));
     }
