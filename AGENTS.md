@@ -32,9 +32,10 @@
 - Run `./gradlew clean build` from the exact `main` commit intended for release. Push `main` only after this final verification succeeds. By default, deploy only a commit already contained in `origin/main`.
 - A push request includes the prerequisite `main` commit; a deploy request includes the prerequisite `main` commit and push. Deploy only the resulting commit already contained in `origin/main`; if that sequence cannot be preserved, stop and report the divergence instead of deploying an unpushed or unintegrated commit.
 - After deployment, verify both the server health check and the public application endpoint. Report the deployed commit SHA and verification result.
-- Until the Lightsail cutover in `docs/lightsail-migration-plan-20261022.md`, production stays on Cafe24 and releases use `deploy.sh`. `deploy-lightsail.sh` targets the new AWS Lightsail host (`deploy/lightsail/`) and enforces this gate itself: it refuses to run when tracked files have uncommitted changes or `HEAD` is not contained in `origin/main`, then builds, deploys, verifies, and rolls back on failure.
+- Since the 2026-11-04 cutover (`docs/lightsail-migration-plan-20261022.md`), production runs on the AWS Lightsail host (`deploy/lightsail/`, SSH alias `sc1hub-lightsail`) and releases use `deploy-lightsail.sh`. It enforces this gate itself: it refuses to run when tracked files have uncommitted changes or `HEAD` is not contained in `origin/main`, then builds, deploys, verifies, and rolls back on failure.
+- `deploy.sh` targets the retired Cafe24 host, whose Tomcat is stopped and kept only as a fallback until the hosting expires on 2026-11-23. Do not use it for releases.
 - If unrelated uncommitted changes block a release, report them and ask the developer how to proceed. Never stash, discard, or commit them to get past the gate.
-- `ALLOW_UNRELEASED_COMMIT=true` is only for pre-cutover rehearsal deploys to the Lightsail host while it serves no public traffic. Never use it for a production release.
+- `ALLOW_UNRELEASED_COMMIT=true` existed only for pre-cutover rehearsal deploys while the Lightsail host served no public traffic. The host now serves production, so never use it.
 
 ## Assistant-Bot Diagnostics
 

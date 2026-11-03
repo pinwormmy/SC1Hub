@@ -49,7 +49,7 @@ cp src/main/resources/application-local.example.properties src/main/resources/ap
 
 서버는 `http://localhost:8082`에서 실행됩니다.
 
-운영 배포는 `deploy.sh`가 Tomcat `setenv.sh`에 `SPRING_PROFILES_ACTIVE=online` 기본값을 보장합니다. 로컬/운영 전환을 위해 `application.properties` 마지막 줄을 수동으로 바꾸지 않습니다.
+운영(2026-11-04부터 AWS 라이트세일)은 `deploy/lightsail/provision.sh`가 만든 Tomcat `setenv.sh`가 `SPRING_PROFILES_ACTIVE=online`을 지정하고, 배포는 `deploy-lightsail.sh`로 합니다. `deploy.sh`는 은퇴한 카페24 호스트용입니다. 로컬/운영 전환을 위해 `application.properties` 마지막 줄을 수동으로 바꾸지 않습니다.
 
 ### 로컬 샘플 데이터
 
