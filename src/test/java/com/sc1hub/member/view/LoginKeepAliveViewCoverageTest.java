@@ -176,6 +176,7 @@ class LoginKeepAliveViewCoverageTest {
         assertTrue(insertAdStart >= 0);
         assertTrue(insertAdEnd > insertAdStart);
         assertTrue(insertAdSource.contains("currentAdSrc = adSrc"));
+        assertTrue(insertAdSource.contains("'&subId=' + encodeURIComponent(config.subId)"));
         assertTrue(insertAdSource.contains("observePendingChatAd();"));
         assertFalse(insertAdSource.contains("document.createElement('iframe')"));
         assertFalse(insertAdSource.contains("iframeEl.src = adSrc"));
@@ -202,6 +203,9 @@ class LoginKeepAliveViewCoverageTest {
 
         assertFalse(source.contains("ads-partners.coupang.com/g.js"));
         assertTrue(source.contains("https://ads-partners.coupang.com/widgets.html"));
+        assertTrue(source.contains("<c:set var=\"coupangDynamicSubId\" value=\"sc1hubpost\" />"));
+        assertTrue(source.contains("'&subId=' + encodeURIComponent(containerEl.dataset.subId || '')"));
+        assertFalse(source.contains("&subId=&"));
         assertTrue(source.contains("window.addEventListener('load'"));
         assertTrue(source.contains("IntersectionObserver"));
         assertTrue(source.contains("!pageLoaded || !nearViewport"));

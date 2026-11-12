@@ -6,8 +6,10 @@
     발급된 스크립트의 id 숫자와 trackingCode(AF로 시작) 값을 아래에 입력하면 활성화된다.
     PC용 id와 trackingCode가 비어 있는 동안에는 아무것도 렌더링하지 않는다.
     모바일용 id가 비어 있으면 모바일에서도 PC용 배너를 사용한다.
+    subId는 파트너스 관리페이지 > 마이 페이지 > 채널 아이디 관리에 등록된 값만 넣는다(미등록 값은 실적 누락 위험).
 --%>
 <c:set var="coupangDynamicTrackingCode" value="AF8324470" />
+<c:set var="coupangDynamicSubId" value="sc1hubpost" />
 <c:set var="coupangDynamicPcId" value="1002422" />
 <c:set var="coupangDynamicPcWidth" value="680" />
 <c:set var="coupangDynamicPcHeight" value="140" />
@@ -46,7 +48,8 @@
      data-mobile-id="${coupangDynamicMobileId}"
      data-mobile-width="${coupangDynamicMobileWidth}"
      data-mobile-height="${coupangDynamicMobileHeight}"
-     data-tracking-code="${coupangDynamicTrackingCode}">
+     data-tracking-code="${coupangDynamicTrackingCode}"
+     data-sub-id="${coupangDynamicSubId}">
     <div class="coupang-dynamic-ad-frame"></div>
     <div class="coupang-banner-text">
         <p>사이트 내 쿠팡 배너는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
@@ -81,7 +84,8 @@
                     + '?id=' + encodeURIComponent(id)
                     + '&template=carousel'
                     + '&trackingCode=' + encodeURIComponent(containerEl.dataset.trackingCode)
-                    + '&subId=&width=' + encodeURIComponent(width)
+                    + '&subId=' + encodeURIComponent(containerEl.dataset.subId || '')
+                    + '&width=' + encodeURIComponent(width)
                     + '&height=' + encodeURIComponent(height)
                     + '&tsource=';
 

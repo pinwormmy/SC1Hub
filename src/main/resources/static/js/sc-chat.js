@@ -79,6 +79,7 @@
         const useMobile = metaEl.dataset.mobileId && window.matchMedia('(max-width: 768px)').matches;
         return {
             trackingCode: metaEl.dataset.trackingCode,
+            subId: metaEl.dataset.subId || '',
             id: useMobile ? metaEl.dataset.mobileId : metaEl.dataset.pcId,
             width: Number.parseInt((useMobile ? metaEl.dataset.mobileWidth : metaEl.dataset.pcWidth) || '680', 10),
             height: Number.parseInt((useMobile ? metaEl.dataset.mobileHeight : metaEl.dataset.pcHeight) || '140', 10),
@@ -195,7 +196,8 @@
             + '?id=' + encodeURIComponent(config.id)
             + '&template=carousel'
             + '&trackingCode=' + encodeURIComponent(config.trackingCode)
-            + '&subId=&width=' + config.width + '&height=' + config.height + '&tsource=';
+            + '&subId=' + encodeURIComponent(config.subId)
+            + '&width=' + config.width + '&height=' + config.height + '&tsource=';
         lineEl.dataset.adWidth = String(config.width);
         lineEl.dataset.adHeight = String(config.height);
 
