@@ -4,6 +4,7 @@ import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.board.support.InvalidBoardException;
 import com.sc1hub.common.dto.PageDTO;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -37,6 +39,21 @@ class GlobalExceptionHandlerTest {
 
         assertEquals("alert", view);
         assertEquals(HttpServletResponse.SC_NOT_FOUND, response.getStatus());
+        assertEquals("noindex,nofollow,noarchive", model.get("robots"));
+    }
+
+    @Test
+    void noResourceFound_returns404AndPreventsIndexing() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = handler.handleNoResourceFoundException(
+                new NoResourceFoundException(HttpMethod.GET, "missing.ico"), model, response);
+
+        assertEquals("alert", view);
+        assertEquals(HttpServletResponse.SC_NOT_FOUND, response.getStatus());
+        assertEquals("noindex,nofollow,noarchive", response.getHeader("X-Robots-Tag"));
         assertEquals("noindex,nofollow,noarchive", model.get("robots"));
     }
 

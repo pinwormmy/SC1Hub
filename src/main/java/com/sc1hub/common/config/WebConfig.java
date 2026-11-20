@@ -7,13 +7,16 @@ import com.sc1hub.common.interceptor.MemberLoginInterceptor;
 import com.sc1hub.common.interceptor.VisitorCountInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.resource.PathResourceResolver;
 import org.springframework.web.util.pattern.PathPatternParser;
 import org.springframework.web.util.pattern.PatternParseException;
 
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 @Configuration(proxyBeanMethods = false)
@@ -52,8 +55,15 @@ public class WebConfig implements WebMvcConfigurer {
         CacheControl staticAssetCache = CacheControl.maxAge(30, TimeUnit.DAYS)
                 .cachePublic();
         registry.addResourceHandler("/favicon.ico")
-                .addResourceLocations("classpath:/static/favicon.ico")
-                .setCacheControl(staticAssetCache);
+                .addResourceLocations("classpath:/static/")
+                .setCacheControl(staticAssetCache)
+                .resourceChain(true)
+                .addResolver(new PathResourceResolver() {
+                    @Override
+                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                        return super.getResource("favicon.ico", location);
+                    }
+                });
         registry.addResourceHandler("/images/**")
                 .addResourceLocations("classpath:/static/images/")
                 .setCacheControl(staticAssetCache);

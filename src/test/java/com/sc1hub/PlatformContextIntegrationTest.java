@@ -3,15 +3,22 @@ package com.sc1hub;
 import org.junit.jupiter.api.Test;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
 import org.mybatis.spring.boot.autoconfigure.MybatisProperties;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:sc1hub;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -37,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "sc1hub.security.legacy-password-migration-enabled=false"
 })
 @ActiveProfiles("test")
+@AutoConfigureMockMvc
 class PlatformContextIntegrationTest {
 
     @Autowired
@@ -51,6 +59,9 @@ class PlatformContextIntegrationTest {
     @Autowired
     private Environment environment;
 
+    @Autowired
+    private MockMvc mockMvc;
+
     @Test
     void applicationContextStartsOnTheUpgradedPlatform() {
         assertNotNull(applicationContext.getBean(SC1HubApplication.class));
@@ -62,5 +73,18 @@ class PlatformContextIntegrationTest {
                 "MyBatis mapper resources must resolve from the configured classpath pattern");
         assertTrue(sqlSessionFactory.getConfiguration().hasStatement(
                 "com.sc1hub.chat.mapper.ChatMapper.selectMaxId", false));
+    }
+
+    @Test
+    void faviconIsServedWithCacheControlAndMissingStaticReturns404() throws Exception {
+        MvcResult favicon = mockMvc.perform(get("/favicon.ico"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=2592000")))
+                .andReturn();
+        assertTrue(favicon.getResponse().getContentAsByteArray().length > 0);
+
+        mockMvc.perform(get("/definitely-missing-static-path-test"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("X-Robots-Tag", "noindex,nofollow,noarchive"));
     }
 }

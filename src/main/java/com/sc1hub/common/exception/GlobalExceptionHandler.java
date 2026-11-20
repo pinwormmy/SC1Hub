@@ -9,6 +9,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.nio.file.AccessDeniedException;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +26,16 @@ public class GlobalExceptionHandler {
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         log.warn("ResourceNotFoundException: {}", e.getMessage());
         prepareErrorModel(model, e.getMessage(), "/");
+        return "alert";
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public String handleNoResourceFoundException(NoResourceFoundException e, Model model,
+                                                 HttpServletResponse response) {
+        response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        response.setHeader("X-Robots-Tag", ERROR_ROBOTS);
+        log.warn("NoResourceFoundException: {}", e.getResourcePath());
+        prepareErrorModel(model, "요청하신 페이지를 찾을 수 없습니다.", "/");
         return "alert";
     }
 
