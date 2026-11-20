@@ -28,7 +28,6 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -242,7 +241,7 @@ public class BoardController {
         boardTitle = normalizeBoardTitle(boardTitle);
         HttpSession session = request.getSession();
         MemberDTO member = getMember(session);
-        BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
+        BoardDTO existingPost = boardService.readPostRaw(boardTitle, post.getPostNum());
         if (existingPost == null) {
             redirectAttributes.addFlashAttribute("msg", "존재하지 않는 게시글입니다.");
             return "redirect:/boards/" + boardTitle;
@@ -287,7 +286,7 @@ public class BoardController {
             HttpServletRequest request) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         Map<String, Object> response = new HashMap<>();
-        BoardDTO post = boardService.readPost(boardTitle, postNum);
+        BoardDTO post = boardService.readPostRaw(boardTitle, postNum);
         if (!isGuestWritableBoard(boardTitle) || !isGuestPost(post)) {
             response.put("valid", false);
             response.put("message", "존재하지 않는 게시글입니다.");
@@ -319,7 +318,7 @@ public class BoardController {
     public String modifyPost(@PathVariable String boardTitle, Model model, int postNum,
             HttpSession session) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        BoardDTO post = boardService.readPost(boardTitle, postNum);
+        BoardDTO post = boardService.readPostRaw(boardTitle, postNum);
         if (post == null) {
             model.addAttribute("msg", "존재하지 않는 게시글입니다.");
             model.addAttribute("url", "/boards/" + boardTitle);
@@ -346,7 +345,7 @@ public class BoardController {
         boardTitle = normalizeBoardTitle(boardTitle);
         HttpSession session = request.getSession();
         MemberDTO member = getMember(session);
-        BoardDTO existingPost = boardService.readPost(boardTitle, post.getPostNum());
+        BoardDTO existingPost = boardService.readPostRaw(boardTitle, post.getPostNum());
         if (existingPost == null) {
             model.addAttribute("msg", "존재하지 않는 게시글입니다.");
             model.addAttribute("url", "/boards/" + boardTitle);
@@ -433,11 +432,21 @@ public class BoardController {
 
     @PostMapping("/{boardTitle}/showCommentList")
     @ResponseBody
-    public List<CommentDTO> showCommentList(@PathVariable String boardTitle, @RequestBody PageDTO page,
+    public List<CommentDTO> showCommentList(@PathVariable String boardTitle, @RequestBody(required = false) PageDTO page,
             @SessionAttribute(name = "member", required = false) MemberDTO member)
             throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        List<CommentDTO> comments = boardService.showCommentList(boardTitle, page);
+        PageDTO target = page == null ? new PageDTO() : page;
+        if (target.getPostBeginPoint() < 0) {
+            target.setPostBeginPoint(0);
+        }
+        int limit = target.getDisplayPostLimit();
+        if (limit <= 0) {
+            target.setDisplayPostLimit(15);
+        } else if (limit > 100) {
+            target.setDisplayPostLimit(100);
+        }
+        List<CommentDTO> comments = boardService.showCommentList(boardTitle, target);
         applyCommentPermissions(comments, member);
         return comments;
     }
@@ -470,13 +479,6 @@ public class BoardController {
         } catch (IllegalArgumentException e) {
             return commentResponse(HttpStatus.NOT_FOUND, "존재하지 않는 댓글입니다.");
         }
-    }
-
-    @PutMapping(value = "/{boardTitle}/updateCommentCount")
-    @ResponseBody
-    public void updateCommentCount(@PathVariable String boardTitle, int postNum) throws Exception {
-        boardTitle = normalizeBoardTitle(boardTitle);
-        boardService.updateCommentCount(boardTitle, postNum);
     }
 
     @PostMapping("/{boardTitle}/addRecommendation")
@@ -553,9 +555,9 @@ public class BoardController {
             @RequestParam("postNum") int postNum) {
         try {
             boardTitle = normalizeBoardTitle(boardTitle);
-            log.info("getRecommendCount 요청 받음. postNum: {}", postNum);
+            log.debug("getRecommendCount 요청 받음. postNum: {}", postNum);
             int recommendCount = boardService.getRecommendCount(boardTitle, postNum);
-            log.info("게시글 번호 {}의 추천 수: {}", postNum, recommendCount);
+            log.debug("게시글 번호 {}의 추천 수: {}", postNum, recommendCount);
             return new ResponseEntity<>(recommendCount, HttpStatus.OK);
         } catch (Exception e) {
             log.error("추천 수 조회 중 오류 발생", e);
@@ -566,8 +568,17 @@ public class BoardController {
     @PostMapping("/{boardTitle}/movePost")
     public String movePost(@PathVariable String boardTitle, @RequestBody Map<String, Object> payload) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        int postNum = (int) payload.get("postNum");
-        String targetBoardTitle = normalizeBoardTitle((String) payload.get("moveToBoard"));
+        Object rawPostNum = payload == null ? null : payload.get("postNum");
+        int postNum;
+        if (rawPostNum instanceof Number number) {
+            postNum = number.intValue();
+        } else if (rawPostNum instanceof String text) {
+            postNum = Integer.parseInt(text.trim());
+        } else {
+            throw new IllegalArgumentException("이동할 게시글 번호가 올바르지 않습니다.");
+        }
+        Object rawMoveToBoard = payload.get("moveToBoard");
+        String targetBoardTitle = normalizeBoardTitle(rawMoveToBoard instanceof String s ? s : null);
         log.debug("게시글 이동 기능 {} {}", postNum, targetBoardTitle);
 
         boardService.movePost(boardTitle, postNum, targetBoardTitle);

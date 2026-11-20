@@ -26,6 +26,7 @@ import jakarta.servlet.http.HttpSession;
 public class AssistantController {
 
     private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
+    private static final int MAX_MESSAGE_LENGTH = 1000;
 
     private final AssistantService assistantService;
     private final AssistantProperties assistantProperties;
@@ -55,6 +56,10 @@ public class AssistantController {
             response.setError("질문을 입력해주세요.");
             return ResponseEntity.badRequest().body(response);
         }
+        if (message.trim().length() > MAX_MESSAGE_LENGTH) {
+            response.setError("질문은 " + MAX_MESSAGE_LENGTH + "자 이하로 입력해주세요.");
+            return ResponseEntity.badRequest().body(response);
+        }
 
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
         if (assistantProperties.isRequireLogin() && member == null) {
@@ -62,9 +67,10 @@ public class AssistantController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
 
+        String ip = httpRequest == null ? null : IpService.getRemoteIP(httpRequest);
+        String sessionId = session == null ? null : session.getId();
+        boolean consumed = false;
         try {
-            String ip = httpRequest == null ? null : IpService.getRemoteIP(httpRequest);
-            String sessionId = session == null ? null : session.getId();
             AssistantRateLimiter.RateLimitResult rateLimit = assistantRateLimiter.tryConsume(member, ip, sessionId);
 
             String userTypeLabel = resolveUserTypeLabel(member);
@@ -78,13 +84,22 @@ public class AssistantController {
                 response.setError(usageText + " - 일일 한도 초과");
                 return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(response);
             }
+            consumed = !rateLimit.isUnlimited();
 
             AssistantChatResponseDTO result = assistantService.chat(message, member);
             if (StringUtils.hasText(result.getError())) {
-                result.setUsageText(usageText);
-                result.setUsageUsed(rateLimit.getUsed());
-                result.setUsageLimit(rateLimit.isUnlimited() ? null : rateLimit.getLimit());
-                result.setUsageUnlimited(rateLimit.isUnlimited());
+                if (consumed) {
+                    assistantRateLimiter.refund(member, ip, sessionId);
+                    consumed = false;
+                }
+                int refundedUsed = rateLimit.isUnlimited() ? rateLimit.getUsed() : Math.max(0, rateLimit.getUsed() - 1);
+                AssistantRateLimiter.RateLimitResult displayLimit = rateLimit.isUnlimited()
+                        ? AssistantRateLimiter.RateLimitResult.allowedUnlimited(refundedUsed)
+                        : AssistantRateLimiter.RateLimitResult.allowed(rateLimit.getLimit(), refundedUsed);
+                result.setUsageText(buildUsageText(userTypeLabel, displayLimit));
+                result.setUsageUsed(displayLimit.getUsed());
+                result.setUsageLimit(displayLimit.isUnlimited() ? null : displayLimit.getLimit());
+                result.setUsageUnlimited(displayLimit.isUnlimited());
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result);
             }
 
@@ -94,6 +109,9 @@ public class AssistantController {
             result.setUsageUnlimited(rateLimit.isUnlimited());
             return ResponseEntity.ok(result);
         } catch (Exception e) {
+            if (consumed) {
+                assistantRateLimiter.refund(member, ip, sessionId);
+            }
             log.error("AI 응답 생성 중 오류 발생", e);
             response.setError("AI 응답 생성 중 오류가 발생했습니다.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
@@ -104,8 +122,7 @@ public class AssistantController {
         if (member == null) {
             return "비로그인 사용자";
         }
-        if (member.getGrade() == assistantProperties.getAdminGrade()
-                || (assistantProperties.getAdminId() != null && assistantProperties.getAdminId().equals(member.getId()))) {
+        if (assistantProperties.isAdmin(member)) {
             return "관리자";
         }
         return "로그인 사용자";

@@ -38,6 +38,8 @@ git fetch --quiet origin main
 COMMIT="$(git rev-parse HEAD)"
 gate_problems=()
 git diff --quiet HEAD -- || gate_problems+=("tracked files have uncommitted changes")
+untracked_build_inputs="$(git ls-files --others --exclude-standard -- src build.gradle settings.gradle deploy)"
+[[ -z "$untracked_build_inputs" ]] || gate_problems+=("untracked build input files exist under src/build/deploy")
 git merge-base --is-ancestor HEAD origin/main || gate_problems+=("HEAD $COMMIT is not contained in origin/main")
 if (( ${#gate_problems[@]} > 0 )); then
   printf 'Release gate: %s\n' "${gate_problems[@]}" >&2

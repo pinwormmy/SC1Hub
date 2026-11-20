@@ -40,6 +40,7 @@
     function render() {
         if (!Array.isArray(state.posts) || state.posts.length === 0) {
             containerEl.innerHTML = '';
+            containerEl.hidden = true;
             return;
         }
 
@@ -48,8 +49,10 @@
         const title = String(current?.title ?? '');
         if (!url) {
             containerEl.innerHTML = '';
+            containerEl.hidden = true;
             return;
         }
+        containerEl.hidden = false;
         containerEl.innerHTML = '';
         const anchorEl = document.createElement('a');
         anchorEl.className = 'sc-title-clip';
@@ -76,14 +79,25 @@
 
     function startRotation() {
         stopRotation();
-        if (!Array.isArray(state.posts) || state.posts.length <= 1) {
+        if (document.hidden || !Array.isArray(state.posts) || state.posts.length <= 1) {
             return;
         }
         state.timerId = window.setInterval(() => {
+            if (document.hidden) {
+                return;
+            }
             state.index = (state.index + 1) % state.posts.length;
             render();
         }, 3000);
     }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopRotation();
+        } else {
+            startRotation();
+        }
+    });
 
     async function load() {
         stopRotation();

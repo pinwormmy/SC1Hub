@@ -24,10 +24,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -36,13 +39,28 @@ public class BoardServiceImpl implements BoardService {
     private static final String DEFAULT_BOARD_SEARCH_TYPE = "title";
     private static final Set<String> BOARD_SEARCH_TYPES = Set.of("title", "content", "titleAndContent");
     private static final int BOARD_DISPLAY_POST_LIMIT = 15;
+    private static final int MAX_COMMENT_DISPLAY_LIMIT = 100;
     private static final int DEFAULT_PAGESET_LIMIT = 10;
+    private static final long BOARD_LIST_CACHE_TTL_MILLIS = 10L * 60L * 1000L;
+    private static final long LATEST_POSTS_CACHE_TTL_MILLIS = 30L * 1000L;
+    private static final long RECENT_POSTS_CACHE_TTL_MILLIS = 30L * 1000L;
     private static final Set<String> ADMIN_ONLY_BOARDS = new HashSet<>(Arrays.asList(
             "tvstboard", "tvszboard", "tvspboard",
             "zvstboard", "zvszboard", "zvspboard",
             "pvstboard", "pvszboard", "pvspboard",
             "teamplayguideboard", "noticeboard", "tipboard"
     ));
+
+    private final Object boardListCacheLock = new Object();
+    private volatile List<BoardListDTO> cachedBoardList;
+    private volatile Map<String, String> cachedKoreanTitles = Collections.emptyMap();
+    private volatile long cachedBoardListAtMillis;
+
+    private final Object latestPostsCacheLock = new Object();
+    private volatile List<LatestPostDTO> cachedLatestPosts;
+    private volatile long cachedLatestPostsAtMillis;
+
+    private final Map<String, CachedRecentPosts> recentPostsCache = new ConcurrentHashMap<>();
 
     private final BoardMapper boardMapper;
     private final AssistantSearchTermsService searchTermsService;
@@ -95,6 +113,7 @@ public class BoardServiceImpl implements BoardService {
             board.setGuestPassword(guestPasswordHasher.hash(board.getGuestPassword()));
         }
         boardMapper.submitPost(boardTitle, board);
+        invalidatePostReadCaches(boardTitle);
     }
 
     @Override
@@ -106,12 +125,19 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
+    public BoardDTO readPostRaw(String boardTitle, int postNum) throws Exception {
+        boardTitle = normalizeBoardTitle(boardTitle);
+        return boardMapper.readPost(boardTitle, postNum);
+    }
+
+    @Override
     public void submitModifyPost(String boardTitle, BoardDTO post) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
         preparePostForPersistence(post);
         if (boardMapper.submitModifyPost(boardTitle, post) != 1) {
             throw new IllegalStateException("게시글 수정 결과를 확인할 수 없습니다.");
         }
+        invalidatePostReadCaches(boardTitle);
     }
 
     @Override
@@ -151,6 +177,7 @@ public class BoardServiceImpl implements BoardService {
         if (boardMapper.deletePost(boardTitle, postNum) != 1) {
             throw new IllegalStateException("게시글 삭제 결과를 확인할 수 없습니다.");
         }
+        invalidatePostReadCaches(boardTitle);
     }
 
     @Override
@@ -170,12 +197,23 @@ public class BoardServiceImpl implements BoardService {
         }
         boardMapper.addComment(boardTitle, comment);
         boardMapper.updateCommentCount(boardTitle, comment.getPostNum());
+        invalidateLatestPostsCache();
     }
 
     @Override
     public List<CommentDTO> showCommentList(String boardTitle, PageDTO page) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        return boardMapper.showCommentList(boardTitle, page);
+        PageDTO target = page == null ? new PageDTO() : page;
+        if (target.getPostBeginPoint() < 0) {
+            target.setPostBeginPoint(0);
+        }
+        int limit = target.getDisplayPostLimit();
+        if (limit <= 0) {
+            target.setDisplayPostLimit(BOARD_DISPLAY_POST_LIMIT);
+        } else if (limit > MAX_COMMENT_DISPLAY_LIMIT) {
+            target.setDisplayPostLimit(MAX_COMMENT_DISPLAY_LIMIT);
+        }
+        return boardMapper.showCommentList(boardTitle, target);
     }
 
     @Override
@@ -194,6 +232,7 @@ public class BoardServiceImpl implements BoardService {
             throw new IllegalStateException("댓글 삭제 결과를 확인할 수 없습니다.");
         }
         boardMapper.updateCommentCount(boardTitle, comment.getPostNum());
+        invalidateLatestPostsCache();
     }
 
     @Override
@@ -287,7 +326,35 @@ public class BoardServiceImpl implements BoardService {
 
     @Override
     public List<BoardListDTO> getBoardList() {
-        return boardMapper.getBoardList();
+        long now = System.currentTimeMillis();
+        List<BoardListDTO> existing = cachedBoardList;
+        if (existing != null && now - cachedBoardListAtMillis < BOARD_LIST_CACHE_TTL_MILLIS) {
+            return existing;
+        }
+        synchronized (boardListCacheLock) {
+            long current = System.currentTimeMillis();
+            if (cachedBoardList != null && current - cachedBoardListAtMillis < BOARD_LIST_CACHE_TTL_MILLIS) {
+                return cachedBoardList;
+            }
+            List<BoardListDTO> loaded = boardMapper.getBoardList();
+            if (loaded == null) {
+                return Collections.emptyList();
+            }
+            List<BoardListDTO> snapshot = Collections.unmodifiableList(new ArrayList<>(loaded));
+            Map<String, String> titles = new HashMap<>();
+            for (BoardListDTO board : snapshot) {
+                if (board != null && board.getBoardTitle() != null) {
+                    String normalized = BoardTitleNormalizer.normalizeNullable(board.getBoardTitle());
+                    if (normalized != null && board.getKoreanTitle() != null) {
+                        titles.put(normalized, board.getKoreanTitle());
+                    }
+                }
+            }
+            cachedBoardList = snapshot;
+            cachedKoreanTitles = Collections.unmodifiableMap(titles);
+            cachedBoardListAtMillis = System.currentTimeMillis();
+            return snapshot;
+        }
     }
 
     @Override
@@ -295,12 +362,42 @@ public class BoardServiceImpl implements BoardService {
         if (boardTitle == null) {
             return null;
         }
-        return boardMapper.getKoreanTitle(normalizeBoardTitle(boardTitle));
+        String normalized = normalizeBoardTitle(boardTitle);
+        String cached = cachedKoreanTitles.get(normalized);
+        if (cached != null && System.currentTimeMillis() - cachedBoardListAtMillis < BOARD_LIST_CACHE_TTL_MILLIS) {
+            return cached;
+        }
+        List<BoardListDTO> boards = getBoardList();
+        if (boards != null && !boards.isEmpty()) {
+            String fromList = cachedKoreanTitles.get(normalized);
+            if (fromList != null) {
+                return fromList;
+            }
+        }
+        return boardMapper.getKoreanTitle(normalized);
     }
 
     @Override
     public List<LatestPostDTO> showLatestPosts() {
-        return boardMapper.showLatestPosts();
+        long now = System.currentTimeMillis();
+        List<LatestPostDTO> existing = cachedLatestPosts;
+        if (existing != null && now - cachedLatestPostsAtMillis < LATEST_POSTS_CACHE_TTL_MILLIS) {
+            return existing;
+        }
+        synchronized (latestPostsCacheLock) {
+            long current = System.currentTimeMillis();
+            if (cachedLatestPosts != null && current - cachedLatestPostsAtMillis < LATEST_POSTS_CACHE_TTL_MILLIS) {
+                return cachedLatestPosts;
+            }
+            List<LatestPostDTO> loaded = boardMapper.showLatestPosts();
+            if (loaded == null) {
+                return Collections.emptyList();
+            }
+            List<LatestPostDTO> snapshot = Collections.unmodifiableList(new ArrayList<>(loaded));
+            cachedLatestPosts = snapshot;
+            cachedLatestPostsAtMillis = System.currentTimeMillis();
+            return snapshot;
+        }
     }
 
     @Override
@@ -324,7 +421,36 @@ public class BoardServiceImpl implements BoardService {
             return Collections.emptyList();
         }
         boardTitle = normalizeBoardTitle(boardTitle);
-        return boardMapper.selectRecentPosts(boardTitle, limit);
+        String cacheKey = boardTitle + ":" + limit;
+        long now = System.currentTimeMillis();
+        CachedRecentPosts cached = recentPostsCache.get(cacheKey);
+        if (cached != null && now - cached.cachedAtMillis < RECENT_POSTS_CACHE_TTL_MILLIS) {
+            return cached.posts;
+        }
+        List<BoardDTO> loaded = boardMapper.selectRecentPosts(boardTitle, limit);
+        List<BoardDTO> snapshot = loaded == null
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(loaded));
+        recentPostsCache.put(cacheKey, new CachedRecentPosts(snapshot, System.currentTimeMillis()));
+        return snapshot;
+    }
+
+    private void invalidatePostReadCaches(String boardTitle) {
+        invalidateLatestPostsCache();
+        if (boardTitle != null) {
+            String prefix = boardTitle + ":";
+            recentPostsCache.keySet().removeIf(key -> key.startsWith(prefix));
+        } else {
+            recentPostsCache.clear();
+        }
+    }
+
+    private void invalidateLatestPostsCache() {
+        cachedLatestPosts = null;
+        cachedLatestPostsAtMillis = 0L;
+    }
+
+    private record CachedRecentPosts(List<BoardDTO> posts, long cachedAtMillis) {
     }
 
     @Override
@@ -402,10 +528,17 @@ public class BoardServiceImpl implements BoardService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void movePost(String boardTitle, int postNum, String targetBoardTitle) throws Exception {
         boardTitle = normalizeBoardTitle(boardTitle);
-        BoardDTO originalPost = readPost(boardTitle, postNum);
+        targetBoardTitle = normalizeBoardTitle(targetBoardTitle);
+        if (boardTitle == null || targetBoardTitle == null) {
+            throw new IllegalArgumentException("이동할 게시판이 올바르지 않습니다.");
+        }
+        if (boardTitle.equals(targetBoardTitle)) {
+            throw new IllegalArgumentException("같은 게시판으로는 이동할 수 없습니다.");
+        }
+        BoardDTO originalPost = boardMapper.readPost(boardTitle, postNum);
         if (originalPost == null) {
             throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
         }

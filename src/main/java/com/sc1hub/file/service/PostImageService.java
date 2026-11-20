@@ -2,6 +2,7 @@ package com.sc1hub.file.service;
 
 import com.sc1hub.file.dto.PostImageResponse;
 import com.sc1hub.file.util.UploadedImageFileNameUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -31,8 +32,10 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class PostImageService {
 
     static final long MAX_INPUT_BYTES = 10L * 1024L * 1024L;
@@ -68,15 +71,19 @@ public class PostImageService {
             throw new IllegalArgumentException("이미지는 10MB 이하만 업로드할 수 있습니다.");
         }
 
-        byte[] uploadBytes = upload.getBytes();
         EncodedImage encoded;
+        boolean acquired;
         try {
-            DECODE_PERMITS.acquire();
+            acquired = DECODE_PERMITS.tryAcquire(10, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("이미지 처리가 중단되었습니다.", e);
         }
+        if (!acquired) {
+            throw new IOException("이미지 처리 요청이 몰려 잠시 후 다시 시도해주세요.");
+        }
         try {
+            byte[] uploadBytes = upload.getBytes();
             DecodedImage decoded = decode(uploadBytes);
             BufferedImage resized = resizeToBounds(decoded.image);
             encoded = encodeWithinTarget(resized, decoded.format);
@@ -101,6 +108,47 @@ public class PostImageService {
         String url = prefix + "/uploadedImg/" + uid + "_" + fileName;
         return new PostImageResponse(fileName, url, encoded.mimeType,
                 encoded.image.getWidth(), encoded.image.getHeight(), encoded.bytes.length);
+    }
+
+    /**
+     * 게시글 저장 실패 시 방금 생성된 고아 업로드 이미지를 조용히 정리한다.
+     */
+    public void deleteStoredImageQuietly(String imageUrl) {
+        if (!StringUtils.hasText(imageUrl)) {
+            return;
+        }
+        int markerIndex = imageUrl.indexOf("/uploadedImg/");
+        if (markerIndex < 0) {
+            return;
+        }
+        String fileName = imageUrl.substring(markerIndex + "/uploadedImg/".length());
+        int queryIndex = fileName.indexOf('?');
+        if (queryIndex >= 0) {
+            fileName = fileName.substring(0, queryIndex);
+        }
+        int fragmentIndex = fileName.indexOf('#');
+        if (fragmentIndex >= 0) {
+            fileName = fileName.substring(0, fragmentIndex);
+        }
+        if (!StringUtils.hasText(fileName)
+                || fileName.contains("/")
+                || fileName.contains("\\")
+                || fileName.contains("..")) {
+            return;
+        }
+        Path basePath = resolvePrimaryUploadPath();
+        if (basePath == null) {
+            return;
+        }
+        Path targetPath = basePath.resolve(fileName).normalize();
+        if (!targetPath.startsWith(basePath) || !Files.isRegularFile(targetPath)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(targetPath);
+        } catch (IOException e) {
+            log.warn("임시 업로드 이미지 정리 실패: {}", fileName, e);
+        }
     }
 
     private DecodedImage decode(byte[] bytes) throws IOException {

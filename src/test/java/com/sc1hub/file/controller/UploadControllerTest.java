@@ -182,6 +182,20 @@ class UploadControllerTest {
         assertEquals("/uploadedImg/" + uid + "_" + storedFileName, response.getRedirectedUrl());
     }
 
+    @Test
+    void ckSubmit_rejectsUnsafeUidInsteadOfRedirecting() throws Exception {
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "uploadPath", tempDir.toString());
+        ReflectionTestUtils.setField(controller, "imageUploadPath", "");
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ckImgSubmit");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.ckSubmit("../logout", "test.jpg", request, response);
+
+        assertEquals(404, response.getStatus());
+    }
+
     private static String encode(String value) throws Exception {
         return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
     }

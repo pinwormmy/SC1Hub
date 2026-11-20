@@ -158,7 +158,7 @@ class BoardControllerTest {
         existing.setPostNum(9);
         existing.setWriter("주인");
         existing.setRegDate(new java.util.Date());
-        when(boardService.readPost("funboard", 9)).thenReturn(existing);
+        when(boardService.readPostRaw("funboard", 9)).thenReturn(existing);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute("member", member);
         BoardDTO edit = new BoardDTO();
@@ -291,7 +291,7 @@ class BoardControllerTest {
         session.setAttribute("authorizedGuestPostKeys", authorized);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("funboard", 7)).thenReturn(post);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(post);
         when(boardService.getKoreanTitle("funboard")).thenReturn("꿀잼놀이터");
 
         String view = boardController.modifyPost("funBoard", model, 7, session);
@@ -309,7 +309,7 @@ class BoardControllerTest {
 
         MockHttpSession session = new MockHttpSession();
         Model model = new ExtendedModelMap();
-        when(boardService.readPost("funboard", 7)).thenReturn(post);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(post);
 
         // GET 수정 화면은 더 이상 비밀번호 쿼리로 권한을 시험하지 않는다. 세션 권한이 없으면 거부.
         String view = boardController.modifyPost("funBoard", model, 7, session);
@@ -322,7 +322,7 @@ class BoardControllerTest {
         BoardDTO post = new BoardDTO();
         post.setPostNum(8);
         post.setGuestPassword(guestPasswordHasher.hash("1234"));
-        when(boardService.readPost("funboard", 8)).thenReturn(post);
+        when(boardService.readPostRaw("funboard", 8)).thenReturn(post);
 
         assertEquals(Boolean.TRUE, boardController.verifyGuestPostPassword("funBoard", 8, "1234", new MockHttpSession(),
                 new MockHttpServletRequest())
@@ -339,7 +339,7 @@ class BoardControllerTest {
         post.setGuestPassword("1234");
 
         MockHttpSession session = new MockHttpSession();
-        when(boardService.readPost("funboard", 7)).thenReturn(post);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(post);
 
         ResponseEntity<Map<String, Object>> response =
                 boardController.verifyGuestPostPassword("funBoard", 7, "1234", session,
@@ -373,7 +373,7 @@ class BoardControllerTest {
         request.setSession(session);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(existingPost);
 
         String view = boardController.submitModifyPost("funBoard", modifiedPost, request, model);
 
@@ -397,7 +397,7 @@ class BoardControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         RedirectAttributesModelMap redirectAttributes = new RedirectAttributesModelMap();
 
-        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(existingPost);
 
         String view = boardController.deletePost("funBoard", requestPost, request, redirectAttributes);
 
@@ -425,7 +425,7 @@ class BoardControllerTest {
         request.setSession(session);
         BoardDTO post = new BoardDTO();
         post.setPostNum(3);
-        when(boardService.readPost("promotionboard", 3)).thenReturn(existingPost);
+        when(boardService.readPostRaw("promotionboard", 3)).thenReturn(existingPost);
 
         String view = boardController.submitModifyPost("promotionBoard", post, request, new ExtendedModelMap());
 
@@ -453,7 +453,7 @@ class BoardControllerTest {
         request.setSession(session);
         Model model = new ExtendedModelMap();
 
-        when(boardService.readPost("promotionboard", 3)).thenReturn(existingPost);
+        when(boardService.readPostRaw("promotionboard", 3)).thenReturn(existingPost);
 
         String view = boardController.submitModifyPost("promotionBoard", post, request, model);
 
@@ -668,7 +668,7 @@ class BoardControllerTest {
         BoardDTO post = new BoardDTO();
         post.setPostNum(8);
         post.setGuestPassword(guestPasswordHasher.hash("1234"));
-        when(boardService.readPost("funboard", 8)).thenReturn(post);
+        when(boardService.readPostRaw("funboard", 8)).thenReturn(post);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Forwarded-For", "203.0.113.70");
 
@@ -698,7 +698,7 @@ class BoardControllerTest {
         existingPost.setPostNum(7);
         existingPost.setWriter("비회원작성자");
         existingPost.setGuestPassword(guestPasswordHasher.hash("1234"));
-        when(boardService.readPost("funboard", 7)).thenReturn(existingPost);
+        when(boardService.readPostRaw("funboard", 7)).thenReturn(existingPost);
 
         for (int i = 0; i < 5; i++) {
             BoardDTO attempt = new BoardDTO();

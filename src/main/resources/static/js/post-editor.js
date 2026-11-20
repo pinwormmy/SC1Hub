@@ -75,8 +75,9 @@
             return;
         }
         titleInput.value = draft.title || '';
-        surface.innerHTML = draft.html || '';
-        source.value = surface.innerHTML;
+        const sanitized = safePreviewHtml(draft.html || '');
+        surface.innerHTML = sanitized;
+        source.value = sanitized;
         draftNotice.hidden = true;
         setStatus('임시본 복원됨');
     };
@@ -380,13 +381,16 @@
 
     const safePreviewHtml = (html) => {
         const template = document.createElement('template');
-        template.innerHTML = html;
-        template.content.querySelectorAll('script, style, object, embed, form').forEach((node) => node.remove());
+        template.innerHTML = html || '';
+        template.content.querySelectorAll('script, style, object, embed, form, base, meta, link').forEach((node) => node.remove());
         template.content.querySelectorAll('*').forEach((element) => {
             Array.from(element.attributes).forEach((attribute) => {
                 const name = attribute.name.toLowerCase();
                 const value = attribute.value.trim();
-                if (name.startsWith('on') || ((name === 'href' || name === 'src') && /^javascript:/i.test(value))) {
+                const isUnsafeUrl = /^(?:javascript|vbscript|data):/i.test(value);
+                if (name.startsWith('on')
+                        || name === 'srcdoc'
+                        || ((name === 'href' || name === 'src' || name === 'xlink:href') && isUnsafeUrl)) {
                     element.removeAttribute(attribute.name);
                 }
             });
@@ -405,7 +409,7 @@
     };
 
     const syncFromSource = () => {
-        surface.innerHTML = source.value;
+        surface.innerHTML = safePreviewHtml(source.value);
     };
 
     const switchMode = (mode) => {
@@ -452,9 +456,9 @@
             syncFromSource();
         }
         const html = surface.innerHTML.trim();
-        const probe = document.createElement('div');
+        const probe = document.createElement('template');
         probe.innerHTML = html;
-        const meaningful = probe.textContent.trim() || probe.querySelector('img, iframe, table');
+        const meaningful = probe.content.textContent.trim() || probe.content.querySelector('img, iframe, table');
         if (!meaningful) {
             event.preventDefault();
             switchMode('visual');

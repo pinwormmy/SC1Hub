@@ -16,6 +16,7 @@ import com.sc1hub.assistant.rag.AssistantRagChunk;
 import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.assistant.search.AssistantQueryParseResult;
 import com.sc1hub.assistant.search.AssistantQueryParser;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -26,7 +27,6 @@ import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -35,7 +35,6 @@ public class AssistantService {
 
     private static final String ASSISTANT_MAINTENANCE_MESSAGE = "AI 채팅 기능은 현재 점검중입니다. 잠시 후 다시 이용해주세요.";
     private static final Pattern SAFE_BOARD_TITLE = Pattern.compile("^[a-z0-9_]+$");
-    private static final Pattern SOURCE_ID_PATTERN = Pattern.compile("^([a-z0-9_]+):(\\d+)$");
     private static final Set<String> FACT_KEYWORDS = new HashSet<>(Arrays.asList(
             "공격", "공격력", "방어", "방어력", "체력", "hp", "실드", "쉴드", "사거리", "사정거리", "시야",
             "이동속도", "속도", "공속", "공격속도", "쿨다운", "비용", "가격", "미네랄", "가스", "자원", "서플라이",
@@ -57,6 +56,8 @@ public class AssistantService {
     private final AssistantRagProperties ragProperties;
     private final AssistantQueryParser queryParser;
     private final ObjectMapper objectMapper;
+    private final AssistantLlmRouter llmRouter;
+    private final AssistantAnswerParser answerParser;
     private volatile List<BoardListDTO> cachedBoards = Collections.emptyList();
     private volatile long cachedBoardsAtMillis = 0L;
 
@@ -88,36 +89,20 @@ public class AssistantService {
         this.ragProperties = ragProperties;
         this.queryParser = queryParser;
         this.objectMapper = objectMapper;
+        this.llmRouter = new AssistantLlmRouter(
+                assistantProperties, geminiClient, openAiAssistantBotClient, anthropicAssistantClient);
+        this.answerParser = new AssistantAnswerParser(objectMapper);
     }
 
-    private static final String SEARCH_PROVIDER_OPENAI = "openai";
-    private static final String SEARCH_PROVIDER_ANTHROPIC = "anthropic";
-
     /**
-     * AI 검색 계열 LLM 호출의 단일 진입점. searchProvider 설정에 따라
-     * Gemini(searchModel/searchThinkingLevel), OpenAI(searchModel/searchReasoningEffort),
-     * Anthropic(searchModel/searchEffort) 중 하나로 보낸다.
+     * AI 검색 계열 LLM 호출의 단일 진입점.
      */
     private String generateSearchLlmAnswer(String prompt) {
-        return generateSearchLlmAnswer(prompt, null);
+        return llmRouter.generateSearchAnswer(prompt);
     }
 
     private String generateSearchLlmAnswer(String prompt, Integer maxOutputTokens) {
-        if (usesSearchProvider(SEARCH_PROVIDER_ANTHROPIC)) {
-            return anthropicAssistantClient.generateSearchAnswer(prompt, maxOutputTokens);
-        }
-        if (usesSearchProvider(SEARCH_PROVIDER_OPENAI)) {
-            return openAiAssistantBotClient.generateSearchAnswer(prompt, maxOutputTokens);
-        }
-        return maxOutputTokens == null
-                ? geminiClient.generateSearchAnswer(prompt)
-                : geminiClient.generateSearchAnswer(prompt, maxOutputTokens);
-    }
-
-    private boolean usesSearchProvider(String expected) {
-        String provider = assistantProperties.getSearchProvider();
-        return StringUtils.hasText(provider)
-                && expected.equals(provider.trim().toLowerCase(Locale.ROOT));
+        return llmRouter.generateSearchAnswer(prompt, maxOutputTokens);
     }
 
     public AssistantChatResponseDTO chat(String message, MemberDTO member) {
@@ -249,269 +234,11 @@ public class AssistantService {
     }
 
     private AssistantAnswerResult parseAnswerResult(String raw, Set<String> allowedSourceIds) {
-        AssistantAnswerResult result = new AssistantAnswerResult();
-        String trimmed = raw == null ? "" : raw.trim();
-        if (!StringUtils.hasText(trimmed)) {
-            result.setAnswer("");
-            return result;
-        }
-
-        if (objectMapper == null) {
-            result.setAnswer(trimmed);
-            return result;
-        }
-
-        String cleaned = stripCodeFences(trimmed);
-        String json = extractFirstJsonObject(cleaned);
-        if (!StringUtils.hasText(json)) {
-            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
-            if (loose != null) {
-                return loose;
-            }
-            result.setAnswer(trimmed);
-            return result;
-        }
-
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            String answer = textOrNull(node.get("answer"));
-            if (!StringUtils.hasText(answer)) {
-                answer = textOrNull(node.get("text"));
-            }
-            if (!StringUtils.hasText(answer)) {
-                answer = trimmed;
-            }
-            result.setAnswer(answer.trim());
-
-            LinkedHashSet<String> used = new LinkedHashSet<>();
-            addSourceIdsFromNode(used, node.get("citations"), allowedSourceIds);
-            addSourceIdsFromNode(used, node.get("used_post_ids"), allowedSourceIds);
-            addSourceIdsFromNode(used, node.get("usedPostIds"), allowedSourceIds);
-            result.setUsedPostIds(new ArrayList<>(used));
-            return result;
-        } catch (Exception e) {
-            AssistantAnswerResult loose = parseLooseAnswerResult(cleaned, allowedSourceIds);
-            if (loose != null) {
-                return loose;
-            }
-            result.setAnswer(trimmed);
-            return result;
-        }
-    }
-
-    private AssistantAnswerResult parseLooseAnswerResult(String raw, Set<String> allowedSourceIds) {
-        if (!StringUtils.hasText(raw)) {
-            return null;
-        }
-        String answer = extractLooseJsonStringField(raw, "answer");
-        if (!StringUtils.hasText(answer)) {
-            answer = extractLooseJsonStringField(raw, "text");
-        }
-        if (!StringUtils.hasText(answer)) {
-            return null;
-        }
-        AssistantAnswerResult result = new AssistantAnswerResult();
-        result.setAnswer(answer.trim());
-        LinkedHashSet<String> used = new LinkedHashSet<>();
-        addSourceIdsFromLooseArray(used, raw, "citations", allowedSourceIds);
-        addSourceIdsFromLooseArray(used, raw, "used_post_ids", allowedSourceIds);
-        addSourceIdsFromLooseArray(used, raw, "usedPostIds", allowedSourceIds);
-        result.setUsedPostIds(new ArrayList<>(used));
-        return result;
-    }
-
-    private static String stripCodeFences(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        String cleaned = raw;
-        cleaned = cleaned.replace("```json", "");
-        cleaned = cleaned.replace("```JSON", "");
-        cleaned = cleaned.replace("```", "");
-        return cleaned.trim();
-    }
-
-    private static String extractLooseJsonStringField(String raw, String fieldName) {
-        if (!StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
-            return "";
-        }
-        String needle = "\"" + fieldName + "\"";
-        int keyIndex = raw.indexOf(needle);
-        if (keyIndex < 0) {
-            return "";
-        }
-        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
-        if (colonIndex < 0) {
-            return "";
-        }
-        int quoteIndex = raw.indexOf('"', colonIndex + 1);
-        if (quoteIndex < 0) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        boolean escape = false;
-        for (int i = quoteIndex + 1; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (escape) {
-                appendJsonEscape(sb, ch);
-                escape = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escape = true;
-                continue;
-            }
-            if (ch == '"') {
-                break;
-            }
-            sb.append(ch);
-        }
-        return sb.toString();
-    }
-
-    private static void appendJsonEscape(StringBuilder sb, char ch) {
-        switch (ch) {
-            case 'n':
-                sb.append('\n');
-                break;
-            case 'r':
-                sb.append('\r');
-                break;
-            case 't':
-                sb.append('\t');
-                break;
-            case '"':
-                sb.append('"');
-                break;
-            case '\\':
-                sb.append('\\');
-                break;
-            default:
-                sb.append(ch);
-                break;
-        }
-    }
-
-    private void addSourceIdsFromLooseArray(Set<String> target, String raw, String fieldName, Set<String> allowedSourceIds) {
-        if (target == null || !StringUtils.hasText(raw) || !StringUtils.hasText(fieldName)) {
-            return;
-        }
-        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
-            return;
-        }
-        String needle = "\"" + fieldName + "\"";
-        int keyIndex = raw.indexOf(needle);
-        if (keyIndex < 0) {
-            return;
-        }
-        int colonIndex = raw.indexOf(':', keyIndex + needle.length());
-        if (colonIndex < 0) {
-            return;
-        }
-        int arrayStart = raw.indexOf('[', colonIndex + 1);
-        if (arrayStart < 0) {
-            return;
-        }
-
-        boolean inString = false;
-        boolean escape = false;
-        StringBuilder current = new StringBuilder();
-        for (int i = arrayStart + 1; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (inString) {
-                if (escape) {
-                    appendJsonEscape(current, ch);
-                    escape = false;
-                    continue;
-                }
-                if (ch == '\\') {
-                    escape = true;
-                    continue;
-                }
-                if (ch == '"') {
-                    inString = false;
-                    addValidatedSourceId(target, current.toString(), allowedSourceIds);
-                    current.setLength(0);
-                    continue;
-                }
-                current.append(ch);
-                continue;
-            }
-
-            if (ch == '"') {
-                inString = true;
-                current.setLength(0);
-                continue;
-            }
-            if (ch == ']') {
-                break;
-            }
-        }
-    }
-
-    private void addSourceIdsFromNode(Set<String> target, JsonNode node, Set<String> allowedSourceIds) {
-        if (target == null || node == null || node.isNull() || node.isMissingNode()) {
-            return;
-        }
-        if (node.isArray()) {
-            for (JsonNode item : node) {
-                if (item == null) {
-                    continue;
-                }
-                if (item.isObject()) {
-                    addValidatedSourceId(target, textOrNull(item.get("sourceId")), allowedSourceIds);
-                    addValidatedSourceId(target, textOrNull(item.get("id")), allowedSourceIds);
-                } else {
-                    addValidatedSourceId(target, textOrNull(item), allowedSourceIds);
-                }
-            }
-            return;
-        }
-        if (node.isObject()) {
-            addValidatedSourceId(target, textOrNull(node.get("sourceId")), allowedSourceIds);
-            addValidatedSourceId(target, textOrNull(node.get("id")), allowedSourceIds);
-            return;
-        }
-        addValidatedSourceId(target, textOrNull(node), allowedSourceIds);
-    }
-
-    private void addValidatedSourceId(Set<String> target, String raw, Set<String> allowedSourceIds) {
-        if (target == null || !StringUtils.hasText(raw)) {
-            return;
-        }
-        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
-            return;
-        }
-        String normalized = normalizeSourceId(raw);
-        if (!StringUtils.hasText(normalized)) {
-            return;
-        }
-        if (!allowedSourceIds.contains(normalized)) {
-            return;
-        }
-        target.add(normalized);
+        return answerParser.parseAnswerResult(raw, allowedSourceIds);
     }
 
     private static String normalizeSourceId(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        String trimmed = raw.trim().toLowerCase(Locale.ROOT);
-        Matcher matcher = SOURCE_ID_PATTERN.matcher(trimmed);
-        if (!matcher.matches()) {
-            return "";
-        }
-        String boardTitle = matcher.group(1);
-        int postNum;
-        try {
-            postNum = Integer.parseInt(matcher.group(2));
-        } catch (NumberFormatException e) {
-            return "";
-        }
-        if (!StringUtils.hasText(boardTitle) || postNum <= 0) {
-            return "";
-        }
-        return boardTitle + ":" + postNum;
+        return AssistantAnswerParser.normalizeSourceId(raw);
     }
 
     private void applyLlmMatchupClassificationIfNeeded(String message, AssistantQueryParseResult parseResult) {
@@ -1030,69 +757,15 @@ public class AssistantService {
     }
 
     private static String extractFirstJsonObject(String raw) {
-        return extractFirstBalancedJson(raw, '{', '}');
+        return AssistantTextUtils.extractFirstJsonObject(raw);
     }
 
     private static String extractFirstJsonArray(String raw) {
-        return extractFirstBalancedJson(raw, '[', ']');
-    }
-
-    private static String extractFirstBalancedJson(String raw, char open, char close) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        int start = raw.indexOf(open);
-        if (start < 0) {
-            return "";
-        }
-        boolean inString = false;
-        boolean escape = false;
-        int depth = 0;
-        for (int i = start; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (escape) {
-                escape = false;
-                continue;
-            }
-            if (ch == '\\') {
-                if (inString) {
-                    escape = true;
-                }
-                continue;
-            }
-            if (ch == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) {
-                continue;
-            }
-            if (ch == open) {
-                depth += 1;
-                continue;
-            }
-            if (ch == close) {
-                depth -= 1;
-                if (depth == 0) {
-                    return raw.substring(start, i + 1).trim();
-                }
-                if (depth < 0) {
-                    return "";
-                }
-            }
-        }
-        return "";
+        return AssistantTextUtils.extractFirstJsonArray(raw);
     }
 
     private static String textOrNull(JsonNode node) {
-        if (node == null || node.isNull() || node.isMissingNode()) {
-            return null;
-        }
-        String value = node.asText(null);
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        return value.trim();
+        return AssistantAnswerParser.textOrNull(node);
     }
 
     private RagRetrieval tryRetrieveWithRag(String ragQuery,
@@ -1511,7 +1184,8 @@ public class AssistantService {
             return true;
         }
         int ragCount = ragRetrieval.matches == null ? 0 : ragRetrieval.matches.size();
-        return ragCount < candidateLimit;
+        int ragSufficiencyTarget = resolveCandidateLimit();
+        return ragCount < Math.min(candidateLimit, Math.max(1, ragSufficiencyTarget));
     }
 
     private int resolveCandidateLimit() {
@@ -3163,17 +2837,7 @@ public class AssistantService {
     }
 
     private static String stripHtmlToText(String html) {
-        if (html == null) {
-            return "";
-        }
-        String text = html.replaceAll("(?s)<[^>]*>", " ");
-        text = text.replace("&nbsp;", " ");
-        text = text.replace("&amp;", "&");
-        text = text.replace("&lt;", "<");
-        text = text.replace("&gt;", ">");
-        text = text.replace("&quot;", "\"");
-        text = text.replace("&#39;", "'");
-        return text.replaceAll("\\s+", " ").trim();
+        return AssistantTextUtils.stripHtmlToText(html);
     }
 
     private void logAnswerGroundedRelatedPosts(String query,

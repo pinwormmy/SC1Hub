@@ -73,8 +73,7 @@ public class ChatController {
 
     @GetMapping(value = "/messages", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ChatPollResponseDTO> messages(@RequestParam(name = "afterSeq", defaultValue = "0") long afterSeq,
-                                                        HttpServletRequest request,
-                                                        HttpSession session) {
+                                                        HttpServletRequest request) {
         if (!chatProperties.isEnabled()) {
             ChatPollResponseDTO response = new ChatPollResponseDTO();
             response.setError(CHAT_MAINTENANCE_MESSAGE);
@@ -85,6 +84,7 @@ public class ChatController {
                 ? chatRoomService.pollRecent(chatProperties.getHistorySize())
                 : chatRoomService.poll(afterSeq);
         if (afterSeq <= 0) {
+            HttpSession session = request == null ? null : request.getSession(false);
             response.setSelf(buildSelf(request, session));
         }
         return ResponseEntity.ok(response);
@@ -208,7 +208,11 @@ public class ChatController {
     private ChatSelfDTO buildSelf(HttpServletRequest request, HttpSession session) {
         MemberDTO member = getMember(session);
         ChatSelfDTO self = new ChatSelfDTO();
-        self.setNickname(chatRoomService.resolveNickname(member, session));
+        if (member == null && session == null) {
+            self.setNickname("Guest");
+        } else {
+            self.setNickname(chatRoomService.resolveNickname(member, session));
+        }
         self.setRole(chatRoomService.resolveRole(member));
         self.setPollIntervalMillis(chatProperties.getPollIntervalMillis());
         self.setHiddenPollIntervalMillis(chatProperties.getHiddenPollIntervalMillis());

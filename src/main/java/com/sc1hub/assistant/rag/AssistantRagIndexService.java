@@ -6,6 +6,7 @@ import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
 import com.sc1hub.assistant.gemini.GeminiException;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -85,17 +86,24 @@ public class AssistantRagIndexService {
         lastReindexFinishedAt = null;
         lastReindexError = null;
 
-        ragIndexExecutor.execute(() -> {
-            try {
-                lastReindexResult = reindex();
-            } catch (Exception e) {
-                log.error("RAG 인덱스 비동기 생성 실패", e);
-                lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
-            } finally {
-                lastReindexFinishedAt = new Date();
-                reindexRunning.set(false);
-            }
-        });
+        try {
+            ragIndexExecutor.execute(() -> {
+                try {
+                    lastReindexResult = reindex();
+                } catch (Exception e) {
+                    log.error("RAG 인덱스 비동기 생성 실패", e);
+                    lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
+                } finally {
+                    lastReindexFinishedAt = new Date();
+                    reindexRunning.set(false);
+                }
+            });
+        } catch (RuntimeException e) {
+            lastReindexError = e.getMessage() != null ? e.getMessage() : e.toString();
+            lastReindexFinishedAt = new Date();
+            reindexRunning.set(false);
+            throw e;
+        }
 
         return ReindexJobStatus.accepted(lastReindexStartedAt, lastReindexResult);
     }
@@ -277,6 +285,8 @@ public class AssistantRagIndexService {
                     continue;
                 }
 
+                pruneDeletedOrNoticePosts(index, boardTitle);
+
                 int sincePostNum = maxPostNumByBoard.getOrDefault(boardTitle, 0);
                 Date sinceRegDate = maxRegDateByBoard.get(boardTitle);
                 if (sinceRegDate == null) {
@@ -298,8 +308,9 @@ public class AssistantRagIndexService {
                         continue;
                     }
 
+                    Date effectiveUpdatedAt = effectiveUpdatedAt(post.getRegDate(), post.getModDate());
                     if (!shouldReindex(
-                            existingRegDateByPost, boardTitle, postNum, post.getRegDate())) {
+                            existingRegDateByPost, boardTitle, postNum, effectiveUpdatedAt)) {
                         continue;
                     }
 
@@ -307,8 +318,8 @@ public class AssistantRagIndexService {
                             boardTitle, post, indexingContext, chunkSize, overlap,
                             embeddingBudget, reusableEmbeddings);
 
+                    removeChunksForPost(index, boardTitle, postNum);
                     if (!result.getChunks().isEmpty()) {
-                        removeChunksForPost(index, boardTitle, postNum);
                         index.getChunks().addAll(result.getChunks());
                         updatedPosts += 1;
                         updatedChunks += result.getChunks().size();
@@ -511,6 +522,7 @@ public class AssistantRagIndexService {
         chunkDto.setPostNum(post.getPostNum());
         chunkDto.setTitle(post.getTitle());
         chunkDto.setRegDate(post.getRegDate());
+        chunkDto.setModDate(post.getModDate());
         chunkDto.setUrl(buildPostUrl(boardTitle, post.getPostNum()));
         chunkDto.setChunkIndex(chunkIndex);
         chunkDto.setText(chunk);
@@ -533,17 +545,7 @@ public class AssistantRagIndexService {
     }
 
     private static String stripHtmlToText(String html) {
-        if (html == null) {
-            return "";
-        }
-        String text = html.replaceAll("(?s)<[^>]*>", " ");
-        text = text.replace("&nbsp;", " ");
-        text = text.replace("&amp;", "&");
-        text = text.replace("&lt;", "<");
-        text = text.replace("&gt;", ">");
-        text = text.replace("&quot;", "\"");
-        text = text.replace("&#39;", "'");
-        return text.replaceAll("\\s+", " ").trim();
+        return AssistantTextUtils.stripHtmlToText(html);
     }
 
     private static String buildPostUrl(String boardTitle, int postNum) {
@@ -951,13 +953,13 @@ public class AssistantRagIndexService {
             if (!StringUtils.hasText(boardTitle)) {
                 continue;
             }
-            Date regDate = chunk.getRegDate();
-            if (regDate == null) {
+            Date effectiveDate = effectiveUpdatedAt(chunk.getRegDate(), chunk.getModDate());
+            if (effectiveDate == null) {
                 continue;
             }
             Date current = maxByBoard.get(boardTitle);
-            if (current == null || regDate.after(current)) {
-                maxByBoard.put(boardTitle, regDate);
+            if (current == null || effectiveDate.after(current)) {
+                maxByBoard.put(boardTitle, effectiveDate);
             }
         }
         return maxByBoard;
@@ -978,18 +980,47 @@ public class AssistantRagIndexService {
                 continue;
             }
             int postNum = chunk.getPostNum();
-            Date regDate = chunk.getRegDate();
-            if (regDate == null) {
+            Date effectiveDate = effectiveUpdatedAt(chunk.getRegDate(), chunk.getModDate());
+            if (effectiveDate == null) {
                 continue;
             }
             String key = postKey(boardTitle, postNum);
             Date current = maxByPost.get(key);
-            if (current == null || regDate.after(current)) {
-                maxByPost.put(key, regDate);
+            if (current == null || effectiveDate.after(current)) {
+                maxByPost.put(key, effectiveDate);
             }
         }
 
         return maxByPost;
+    }
+
+    private static Date effectiveUpdatedAt(Date regDate, Date modDate) {
+        if (modDate == null) {
+            return regDate;
+        }
+        if (regDate == null || modDate.after(regDate)) {
+            return modDate;
+        }
+        return regDate;
+    }
+
+    private void pruneDeletedOrNoticePosts(AssistantRagIndex index, String boardTitle) {
+        if (index == null || index.getChunks() == null || index.getChunks().isEmpty()) {
+            return;
+        }
+        try {
+            List<Integer> activePostNums = boardMapper.selectActivePostNumsForRag(boardTitle);
+            if (activePostNums == null) {
+                return;
+            }
+            Set<Integer> activeSet = new HashSet<>(activePostNums);
+            String normalizedBoardTitle = normalizeBoardTitle(boardTitle);
+            index.getChunks().removeIf(chunk -> chunk != null
+                    && normalizedBoardTitle.equals(normalizeBoardTitle(chunk.getBoardTitle()))
+                    && !activeSet.contains(chunk.getPostNum()));
+        } catch (Exception e) {
+            log.warn("RAG 삭제/공지 게시글 정리 실패. boardTitle={}", boardTitle, e);
+        }
     }
 
     private static boolean shouldReindex(Map<String, Date> existingRegDateByPost, String boardTitle, int postNum, Date currentRegDate) {

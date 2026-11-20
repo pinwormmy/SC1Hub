@@ -1,6 +1,5 @@
 package com.sc1hub.assistant.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.dto.AliasDictionaryDTO;
 import com.sc1hub.assistant.dto.AliasDictionaryFormDTO;
@@ -8,6 +7,7 @@ import com.sc1hub.assistant.mapper.AliasDictionaryMapper;
 import com.sc1hub.assistant.search.AssistantQueryParser;
 import com.sc1hub.assistant.search.AssistantSearchTermsIndexService;
 import com.sc1hub.assistant.search.AssistantSearchTermsService;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -301,41 +301,7 @@ public class AliasDictionaryAdminService {
     }
 
     private List<String> parseTerms(String raw) {
-        String trimmed = raw == null ? "" : raw.trim();
-        if (!StringUtils.hasText(trimmed)) {
-            return Collections.emptyList();
-        }
-        List<String> terms = new ArrayList<>();
-        if (looksLikeJsonArray(trimmed)) {
-            try {
-                List<String> parsed = objectMapper.readValue(trimmed, new TypeReference<List<String>>() {});
-                for (String term : parsed) {
-                    addTerm(terms, term);
-                }
-                return deduplicate(terms);
-            } catch (Exception e) {
-                log.debug("alias term JSON 파싱 실패: {}", trimmed, e);
-            }
-        }
-        String[] tokens = trimmed.split("[,\n\r]+");
-        for (String token : tokens) {
-            addTerm(terms, token);
-        }
-        if (terms.isEmpty()) {
-            addTerm(terms, trimmed);
-        }
-        return deduplicate(terms);
-    }
-
-    private void addTerm(List<String> terms, String token) {
-        if (!StringUtils.hasText(token)) {
-            return;
-        }
-        String normalized = token.trim();
-        if (!StringUtils.hasText(normalized)) {
-            return;
-        }
-        terms.add(normalized);
+        return deduplicate(AssistantTextUtils.parseTerms(raw, objectMapper));
     }
 
     private List<String> deduplicate(List<String> terms) {
@@ -349,11 +315,6 @@ public class AliasDictionaryAdminService {
             }
         }
         return new ArrayList<>(set);
-    }
-
-    private static boolean looksLikeJsonArray(String value) {
-        String trimmed = value.trim();
-        return trimmed.startsWith("[") && trimmed.endsWith("]");
     }
 
     private void invalidateAliasCaches() {

@@ -13,7 +13,7 @@
         <c:forEach var="countPage" begin="${page.pageBeginPoint}" end="${page.pageEndPoint}">
             <c:choose>
                 <c:when test="${countPage == page.recentPage}">
-                    <a class="sc-paging__page btn btn-theme is-current"
+                    <a class="sc-paging__page btn btn-theme is-current" aria-current="page"
                        href="${countPage <= 1 ? scPagingBase : scPagingBase += '?recentPage=' += countPage}">${countPage}</a>
                 </c:when>
                 <c:otherwise>

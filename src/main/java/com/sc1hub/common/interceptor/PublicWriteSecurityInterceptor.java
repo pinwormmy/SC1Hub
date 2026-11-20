@@ -83,7 +83,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
 
         String origin = request.getHeader("Origin");
         String referer = request.getHeader("Referer");
-        if ("cross-site".equals(request.getHeader("Sec-Fetch-Site"))
+        if ("cross-site".equalsIgnoreCase(request.getHeader("Sec-Fetch-Site"))
                 || (origin != null && !sameOrigin(origin, request))
                 || (origin == null && referer != null && !sameOrigin(referer, request))
                 || (member != null && origin == null && referer == null)) {
@@ -198,9 +198,13 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
                     && (uri.getPort() == -1 || uri.getPort() == 443)) {
                 return true;
             }
+            String forwardedProto = request.getHeader("X-Forwarded-Proto");
+            boolean proxiedHttps = forwardedProto != null && "https".equalsIgnoreCase(forwardedProto.split(",")[0].trim());
+            String expectedScheme = proxiedHttps ? "https" : request.getScheme();
+            int expectedPort = proxiedHttps ? 443 : request.getServerPort();
             int port = uri.getPort() == -1 ? ("https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80) : uri.getPort();
-            return request.getScheme().equalsIgnoreCase(uri.getScheme())
-                    && request.getServerName().equalsIgnoreCase(uri.getHost()) && request.getServerPort() == port;
+            return expectedScheme.equalsIgnoreCase(uri.getScheme())
+                    && request.getServerName().equalsIgnoreCase(uri.getHost()) && expectedPort == port;
         } catch (IllegalArgumentException e) {
             return false;
         }

@@ -166,6 +166,9 @@
 
     function setChatExpanded(expanded) {
         const actuallyExpanded = expanded && isChatExpanded();
+        if (actuallyExpanded) {
+            start();
+        }
         if (currentAdLineEl) {
             currentAdLineEl.setAttribute('aria-hidden', actuallyExpanded ? 'false' : 'true');
         }
@@ -272,7 +275,7 @@
     }
 
     // AI 답변 끝의 "관련: <제목> <URL>" 줄은 URL을 숨기고 제목에 링크를 건다.
-    const RELATED_LINE_PATTERN = /\n관련: ([\s\S]+) ((?:https?:\/\/|\/)\S+)\s*$/;
+    const RELATED_LINE_PATTERN = /\n관련: ([\s\S]+) ((?:https?:\/\/|\/(?!\/))\S+)\s*$/;
 
     function fillMessageContent(contentEl, message) {
         const text = ' ' + (message.content || '');
@@ -473,7 +476,16 @@
         }
     }
 
+    let pollInFlight = false;
+
     async function pollOnce() {
+        if (pollInFlight) {
+            return;
+        }
+        if (document.hidden) {
+            return;
+        }
+        pollInFlight = true;
         try {
             const result = await fetchJson('/api/chat/messages?afterSeq=' + lastSeq);
             if (result.ok && result.data) {
@@ -486,6 +498,8 @@
             }
         } catch (e) {
             bumpBackoff();
+        } finally {
+            pollInFlight = false;
         }
         scheduleNextPoll();
     }
@@ -497,8 +511,12 @@
     function scheduleNextPoll() {
         if (pollTimerId) {
             window.clearTimeout(pollTimerId);
+            pollTimerId = null;
         }
-        let delay = document.hidden ? hiddenPollIntervalMillis : pollIntervalMillis;
+        if (document.hidden) {
+            return;
+        }
+        let delay = pollIntervalMillis;
         if (errorBackoffMillis > 0) {
             delay = Math.max(delay, errorBackoffMillis);
         }
@@ -717,20 +735,45 @@
         return false;
     }
 
+    function observeOrStart() {
+        const terminalEl = document.getElementById('scTerminal');
+        if (terminalEl && 'IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    observer.disconnect();
+                    start();
+                }
+            }, { rootMargin: '250px' });
+            observer.observe(terminalEl);
+            return;
+        }
+        start();
+    }
+
     function init() {
-        // 모든 페이지에서 채팅창을 기본 표시하고 폴링을 시작한다.
-        // 프리렌더된 문서는 실제 화면 전환 후에만 폴링을 시작한다.
         openTerminal();
         if (document.prerendering) {
             document.addEventListener('prerenderingchange', start, { once: true });
         } else {
-            start();
+            observeOrStart();
         }
     }
 
     document.addEventListener('visibilitychange', () => {
-        if (started && !document.hidden) {
-            scheduleNextPoll();
+        if (!started) {
+            return;
+        }
+        if (document.hidden) {
+            if (pollTimerId) {
+                window.clearTimeout(pollTimerId);
+                pollTimerId = null;
+            }
+        } else {
+            if (pollTimerId) {
+                window.clearTimeout(pollTimerId);
+                pollTimerId = null;
+            }
+            void pollOnce();
         }
     });
 

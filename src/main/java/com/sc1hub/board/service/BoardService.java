@@ -17,6 +17,8 @@ public interface BoardService {
 
     BoardDTO readPost(String boardTitle, int postNum) throws Exception;
 
+    BoardDTO readPostRaw(String boardTitle, int postNum) throws Exception;
+
     void submitModifyPost(String boardTitle, BoardDTO post) throws Exception;
 
     void deletePost(String boardTitle, int postNum, MemberDTO requestingMember) throws Exception;

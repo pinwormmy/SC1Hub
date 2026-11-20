@@ -19,22 +19,32 @@ public class PageService {
     }
 
     public PageDTO calculatePage(PageDTO page) {
+        int recentPage = Math.max(1, page.getRecentPage());
+        int displayLimit = Math.max(1, DISPLAY_POST_LIMIT);
+        int pageSetLimit = Math.max(1, PAGESET_LIMIT);
+        int totalPostCount = Math.max(0, page.getTotalPostCount());
 
-        int postEndPoint = page.getRecentPage() * DISPLAY_POST_LIMIT;
-        int postBeginPoint = postEndPoint - DISPLAY_POST_LIMIT;
+        int totalPage = totalPostCount == 0
+                ? 0
+                : (int) (((long) totalPostCount + displayLimit - 1L) / displayLimit);
+        long postEndLong = (long) recentPage * displayLimit;
+        long postBeginLong = postEndLong - displayLimit;
+        int postBeginPoint = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, postBeginLong));
+        int postEndPoint = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, postEndLong));
 
-        int totalPage = (int) Math.ceil((double) page.getTotalPostCount() / DISPLAY_POST_LIMIT);
-        int pageBeginPoint = (page.getRecentPage() - 1) / PAGESET_LIMIT * PAGESET_LIMIT + 1;
-        int pageEndPoint = pageBeginPoint + PAGESET_LIMIT - 1;
-        if (pageEndPoint > totalPage)
-            pageEndPoint = totalPage;
+        long pageBeginLong = ((long) (recentPage - 1) / pageSetLimit) * pageSetLimit + 1L;
+        int pageBeginPoint = (int) Math.min(Integer.MAX_VALUE, pageBeginLong);
+        long pageEndLong = pageBeginLong + pageSetLimit - 1L;
+        int pageEndPoint = (int) Math.min(totalPage, pageEndLong);
 
         int prevPageSetPoint = pageBeginPoint - 1;
-        int nextPageSetPoint = pageBeginPoint + PAGESET_LIMIT;
+        long nextPageSetLong = pageBeginLong + pageSetLimit;
+        int nextPageSetPoint = (int) Math.min(Integer.MAX_VALUE, nextPageSetLong);
 
+        page.setRecentPage(recentPage);
         page.setPageBeginPoint(pageBeginPoint);
         page.setPostEndPoint(postEndPoint);
-        page.setDisplayPostLimit(DISPLAY_POST_LIMIT);
+        page.setDisplayPostLimit(displayLimit);
         page.setPostBeginPoint(postBeginPoint);
         page.setPageEndPoint(pageEndPoint);
         page.setPrevPageSetPoint(prevPageSetPoint);

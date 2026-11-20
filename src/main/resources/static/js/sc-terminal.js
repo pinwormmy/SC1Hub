@@ -287,9 +287,23 @@
     }
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text ?? '';
-        return div.innerHTML;
+        return String(text ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function sanitizeRelatedUrl(rawUrl, fallbackUrl) {
+        const trimmed = String(rawUrl ?? '').trim();
+        if (!trimmed) {
+            return fallbackUrl;
+        }
+        if ((trimmed.startsWith('/') && !trimmed.startsWith('//')) || /^https?:\/\//i.test(trimmed)) {
+            return trimmed;
+        }
+        return fallbackUrl;
     }
 
     async function buildRelatedPostsHtml(related, noticeText) {
@@ -321,7 +335,8 @@
                     boardNameCache.set(boardTitle, boardDisplayName);
                 }
 
-                const href = url || `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(postNum)}`;
+                const fallbackHref = `/boards/${encodeURIComponent(boardTitle)}/readPost?postNum=${encodeURIComponent(postNum)}`;
+                const href = sanitizeRelatedUrl(url, fallbackHref);
                 const label = `[${boardDisplayName}] ${postNum}번 | ${title || '제목 없음'}`;
                 return `<li><a href="${escapeHtml(href)}" data-google-vignette="false">${escapeHtml(label)}</a></li>`;
             }),

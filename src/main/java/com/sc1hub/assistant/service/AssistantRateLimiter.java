@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,15 +17,19 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class AssistantRateLimiter {
 
-    private static final int MAX_COUNTER_SIZE_BEFORE_CLEANUP = 5000;
+    private static final ZoneId RATE_LIMIT_ZONE = ZoneId.of("Asia/Seoul");
+    static final int MAX_COUNTER_SIZE_BEFORE_CLEANUP = 5000;
+    static final int HARD_MAX_COUNTER_SIZE = 20_000;
+    private static final int EVICTION_BATCH = 500;
 
     private final AssistantProperties assistantProperties;
     private final Clock clock;
+    private final Object cleanupLock = new Object();
     private final Map<String, DailyCounter> counters = new ConcurrentHashMap<>();
 
     @Autowired
     public AssistantRateLimiter(AssistantProperties assistantProperties) {
-        this(assistantProperties, Clock.systemDefaultZone());
+        this(assistantProperties, Clock.system(RATE_LIMIT_ZONE));
     }
 
     AssistantRateLimiter(AssistantProperties assistantProperties, Clock clock) {
@@ -39,17 +44,18 @@ public class AssistantRateLimiter {
 
         boolean loggedIn = member != null && StringUtils.hasText(member.getId());
         int limit = loggedIn ? assistantProperties.getMemberDailyLimit() : assistantProperties.getAnonymousDailyLimit();
-        boolean unlimited = assistantProperties.isAdminUnlimited() && isAdmin(member);
+        boolean unlimited = assistantProperties.isAdminUnlimited() && assistantProperties.isAdmin(member);
         if (limit <= 0 && !unlimited) {
             return RateLimitResult.denied(0, 0);
         }
 
         String key = buildKey(member, ip, sessionId);
         LocalDate today = LocalDate.now(clock);
+        maybeCleanup(today);
 
         DailyCounter counter = counters.compute(key, (k, existing) -> {
             if (existing == null || !today.equals(existing.date)) {
-                return new DailyCounter(today);
+                return new DailyCounter(today, clock.millis());
             }
             return existing;
         });
@@ -66,9 +72,8 @@ public class AssistantRateLimiter {
                 return RateLimitResult.denied(limit, current);
             }
             used = ++counter.count;
+            counter.lastAccessMillis = clock.millis();
         }
-
-        maybeCleanup(today);
 
         if (unlimited) {
             return RateLimitResult.allowedUnlimited(used);
@@ -77,18 +82,60 @@ public class AssistantRateLimiter {
         return RateLimitResult.allowed(limit, used);
     }
 
+    /** 업스트림 API 장애 등 사용자 귀책이 아닌 실패 시 방금 차감한 1회를 복원한다. */
+    public void refund(MemberDTO member, String ip, String sessionId) {
+        String key = buildKey(member, ip, sessionId);
+        DailyCounter counter = counters.get(key);
+        if (counter == null) {
+            return;
+        }
+        LocalDate today = LocalDate.now(clock);
+        synchronized (counter) {
+            if (today.equals(counter.date) && counter.count > 0) {
+                counter.count--;
+            }
+        }
+    }
+
     private void maybeCleanup(LocalDate today) {
         if (counters.size() < MAX_COUNTER_SIZE_BEFORE_CLEANUP) {
             return;
         }
-
-        Iterator<Map.Entry<String, DailyCounter>> iterator = counters.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, DailyCounter> entry = iterator.next();
-            DailyCounter counter = entry.getValue();
-            if (counter == null || !today.equals(counter.date)) {
-                iterator.remove();
+        synchronized (cleanupLock) {
+            if (counters.size() < MAX_COUNTER_SIZE_BEFORE_CLEANUP) {
+                return;
             }
+            Iterator<Map.Entry<String, DailyCounter>> iterator = counters.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, DailyCounter> entry = iterator.next();
+                DailyCounter counter = entry.getValue();
+                if (counter == null || !today.equals(counter.date)) {
+                    iterator.remove();
+                }
+            }
+            if (counters.size() >= HARD_MAX_COUNTER_SIZE) {
+                int toRemove = counters.size() - HARD_MAX_COUNTER_SIZE + EVICTION_BATCH;
+                evictOldest(toRemove);
+            }
+        }
+    }
+
+    private void evictOldest(int count) {
+        for (int i = 0; i < count; i++) {
+            String oldestKey = null;
+            long oldestMillis = Long.MAX_VALUE;
+            for (Map.Entry<String, DailyCounter> entry : counters.entrySet()) {
+                DailyCounter value = entry.getValue();
+                long access = value == null ? 0L : value.lastAccessMillis;
+                if (access < oldestMillis) {
+                    oldestMillis = access;
+                    oldestKey = entry.getKey();
+                }
+            }
+            if (oldestKey == null) {
+                break;
+            }
+            counters.remove(oldestKey);
         }
     }
 
@@ -108,26 +155,14 @@ public class AssistantRateLimiter {
         return "anonymous:unknown";
     }
 
-    private boolean isAdmin(MemberDTO member) {
-        if (member == null) {
-            return false;
-        }
-        if (member.getGrade() == assistantProperties.getAdminGrade()) {
-            return true;
-        }
-        String adminId = assistantProperties.getAdminId();
-        if (!StringUtils.hasText(adminId)) {
-            return false;
-        }
-        return adminId.equals(member.getId());
-    }
-
     private static final class DailyCounter {
         private volatile LocalDate date;
+        private volatile long lastAccessMillis;
         private int count;
 
-        private DailyCounter(LocalDate date) {
+        private DailyCounter(LocalDate date, long lastAccessMillis) {
             this.date = date;
+            this.lastAccessMillis = lastAccessMillis;
         }
     }
 

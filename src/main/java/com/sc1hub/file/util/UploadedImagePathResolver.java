@@ -143,7 +143,11 @@ public final class UploadedImagePathResolver {
         return extension.toLowerCase(Locale.ROOT);
     }
 
-    private static boolean hasSafeUid(String uid) {
-        return StringUtils.hasText(uid) && uid.matches("[A-Za-z0-9._-]+");
+    public static boolean hasSafeUid(String uid) {
+        return StringUtils.hasText(uid)
+                && uid.matches("[A-Za-z0-9._-]+")
+                && !".".equals(uid)
+                && !"..".equals(uid)
+                && !uid.contains("..");
     }
 }

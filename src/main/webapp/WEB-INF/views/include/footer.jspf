@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ taglib uri='http://java.sun.com/jsp/jstl/core' prefix='c'%>
+<%@ taglib uri='jakarta.tags.core' prefix='c'%>
 <style>
 #scFooterMeta {
     margin-top: 18px;
@@ -18,7 +18,7 @@
 	<div class="container">
         <div class="row">
             <div class="col-lg-12">
-                <p class="copyright-text">Copyright 2024. SC1Hub All rights reserved.</p>
+                <p class="copyright-text">Copyright 2026. SC1Hub All rights reserved.</p>
                 <p class="visitor-text">오늘의 방문자 수: ${todayCount}, 누적 방문자 수: ${totalCount}</p>
                 <hr>
             </div>
@@ -52,7 +52,7 @@
 	    <div class="row">
         <div class="col-sm-12">
                 <div class="sc-terminal-wrap">
-                    <div class="sc-terminal__notice"><span>대화입력(공개채팅) &nbsp /ai 질문(AI답변 공유) &nbsp 단축키(ALT+키)</span><button type="button" id="scTerminalExpandBtn" class="sc-terminal__expand" aria-expanded="false">채팅창 확장</button></div>
+                    <div class="sc-terminal__notice"><span>대화입력(공개채팅) &nbsp; /ai 질문(AI답변 공유) &nbsp; 단축키(ALT+키)</span><button type="button" id="scTerminalExpandBtn" class="sc-terminal__expand" aria-expanded="false">채팅창 확장</button></div>
                     <div id="scTerminal" class="sc-terminal" aria-label="SC1Hub Terminal">
                         <div id="scTerminalOutput" class="sc-terminal__output" aria-live="polite"><div id="scChatLog" class="sc-chat__log"></div></div>
                         <div class="sc-terminal__prompt">

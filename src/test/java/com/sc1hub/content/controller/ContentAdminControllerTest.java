@@ -27,8 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -232,6 +234,68 @@ class ContentAdminControllerTest {
 
         assertEquals(204, response.getStatusCode().value());
         verify(boardService).deletePost("pvstboard", 12);
+    }
+
+    @Test
+    void publishPostWithMedia_rejectsInvalidFormBeforeStoringImage() {
+        ContentAdminController controller = controller(new PostContentSanitizer());
+        when(boardService.getKoreanTitle("pvstboard")).thenReturn("프테전");
+
+        ContentPostForm blankTitle = new ContentPostForm();
+        blankTitle.setTitle("   ");
+        blankTitle.setContent("<p>본문</p>");
+        MockMultipartFile image = new MockMultipartFile(
+                "upload", "arbiter.jpg", "image/jpeg", new byte[] { 1, 2, 3 });
+
+        assertThrows(IllegalArgumentException.class, () -> controller.publishPostWithMedia(
+                "pvstboard", blankTitle, image, new MockHttpServletRequest()));
+        verifyNoInteractions(postImageService);
+
+        ContentPostForm badYoutube = new ContentPostForm();
+        badYoutube.setTitle("정상 제목");
+        badYoutube.setContent("<p>본문</p>");
+        badYoutube.setYoutubeUrl("https://evil.example/watch?v=123456");
+
+        assertThrows(IllegalArgumentException.class, () -> controller.publishPostWithMedia(
+                "pvstboard", badYoutube, image, new MockHttpServletRequest()));
+        verifyNoInteractions(postImageService);
+    }
+
+    @Test
+    void updatePostWithMedia_rejectsMissingPostBeforeStoringImage() throws Exception {
+        ContentAdminController controller = controller(new PostContentSanitizer());
+        when(boardService.getKoreanTitle("pvstboard")).thenReturn("프테전");
+        when(boardService.readPost("pvstboard", 999)).thenReturn(null);
+
+        ContentPostForm form = new ContentPostForm();
+        form.setTitle("23넥 아비터");
+        form.setContent("<p>23넥 본문</p>");
+        MockMultipartFile image = new MockMultipartFile(
+                "upload", "arbiter.jpg", "image/jpeg", new byte[] { 1, 2, 3 });
+
+        assertThrows(ResourceNotFoundException.class, () -> controller.updatePostWithMedia(
+                "pvstboard", 999, form, image, new MockHttpServletRequest()));
+        verifyNoInteractions(postImageService);
+    }
+
+    @Test
+    void publishPostWithMedia_deletesStoredImageWhenPersistenceFails() throws Exception {
+        ContentAdminController controller = controller(new PostContentSanitizer());
+        when(boardService.getKoreanTitle("teamplayguideboard")).thenReturn("팀플 게시판");
+        when(postImageService.store(any(), eq(""))).thenReturn(new PostImageResponse(
+                "teamplay.jpg", "/uploadedImg/uuid_teamplay.jpg", "image/jpeg", 700, 394, 123_000));
+        doThrow(new IllegalStateException("db write failed"))
+                .when(boardService).submitPost(eq("teamplayguideboard"), any(BoardDTO.class));
+
+        ContentPostForm form = new ContentPostForm();
+        form.setTitle("헌터 팀플");
+        form.setContent("<p>본문</p>");
+        MockMultipartFile image = new MockMultipartFile(
+                "upload", "teamplay.jpg", "image/jpeg", new byte[] { 1, 2, 3 });
+
+        assertThrows(IllegalStateException.class, () -> controller.publishPostWithMedia(
+                "teamplayguideboard", form, image, new MockHttpServletRequest()));
+        verify(postImageService).deleteStoredImageQuietly("/uploadedImg/uuid_teamplay.jpg");
     }
 
     private ContentAdminController controller(PostContentSanitizer sanitizer) {

@@ -1,7 +1,9 @@
 [Unit]
 Description=SC1Hub on Apache Tomcat 10.1
-Wants=network-online.target
+Wants=network-online.target mariadb.service
 After=network-online.target mariadb.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -28,6 +30,12 @@ NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=read-only
 ReadWritePaths=/home/hosting_users/sc1hub/tomcat
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

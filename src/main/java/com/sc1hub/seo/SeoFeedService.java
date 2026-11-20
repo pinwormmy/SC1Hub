@@ -66,19 +66,27 @@ public class SeoFeedService {
             if (current != null && now - current.createdAtMillis < CACHE_MILLIS) {
                 return current.xml;
             }
-            String xml = render(collectItems());
+            FeedCollection collected = collectItems();
+            String xml = render(collected.items);
+            if (collected.hadError) {
+                if (current != null) {
+                    return current.xml;
+                }
+                return xml;
+            }
             cachedFeed = new CachedFeed(now, xml);
             return xml;
         }
     }
 
-    private List<FeedItem> collectItems() {
+    private FeedCollection collectItems() {
         List<BoardListDTO> boards = boardService.getBoardList();
         if (boards == null) {
-            return Collections.emptyList();
+            return new FeedCollection(Collections.emptyList(), false);
         }
 
         List<FeedItem> items = new ArrayList<>();
+        boolean hadError = false;
         for (BoardListDTO board : boards) {
             if (board == null) {
                 continue;
@@ -103,11 +111,13 @@ public class SeoFeedService {
                     }
                 }
             } catch (Exception e) {
+                hadError = true;
                 log.warn("RSS 게시글 조회에 실패했습니다. boardTitle={}", boardTitle, e);
             }
         }
         items.sort(Comparator.comparing((FeedItem item) -> item.post.getRegDate()).reversed());
-        return items.size() > MAX_ITEMS ? items.subList(0, MAX_ITEMS) : items;
+        List<FeedItem> limited = items.size() > MAX_ITEMS ? items.subList(0, MAX_ITEMS) : items;
+        return new FeedCollection(limited, hadError);
     }
 
     private String render(List<FeedItem> items) {
@@ -173,6 +183,9 @@ public class SeoFeedService {
             }
         });
         return out.toString();
+    }
+
+    private record FeedCollection(List<FeedItem> items, boolean hadError) {
     }
 
     private static final class CachedFeed {

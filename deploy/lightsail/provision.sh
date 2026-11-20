@@ -119,7 +119,7 @@ cat > "$BASE/bin/setenv.sh" <<EOF
 export JAVA_HOME="$JAVA_HOME"
 export SPRING_PROFILES_ACTIVE=online
 export SPRING_CONFIG_ADDITIONAL_LOCATION=file:$APP_HOME/config/
-export CATALINA_OPTS="-Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError -Duser.timezone=Asia/Seoul -Dfile.encoding=UTF-8 -Djava.awt.headless=true -Dsun.reflect.inflationThreshold=2147483647"
+export CATALINA_OPTS="-Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError -Duser.timezone=Asia/Seoul -Dfile.encoding=UTF-8 -Djava.awt.headless=true"
 EOF
 chown root:"$APP_USER" "$BASE/bin/setenv.sh"
 chmod 750 "$BASE/bin/setenv.sh"

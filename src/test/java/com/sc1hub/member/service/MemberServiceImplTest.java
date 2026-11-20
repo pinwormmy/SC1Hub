@@ -17,7 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -255,5 +258,27 @@ class MemberServiceImplTest {
 
         assertThrows(IllegalArgumentException.class, () -> memberService.submitModifyMemberByAdmin(edit));
         verify(memberMapper, never()).submitModifyMemberByAdmin(any());
+    }
+
+    @Test
+    void missingMemberRunsDummyBcryptCheckBeforeReturningNull() throws Exception {
+        PasswordEncoder spyEncoder = spy(passwordEncoder);
+        MemberServiceImpl timingSafeService = new MemberServiceImpl(
+                memberMapper, spyEncoder, writerNicknameGuard, recommendationCleanup);
+        when(memberMapper.getMemberInfo(MEMBER_ID)).thenReturn(null);
+
+        assertNull(timingSafeService.checkLoginData(loginAttempt("wrong-password")));
+        verify(spyEncoder).matches(eq("wrong-password"), anyString());
+    }
+
+    @Test
+    void signUpRejectsDuplicateIdBeforeInserting() throws Exception {
+        MemberDTO signUp = loginAttempt(RAW_PASSWORD);
+        signUp.setNickName("tester");
+        when(memberMapper.isUniqueId(MEMBER_ID)).thenReturn("1");
+
+        assertThrows(IllegalArgumentException.class, () -> memberService.submitSignUp(signUp));
+        verify(memberMapper, never()).submitSignUp(any());
+        verify(memberMapper, never()).isUniqueNickName(any());
     }
 }

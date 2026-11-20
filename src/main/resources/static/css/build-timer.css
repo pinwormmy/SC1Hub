@@ -1,0 +1,97 @@
+/* Build-order practice timer (/build-timer). Uses the shared --sc-* theme tokens only. */
+.sc-bt { display: grid; gap: 16px; max-width: 960px; margin: 0 auto 32px; }
+.sc-bt-intro h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+.sc-bt-intro p { margin: 0; color: var(--sc-text-dim); font-size: 14px; }
+.sc-bt kbd {
+    display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 2px; font-size: 11px; line-height: 18px; text-align: center;
+    color: var(--sc-text); background: var(--sc-bg-panel); border: 1px solid var(--sc-line); border-bottom-width: 2px; border-radius: var(--sc-radius-sm);
+}
+
+.sc-bt-panel { background: var(--sc-bg-deep); border: 1px solid var(--sc-panel-border); border-radius: var(--sc-radius); min-width: 0; }
+.sc-bt-panel__header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px;
+    background: var(--sc-bg-panel); border-bottom: 1px solid var(--sc-panel-border); border-radius: var(--sc-radius) var(--sc-radius) 0 0;
+}
+.sc-bt-panel__header h2 { font-size: 14px; font-weight: 600; margin: 0; }
+.sc-bt-panel__body { padding: 12px 16px; }
+.sc-bt-hint { color: var(--sc-text-dim); font-size: 12px; }
+
+.sc-bt-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sc-bt-pick select { flex: 1 1 260px; min-width: 0; max-width: 420px; min-height: 36px; font-size: 15px; }
+.sc-bt-source { font-size: 14px; }
+.sc-bt-summary { margin: 8px 0 0; color: var(--sc-text-dim); font-size: 14px; }
+
+/* stage: clock, current step, controls */
+.sc-bt-stage { display: grid; grid-template-columns: minmax(180px, auto) 1fr; gap: 16px 24px; padding: 16px; }
+.sc-bt-stage__clock { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.sc-bt-clock { font-family: var(--sc-font-mono); font-size: 64px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.sc-bt-adjust { display: flex; gap: 6px; }
+.sc-bt-adjust button { min-height: 30px; padding: 2px 10px; font-size: 12px; }
+.sc-bt-stage__now { min-width: 0; }
+.sc-bt-label { margin: 0; color: var(--sc-text-dim); font-size: 12px; font-weight: 600; }
+.sc-bt-now { margin: 2px 0 10px; font-size: 28px; font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
+.sc-bt-next { margin: 2px 0 0; font-size: 16px; color: var(--sc-text-dim); overflow-wrap: anywhere; }
+.sc-bt-alert {
+    margin: 12px 0 0; padding: 8px 12px; font-size: 15px; font-weight: 600;
+    color: var(--sc-attention); background: var(--sc-attention-subtle); border: 1px solid var(--sc-attention); border-radius: var(--sc-radius);
+}
+.sc-bt-alert[hidden] { display: none; }
+.sc-bt-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.sc-bt-actions button { min-height: 40px; padding: 6px 16px; font-size: 15px; }
+.sc-bt-actions #scBtStart { min-width: 96px; }
+.sc-bt-actions .sc-bt-step { flex: 1 1 200px; font-weight: 600; }
+.sc-bt-actions .sc-bt-step:not(:disabled) { color: var(--sc-on-emphasis); background: var(--sc-accent-emphasis); border-color: var(--sc-accent-emphasis); }
+.sc-bt-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.sc-bt-options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 14px; }
+.sc-bt-options label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; }
+.sc-bt-options select { min-height: 30px; }
+.sc-bt-keys { grid-column: 1 / -1; margin: 0; color: var(--sc-text-dim); font-size: 12px; line-height: 2; }
+
+/* steps and checkpoints */
+.sc-bt-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.sc-bt-steps { position: relative; list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; }
+.sc-bt-steps__item {
+    display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 8px;
+    padding: 7px 16px; font-size: 14px; border-top: 1px solid var(--sc-line-muted);
+}
+.sc-bt-steps__item:first-child { border-top: 0; }
+.sc-bt-steps__supply { font-family: var(--sc-font-mono); font-weight: 600; color: var(--sc-text-dim); }
+.sc-bt-steps__action { min-width: 0; overflow-wrap: anywhere; }
+.sc-bt-steps__times { font-family: var(--sc-font-mono); font-size: 12px; color: var(--sc-text-subtle); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sc-bt-steps__item.is-done .sc-bt-steps__action { color: var(--sc-text-subtle); text-decoration: line-through; }
+.sc-bt-steps__item.is-current { background: var(--sc-accent-subtle); box-shadow: inset 3px 0 0 var(--sc-accent-emphasis); }
+.sc-bt-steps__item.is-current .sc-bt-steps__action { font-weight: 600; }
+
+.sc-bt-checkpoints { list-style: none; margin: 0; padding: 0; }
+.sc-bt-checkpoints li { display: grid; grid-template-columns: 84px 1fr; gap: 8px; padding: 7px 16px; font-size: 14px; border-top: 1px solid var(--sc-line-muted); }
+.sc-bt-checkpoints li:first-child { border-top: 0; }
+.sc-bt-checkpoints li.is-done { color: var(--sc-text-subtle); }
+.sc-bt-checkpoints__time { font-family: var(--sc-font-mono); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sc-bt-checkpoints .sc-bt-checkpoints__empty { display: block; color: var(--sc-text-dim); }
+.sc-bt-note { margin: 0; padding: 10px 16px; font-size: 12px; color: var(--sc-text-dim); border-top: 1px solid var(--sc-line-muted); }
+.sc-bt-note[hidden] { display: none; }
+
+.sc-bt-help ul { list-style: disc; margin: 0; padding-left: 20px; font-size: 14px; }
+.sc-bt-help li { display: list-item; margin: 0; }
+.sc-bt-help li + li { margin-top: 4px; }
+.sc-bt-catalog details { padding: 6px 0; border-top: 1px solid var(--sc-line-muted); font-size: 14px; }
+.sc-bt-catalog details:first-child { border-top: 0; }
+.sc-bt-catalog summary { cursor: pointer; font-weight: 600; }
+.sc-bt-catalog p { margin: 6px 0; }
+.sc-bt-catalog__order { color: var(--sc-text-dim); }
+.sc-bt-catalog__links { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+.sc-bt-catalog__pick { min-height: 28px; padding: 2px 10px; font-size: 12px; }
+
+@media (max-width: 767px) {
+    .sc-bt-intro h1 { font-size: 20px; }
+    .sc-bt-stage { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+    .sc-bt-stage__clock { flex-direction: row; justify-content: space-between; }
+    .sc-bt-clock { font-size: 48px; }
+    .sc-bt-now { font-size: 22px; }
+    .sc-bt-actions .sc-bt-step { order: -1; flex-basis: 100%; min-height: 56px; font-size: 18px; }
+    .sc-bt-actions button:not(.sc-bt-step) { flex: 1 1 0; padding: 6px 8px; }
+    .sc-bt-keys { display: none; }
+    .sc-bt-columns { grid-template-columns: 1fr; }
+    .sc-bt-steps { max-height: none; }
+    .sc-bt-steps__item, .sc-bt-checkpoints li { padding: 7px 12px; }
+}

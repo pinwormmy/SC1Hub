@@ -3,12 +3,14 @@ package com.sc1hub.board.service;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.safety.Cleaner;
 import org.jsoup.safety.Safelist;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -19,8 +21,9 @@ public class PostContentSanitizer {
      * 본문에 임베드할 수 있는 영상 플레이어 호스트. 스타크래프트 콘텐츠가 활발한 공식 플랫폼의
      * 플레이어 도메인만 허용한다: 유튜브, SOOP(구 아프리카TV), 치지직, 트위치, 네이버TV, 빌리빌리.
      * 목록을 바꾸면 post-editor.js 의 미리보기 허용 목록(ALLOWED_EMBED_HOSTS)도 함께 맞춘다.
+     * AttackContentDetector 도 이 목록을 공유해 정상 영상 임베드가 오탐 차단되지 않도록 한다.
      */
-    private static final Set<String> ALLOWED_IFRAME_HOSTS = new HashSet<>(Arrays.asList(
+    public static final Set<String> ALLOWED_IFRAME_HOSTS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "youtube.com", "www.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com",
             "play.sooplive.co.kr", "vod.sooplive.co.kr", "play.sooplive.com", "vod.sooplive.com",
             "play.afreecatv.com", "vod.afreecatv.com",
@@ -28,7 +31,7 @@ public class PostContentSanitizer {
             "player.twitch.tv", "clips.twitch.tv",
             "tv.naver.com",
             "player.bilibili.com"
-    ));
+    )));
     /** 트위치 플레이어는 임베드하는 사이트 호스트를 parent 파라미터로 요구한다. */
     private static final Set<String> TWITCH_HOSTS = new HashSet<>(Arrays.asList("player.twitch.tv", "clips.twitch.tv"));
     private static final String TWITCH_PARENT_HOST = "sc1hub.com";
@@ -61,8 +64,8 @@ public class PostContentSanitizer {
         }
 
         Document.OutputSettings outputSettings = new Document.OutputSettings().prettyPrint(false);
-        String cleaned = Jsoup.clean(html, "", safelist, outputSettings);
-        Document fragment = Jsoup.parseBodyFragment(cleaned);
+        Document dirty = Jsoup.parseBodyFragment(html, "");
+        Document fragment = new Cleaner(safelist).clean(dirty);
         fragment.outputSettings(outputSettings);
 
         for (Element iframe : fragment.select("iframe")) {

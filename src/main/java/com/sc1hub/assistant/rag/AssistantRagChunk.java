@@ -13,6 +13,8 @@ public class AssistantRagChunk {
     private String title;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date regDate;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date modDate;
     private String url;
     private int chunkIndex;
     private String text;

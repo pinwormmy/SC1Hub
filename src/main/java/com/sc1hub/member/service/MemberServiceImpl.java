@@ -40,6 +40,9 @@ public class MemberServiceImpl implements MemberService {
     // 기존 회원 행은 평문 pw를 담고 있다. 로그인 성공 시 BCrypt로 제자리 승격되며,
     // 이 접두사로 저장 형식을 판별한다.
     private static final String BCRYPT_PREFIX = "$2";
+    // 존재하지 않는 아이디 로그인 시도에서도 BCrypt 연산 비용을 동일하게 유지해 계정 존재 추론을 완화한다.
+    private static final String DUMMY_BCRYPT_HASH =
+            "$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG";
 
     private final MemberMapper memberMapper;
     private final PasswordEncoder passwordEncoder;
@@ -75,6 +78,7 @@ public class MemberServiceImpl implements MemberService {
         validateMemberId(memberDTO.getId());
         validateNewPassword(memberDTO.getPw());
         validateProfileFields(memberDTO, true);
+        ensureIdAvailable(memberDTO.getId());
         ensureNicknameAvailable(null, memberDTO.getNickName());
         // 호출자는 같은 DTO로 곧바로 로그인을 시도하므로 원본은 건드리지 않는다.
         memberMapper.submitSignUp(copyWithHashedPassword(memberDTO));
@@ -88,6 +92,7 @@ public class MemberServiceImpl implements MemberService {
         }
         MemberDTO stored = memberMapper.getMemberInfo(memberDTO.getId());
         if (stored == null || !StringUtils.hasText(stored.getPw())) {
+            passwordEncoder.matches(memberDTO.getPw(), DUMMY_BCRYPT_HASH);
             return null;
         }
 
@@ -157,6 +162,13 @@ public class MemberServiceImpl implements MemberService {
         validateGrade(memberDTO.getGrade());
         ensureNicknameAvailable(memberDTO.getId(), memberDTO.getNickName());
         memberMapper.submitModifyMemberByAdmin(memberDTO);
+    }
+
+    private void ensureIdAvailable(String id) throws Exception {
+        String duplicateCount = memberMapper.isUniqueId(id);
+        if (duplicateCount != null && !"0".equals(duplicateCount.trim())) {
+            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
+        }
     }
 
     /**

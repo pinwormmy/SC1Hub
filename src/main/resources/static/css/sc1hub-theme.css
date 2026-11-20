@@ -298,7 +298,8 @@ textarea { padding: 8px 12px; line-height: 1.5; }
 
 .latest-posts { display: block; margin-bottom: 8px; padding: 6px 12px; min-height: 32px; font-size: 13px;
     color: var(--sc-text-dim); background: var(--sc-accent-subtle); border: 1px solid var(--sc-accent-muted); border-radius: var(--sc-radius); }
-.latest-posts:empty { display: none; }
+.latest-posts:empty { visibility: hidden; }
+.latest-posts[hidden] { display: none; }
 .latest-posts a { color: var(--sc-text); }
 
 .sc-home-feeds { display: grid; gap: 16px; }
@@ -508,17 +509,32 @@ body.sc-chat-fullscreen .sc-terminal-wrap { border: 0; border-radius: 0; }
 #scFooterMeta { margin-top: 32px; padding: 24px 0 32px; border-top: 1px solid var(--sc-line-muted); }
 #scFooterMeta .copyright-text, #scFooterMeta .visitor-text { font-size: 12px; color: var(--sc-text-dim); }
 
+/* Restore standard list bullets/numbers inside article prose and the rich post editor
+   (legacy style.css globally strips list-style and sets li { display: block; margin: 10px }). */
+.post-content ul, .sc-post-editor__surface ul, .sc-post-editor__preview ul {
+    list-style: disc; margin: 0 0 14px; padding-left: 24px;
+}
+.post-content ol, .sc-post-editor__surface ol, .sc-post-editor__preview ol {
+    list-style: decimal; margin: 0 0 14px; padding-left: 24px;
+}
+.post-content li, .sc-post-editor__surface li, .sc-post-editor__preview li {
+    display: list-item; margin: 4px 0;
+}
+.post-content ul ul, .sc-post-editor__surface ul ul, .sc-post-editor__preview ul ul {
+    list-style: circle; margin: 4px 0;
+}
+
 /* ---------- responsive ---------- */
 @media (min-width: 1025px) {
     .sc-home-page .sc-row > .sc-col-3 { flex: 0 0 22%; max-width: 22%; }
     .sc-home-main { flex: 0 0 78%; max-width: 78%; }
 }
-@media (min-width: 769px) and (max-width: 1024px) {
+@media (min-width: 768px) and (max-width: 1024px) {
     .sc-home-page .sc-row > .sc-col-3 { flex: 0 0 26%; max-width: 26%; }
     .sc-home-main { flex: 0 0 74%; max-width: 74%; }
     .sc-brand-context { display: none; }
 }
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     html { font-size: 14px; }
     body { line-height: 1.5; }
     .container, .sc-container, .navbar-wrapper .container { max-width: 100%; padding-left: 16px; padding-right: 16px; }

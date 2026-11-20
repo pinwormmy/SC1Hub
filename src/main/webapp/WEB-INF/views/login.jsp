@@ -1,6 +1,6 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
-<%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+<%@ taglib prefix = "c" uri = "jakarta.tags.core" %>
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -73,11 +73,17 @@
 </div>
 <%@include file="./include/footer.jspf" %>
 
-<script>
-    <c:if test="${not empty message}">
-        alert("${message}");
-        history.back();
-    </c:if>
-</script>
+<c:if test="${not empty message}">
+    <div id="scLoginMessage" data-message="<c:out value='${message}'/>" hidden></div>
+    <script>
+        (function () {
+            const el = document.getElementById('scLoginMessage');
+            if (el && el.dataset.message) {
+                alert(el.dataset.message);
+                history.back();
+            }
+        })();
+    </script>
+</c:if>
 </body>
 </html>

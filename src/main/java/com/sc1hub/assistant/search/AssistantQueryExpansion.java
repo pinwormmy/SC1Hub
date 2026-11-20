@@ -1,9 +1,8 @@
 package com.sc1hub.assistant.search;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.dto.AliasDictionaryDTO;
-import lombok.extern.slf4j.Slf4j;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -14,7 +13,6 @@ import java.util.Locale;
 import java.util.Set;
 
 @Service
-@Slf4j
 public class AssistantQueryExpansion {
 
     private static final int MAX_EXPANDED_TERMS = 15;
@@ -94,32 +92,6 @@ public class AssistantQueryExpansion {
     }
 
     private List<String> parseTerms(String raw) {
-        String trimmed = raw == null ? "" : raw.trim();
-        if (!StringUtils.hasText(trimmed)) {
-            return new ArrayList<>();
-        }
-        if (looksLikeJsonArray(trimmed)) {
-            try {
-                return objectMapper.readValue(trimmed, new TypeReference<List<String>>() {});
-            } catch (Exception e) {
-                log.debug("alias term JSON 파싱 실패: {}", trimmed, e);
-            }
-        }
-        List<String> results = new ArrayList<>();
-        String[] tokens = trimmed.split("[,\\n\\r]+");
-        for (String token : tokens) {
-            if (StringUtils.hasText(token)) {
-                results.add(token.trim());
-            }
-        }
-        if (results.isEmpty()) {
-            results.add(trimmed);
-        }
-        return results;
-    }
-
-    private static boolean looksLikeJsonArray(String value) {
-        String trimmed = value.trim();
-        return trimmed.startsWith("[") && trimmed.endsWith("]");
+        return AssistantTextUtils.parseTerms(raw, objectMapper);
     }
 }

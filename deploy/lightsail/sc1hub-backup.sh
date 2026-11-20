@@ -34,16 +34,29 @@ db_name="$(printf '%s' "$db_url" | sed -E 's#^jdbc:(mysql|mariadb)://[^/]+/([^?]
 stamp="$(date +%Y%m%d-%H%M)"
 prefix="$BACKUP_DIR/sc1hub-$stamp"
 
+cleanup_parts() {
+  rm -f "$prefix-db.sql.gz.part" "$prefix-files.tar.gz.part" "$prefix-config.tar.gz.part"
+}
+trap cleanup_parts EXIT
+
 # root reaches MariaDB through the unix socket, so no password is stored for backups.
 mariadb-dump --single-transaction --quick --routines --triggers --hex-blob \
   --default-character-set=utf8mb4 "$db_name" | gzip -6 > "$prefix-db.sql.gz.part"
 gzip -t "$prefix-db.sql.gz.part"
 mv "$prefix-db.sql.gz.part" "$prefix-db.sql.gz"
 
-tar -C "$BASE" -czf "$prefix-files.tar.gz.part" webapps/img webapps/upload data/assistant
+# Exit code 1 from GNU tar means a live file changed during archiving (upload/RAG update);
+# keep going so the backup and off-site upload still complete.
+tar_rc=0
+tar -C "$BASE" --warning=no-file-changed -czf "$prefix-files.tar.gz.part" \
+  webapps/img webapps/upload data/assistant || tar_rc=$?
+if (( tar_rc != 0 && tar_rc != 1 )); then
+  exit "$tar_rc"
+fi
 mv "$prefix-files.tar.gz.part" "$prefix-files.tar.gz"
 
-tar -C "$APP_HOME" -czf "$prefix-config.tar.gz" config
+tar -C "$APP_HOME" -czf "$prefix-config.tar.gz.part" config
+mv "$prefix-config.tar.gz.part" "$prefix-config.tar.gz"
 
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'sc1hub-*' -mtime "+$KEEP_LOCAL_DAYS" -delete
 echo "Local backup: $(du -ch "$prefix"-* | tail -1 | cut -f1) in $BACKUP_DIR"

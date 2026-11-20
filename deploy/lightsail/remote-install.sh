@@ -70,10 +70,9 @@ warm_up_representative_routes() {
 }
 
 verify_through_nginx() {
-  # -k: before the cutover nginx may still serve the self-signed certificate.
   local route
   for route in / '/boards/pvstboard/readPost?postNum=2'; do
-    curl -kfsS --max-time 10 -o /dev/null --resolve sc1hub.com:443:127.0.0.1 "https://sc1hub.com$route" \
+    curl -fsS --max-time 10 -o /dev/null --resolve sc1hub.com:443:127.0.0.1 "https://sc1hub.com$route" \
       || { echo "nginx path failed: $route" >&2; return 1; }
   done
 }

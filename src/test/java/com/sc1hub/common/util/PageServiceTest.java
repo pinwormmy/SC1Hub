@@ -50,5 +50,20 @@ class PageServiceTest {
         assertEquals(0, result.getPrevPageSetPoint());
         assertEquals(6, result.getNextPageSetPoint());
     }
+
+    @Test
+    void calculatePage_preventsOverflowOnHugeRecentPage() {
+        PageService service = new PageService();
+        service.setDISPLAY_POST_LIMIT(15);
+
+        PageDTO page = new PageDTO();
+        page.setRecentPage(200_000_000);
+        page.setTotalPostCount(30);
+
+        PageDTO result = service.calculatePage(page);
+
+        assertEquals(Integer.MAX_VALUE, result.getPostBeginPoint());
+        assertEquals(2, result.getTotalPage());
+    }
 }
 

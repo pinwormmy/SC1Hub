@@ -27,6 +27,7 @@ public class LoginAttemptGuard {
     private static final String IP_KEY_PREFIX = "ip:";
 
     private final Clock clock;
+    private final Object cleanupLock = new Object();
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
 
     public LoginAttemptGuard() {
@@ -39,12 +40,13 @@ public class LoginAttemptGuard {
 
     /** 잠긴 계정이면 true. 로그인 검증을 시작하기 전에 호출한다. */
     public boolean isBlocked(String memberId) {
-        Attempt attempt = attempts.get(key(memberId));
+        String key = key(memberId);
+        Attempt attempt = attempts.get(key);
         if (attempt == null) {
             return false;
         }
         if (isExpired(attempt)) {
-            attempts.remove(key(memberId));
+            attempts.remove(key, attempt);
             return false;
         }
         return attempt.failures >= MAX_FAILURES;
@@ -52,14 +54,7 @@ public class LoginAttemptGuard {
 
     public void recordFailure(String memberId) {
         String key = key(memberId);
-        if (attempts.size() >= MAX_TRACKED_ACCOUNTS && !attempts.containsKey(key)) {
-            // 만료된 항목을 먼저 회수하고, 그래도 상한을 넘으면 가장 오래된 항목을 밀어낸다.
-            // 존재하지 않는 ID 를 대량으로 흘려 상한을 무력화하려는 시도로부터 메모리를 보호한다.
-            attempts.entrySet().removeIf(entry -> isExpired(entry.getValue()));
-            while (attempts.size() >= MAX_TRACKED_ACCOUNTS && !evictOldest()) {
-                break;
-            }
-        }
+        ensureCapacity(key);
         attempts.compute(key, (ignored, current) -> {
             Instant now = clock.instant();
             if (current == null || isExpired(current)) {
@@ -67,6 +62,30 @@ public class LoginAttemptGuard {
             }
             return new Attempt(current.failures + 1, now);
         });
+    }
+
+    private void ensureCapacity(String incomingKey) {
+        if (attempts.size() < MAX_TRACKED_ACCOUNTS || attempts.containsKey(incomingKey)) {
+            return;
+        }
+        synchronized (cleanupLock) {
+            if (attempts.size() < MAX_TRACKED_ACCOUNTS || attempts.containsKey(incomingKey)) {
+                return;
+            }
+            // 만료된 항목을 먼저 회수하고(IP 항목은 15분, 계정 항목은 5분 기준),
+            // 그래도 상한을 넘으면 가장 오래된 항목을 밀어낸다.
+            attempts.entrySet().removeIf(this::isExpiredEntry);
+            while (attempts.size() >= MAX_TRACKED_ACCOUNTS) {
+                if (!evictOldest()) {
+                    break;
+                }
+            }
+        }
+    }
+
+    private boolean isExpiredEntry(Map.Entry<String, Attempt> entry) {
+        Duration lockout = entry.getKey().startsWith(IP_KEY_PREFIX) ? IP_LOCKOUT : LOCKOUT;
+        return isExpired(entry.getValue(), lockout);
     }
 
     /** 가장 오래 실패 기록이 갱신되지 않은 항목 하나를 제거한다. 제거할 항목이 없으면 false. */
@@ -98,7 +117,7 @@ public class LoginAttemptGuard {
             return false;
         }
         if (isExpired(attempt, IP_LOCKOUT)) {
-            attempts.remove(key);
+            attempts.remove(key, attempt);
             return false;
         }
         return attempt.failures >= IP_MAX_FAILURES;
@@ -109,12 +128,7 @@ public class LoginAttemptGuard {
             return;
         }
         String key = IP_KEY_PREFIX + key(ip);
-        if (attempts.size() >= MAX_TRACKED_ACCOUNTS && !attempts.containsKey(key)) {
-            attempts.entrySet().removeIf(entry -> isExpired(entry.getValue()));
-            while (attempts.size() >= MAX_TRACKED_ACCOUNTS && !evictOldest()) {
-                break;
-            }
-        }
+        ensureCapacity(key);
         attempts.compute(key, (ignored, current) -> {
             Instant now = clock.instant();
             if (current == null || isExpired(current, IP_LOCKOUT)) {

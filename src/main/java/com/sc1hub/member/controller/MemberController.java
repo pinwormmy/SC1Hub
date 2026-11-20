@@ -147,13 +147,19 @@ public class MemberController {
     }
 
     @GetMapping(value = "/logout")
-    public String logout(HttpServletRequest request, HttpSession httpSession) {
+    public String logout(HttpServletRequest request) {
+        return logout(request, request == null ? null : request.getSession(false));
+    }
+
+    String logout(HttpServletRequest request, HttpSession httpSession) {
         if (isCrossSiteNavigation(request)) {
             // 외부 페이지가 링크·리다이렉트로 유도한 로그아웃(CSRF)은 무시한다. 사이트 안의 로그아웃 링크는
             // same-origin 이고, 주소창 입력·북마크는 Sec-Fetch-Site: none 이라 그대로 처리된다.
             return "redirect:/";
         }
-        httpSession.invalidate();
+        if (httpSession != null) {
+            httpSession.invalidate();
+        }
         return "redirect:/";
     }
 
@@ -188,12 +194,7 @@ public class MemberController {
         registerSession(refreshed, session);
         // 비밀번호가 바뀌었을 수 있으므로 다른 기기의 기존 세션은 회수한다.
         sessionRegistry.invalidateMemberExcept(authenticatedMember.getId(), session);
-        return "myPage";
-    }
-
-    @GetMapping(value = "/modifyMember")
-    public String modifyMember() {
-        return "modifyMember";
+        return "redirect:/myPage";
     }
 
     @GetMapping("/checkUniqueId")
@@ -247,8 +248,15 @@ public class MemberController {
     }
 
     @PostMapping("/submitModifyMemberByAdmin")
-    public String submitModifyMemberByAdmin(MemberDTO memberDTO) {
+    public String submitModifyMemberByAdmin(MemberDTO memberDTO, HttpSession session, Model model) {
         log.info("관리자의 회원수정 제출");
+        MemberDTO authenticated = session == null ? null : (MemberDTO) session.getAttribute("member");
+        if (isSameMemberId(authenticated, memberDTO == null ? null : memberDTO.getId())
+                && memberDTO.getGrade() < authenticated.getGrade()) {
+            model.addAttribute("msg", "본인의 관리자 등급은 낮출 수 없습니다.");
+            model.addAttribute("url", "/adminPage");
+            return "alert";
+        }
         memberService.submitModifyMemberByAdmin(memberDTO);
         // 등급 변경 등으로 세션 정보가 낡았으므로 대상 회원의 기존 세션을 회수한다.
         sessionRegistry.invalidateMember(memberDTO.getId());
@@ -269,8 +277,13 @@ public class MemberController {
 
     @PostMapping("/deleteMember")
     @ResponseBody
-    public ResponseEntity<Map<String, Boolean>> deleteMember(@RequestParam("id") String id) {
+    public ResponseEntity<Map<String, Boolean>> deleteMember(@RequestParam("id") String id, HttpSession session) {
         Map<String, Boolean> response = new HashMap<>();
+        MemberDTO authenticated = session == null ? null : (MemberDTO) session.getAttribute("member");
+        if (isSameMemberId(authenticated, id)) {
+            response.put("success", false);
+            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        }
         try {
             memberService.deleteMember(id);
             sessionRegistry.invalidateMember(id); // 탈퇴 처리된 회원의 기존 세션을 즉시 종료한다.
@@ -417,6 +430,13 @@ public class MemberController {
         } catch (URISyntaxException e) {
             return true;
         }
+    }
+
+    private static boolean isSameMemberId(MemberDTO authenticated, String targetId) {
+        return authenticated != null
+                && StringUtils.hasText(authenticated.getId())
+                && StringUtils.hasText(targetId)
+                && authenticated.getId().trim().equals(targetId.trim());
     }
 
     private String resolveSafeReturnPath(String referer) {

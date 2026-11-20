@@ -3,10 +3,13 @@ package com.sc1hub.visitor.service;
 import com.sc1hub.common.util.IpService;
 import com.sc1hub.visitor.mapper.VisitorCountMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,40 +41,93 @@ public class VisitorCountServiceImpl implements VisitorCountService {
             Pattern.CASE_INSENSITIVE
     );
 
+    private static final long COUNT_CACHE_TTL_MILLIS = 15_000L;
+
     private final VisitorCountMapper visitorCountMapper;
     private final Clock clock;
+    private final TransactionTemplate transactionTemplate;
+
+    private final Object countCacheLock = new Object();
+    private Integer cachedTotalCount;
+    private long cachedTotalCountAtMillis;
+    private LocalDate cachedTodayDate;
+    private Integer cachedTodayCount;
+    private long cachedTodayCountAtMillis;
 
     @Autowired
-    public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper) {
-        this(visitorCountMapper, Clock.system(VISITOR_ZONE));
+    public VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper,
+                                   ObjectProvider<PlatformTransactionManager> transactionManagerProvider) {
+        this(visitorCountMapper, Clock.system(VISITOR_ZONE),
+                transactionManagerProvider == null ? null : transactionManagerProvider.getIfAvailable());
     }
 
     VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper, Clock clock) {
+        this(visitorCountMapper, clock, null);
+    }
+
+    VisitorCountServiceImpl(VisitorCountMapper visitorCountMapper, Clock clock,
+                            PlatformTransactionManager transactionManager) {
         this.visitorCountMapper = visitorCountMapper;
         this.clock = clock;
+        this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
     @Override
     @Transactional
     public void incrementVisitorCount() {
-        LocalDate today = LocalDate.now(clock);
+        incrementVisitorCountForDate(LocalDate.now(clock));
+    }
+
+    private void incrementVisitorCountForDate(LocalDate today) {
         visitorCountMapper.upsertDailyCount(today);
         visitorCountMapper.incrementTotalCount();
+        invalidateCountCache();
     }
 
     @Override
     public int getTotalCount() {
-        return nullToZero(visitorCountMapper.getTotalCount());
+        long now = clock.millis();
+        synchronized (countCacheLock) {
+            if (cachedTotalCount != null && now - cachedTotalCountAtMillis < COUNT_CACHE_TTL_MILLIS) {
+                return cachedTotalCount;
+            }
+        }
+        int total = nullToZero(visitorCountMapper.getTotalCount());
+        synchronized (countCacheLock) {
+            cachedTotalCount = total;
+            cachedTotalCountAtMillis = clock.millis();
+        }
+        return total;
     }
 
     @Override
     public int getTodayCount() {
         LocalDate today = LocalDate.now(clock);
-        return nullToZero(visitorCountMapper.getTodayCount(today));
+        long now = clock.millis();
+        synchronized (countCacheLock) {
+            if (cachedTodayCount != null
+                    && today.equals(cachedTodayDate)
+                    && now - cachedTodayCountAtMillis < COUNT_CACHE_TTL_MILLIS) {
+                return cachedTodayCount;
+            }
+        }
+        int count = nullToZero(visitorCountMapper.getTodayCount(today));
+        synchronized (countCacheLock) {
+            cachedTodayDate = today;
+            cachedTodayCount = count;
+            cachedTodayCountAtMillis = clock.millis();
+        }
+        return count;
+    }
+
+    private void invalidateCountCache() {
+        synchronized (countCacheLock) {
+            cachedTotalCount = null;
+            cachedTodayCount = null;
+        }
     }
 
     @Override
-    @Transactional
     public void processVisitor(HttpServletRequest request, HttpServletResponse response) {
         if (hasVisitorCookie(request.getCookies()) || isBot(request.getHeader("User-Agent"))) {
             return;
@@ -79,11 +135,18 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
         LocalDate today = LocalDate.now(clock);
         String visitorHash = createVisitorHash(request, today);
-        createVisitorCookie(response);
+        Runnable recordVisit = () -> {
+            if (visitorCountMapper.insertDailyVisitor(today, visitorHash) == 1) {
+                incrementVisitorCountForDate(today);
+            }
+        };
 
-        if (visitorCountMapper.insertDailyVisitor(today, visitorHash) == 1) {
-            incrementVisitorCount();
+        if (transactionTemplate != null) {
+            transactionTemplate.executeWithoutResult(status -> recordVisit.run());
+        } else {
+            recordVisit.run();
         }
+        createVisitorCookie(response);
     }
 
     private boolean hasVisitorCookie(Cookie[] cookies) {
@@ -153,8 +216,8 @@ public class VisitorCountServiceImpl implements VisitorCountService {
 
     private int secondsUntilTomorrow() {
         LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime midnight = LocalDateTime.of(LocalDate.now(clock).plusDays(1), LocalTime.MIDNIGHT);
-        return (int) Duration.between(now, midnight).getSeconds();
+        LocalDateTime midnight = LocalDateTime.of(now.toLocalDate().plusDays(1), LocalTime.MIDNIGHT);
+        return Math.max(1, (int) Duration.between(now, midnight).getSeconds());
     }
 
     private int nullToZero(Integer value) {

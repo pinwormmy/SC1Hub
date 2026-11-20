@@ -86,11 +86,12 @@ class ChatControllerTest {
         fullResponse.setMessages(recentMessages);
         when(chatRoomService.pollRecent(50)).thenReturn(fullResponse);
 
-        ResponseEntity<ChatPollResponseDTO> result = controller.messages(0, request, session);
+        ResponseEntity<ChatPollResponseDTO> result = controller.messages(0, request);
 
         assertSame(recentMessages, result.getBody().getMessages());
         assertEquals(50, result.getBody().getSelf().getHistorySize());
         verify(chatRoomService).pollRecent(50);
+        verify(request).getSession(false);
     }
 
     @Test
@@ -146,7 +147,7 @@ class ChatControllerTest {
         ChatPollResponseDTO incrementalResponse = new ChatPollResponseDTO();
         when(chatRoomService.poll(42)).thenReturn(incrementalResponse);
 
-        ResponseEntity<ChatPollResponseDTO> result = controller.messages(42, request, session);
+        ResponseEntity<ChatPollResponseDTO> result = controller.messages(42, request);
 
         assertSame(incrementalResponse, result.getBody());
         verify(chatRoomService, never()).pollRecent(anyInt());

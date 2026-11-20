@@ -11,6 +11,7 @@
         <foreach collection="messages" item="m" separator=",">
             (#{m.id}, #{m.memberId}, #{m.nickname}, #{m.role}, #{m.content}, #{m.ip}, #{m.deleted}, #{m.createdAt})
         </foreach>
+        on duplicate key update deleted = greatest(deleted, values(deleted))
     </insert>
 
     <select id="selectRecentMessages" resultType="com.sc1hub.chat.dto.ChatMessageDTO">

@@ -31,13 +31,21 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Controller
 public class UploadController {
 
     private static final String IMMUTABLE_IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+    private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
 
     // 슬래시 포함 여부가 또 중요해서 설정 경로 따로 만듬
     private String uploadPath;
@@ -103,7 +111,7 @@ public class UploadController {
             return;
         }
         log.debug("img upload path for submit: {}", targetPath);
-        writeImageResponse(targetPath, request, response, uid, decodedFileName);
+        writeImageResponse(targetPath, request, response, uid, decodedFileName, true);
     }
 
     @GetMapping(value={"/img/{imageName:.+}", "/uploadedImg/{imageName:.+}"})
@@ -128,20 +136,23 @@ public class UploadController {
             return;
         }
         log.debug("img upload path for /img: {}", targetPath);
-        writeImageResponse(targetPath, request, response, ref.uid, ref.fileName);
+        writeImageResponse(targetPath, request, response, ref.uid, ref.fileName, false);
     }
 
     private void writeImageResponse(Path targetPath, HttpServletRequest request, HttpServletResponse response,
-            String uid, String decodedFileName) {
+            String uid, String decodedFileName, boolean allowRedirectFallback) {
         if (Files.isRegularFile(targetPath)) {
             try {
                 long fileSize = Files.size(targetPath);
                 long lastModified = Files.getLastModifiedTime(targetPath).toMillis();
-                String contentType = Files.probeContentType(targetPath);
-                if (contentType == null) {
-                    contentType = "application/octet-stream";
+                String probedType = Files.probeContentType(targetPath);
+                String normalizedType = probedType == null ? "" : probedType.trim().toLowerCase(Locale.ROOT);
+                boolean inlineImage = ALLOWED_IMAGE_CONTENT_TYPES.contains(normalizedType);
+                response.setContentType(inlineImage ? normalizedType : "application/octet-stream");
+                if (!inlineImage) {
+                    response.setHeader("Content-Disposition", "attachment");
                 }
-                response.setContentType(contentType);
+                response.setHeader("Content-Security-Policy", "sandbox");
                 response.setHeader("Cache-Control", IMMUTABLE_IMAGE_CACHE_CONTROL);
                 response.setHeader("X-Content-Type-Options", "nosniff");
                 response.setDateHeader("Last-Modified", lastModified);
@@ -160,7 +171,7 @@ public class UploadController {
                 log.error("Failed to load uploaded image. path={}", targetPath, e);
             }
         } else {
-            if (redirectToImg(request, response, uid, decodedFileName)) {
+            if (allowRedirectFallback && redirectToImg(request, response, uid, decodedFileName)) {
                 return;
             }
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -296,7 +307,7 @@ public class UploadController {
     }
 
     private boolean redirectToImg(HttpServletRequest request, HttpServletResponse response, String uid, String fileName) {
-        if (uid == null || uid.trim().isEmpty()) {
+        if (!UploadedImagePathResolver.hasSafeUid(uid)) {
             return false;
         }
         try {
@@ -304,8 +315,9 @@ public class UploadController {
             if (redirectFileName.isEmpty()) {
                 return false;
             }
+            String encodedUid = URLEncoder.encode(uid.trim(), StandardCharsets.UTF_8.name()).replace("+", "%20");
             String encodedName = URLEncoder.encode(redirectFileName, StandardCharsets.UTF_8.name()).replace("+", "%20");
-            String redirectUrl = request.getContextPath() + "/uploadedImg/" + uid + "_" + encodedName;
+            String redirectUrl = request.getContextPath() + "/uploadedImg/" + encodedUid + "_" + encodedName;
             response.sendRedirect(redirectUrl);
             return true;
         } catch (IOException e) {

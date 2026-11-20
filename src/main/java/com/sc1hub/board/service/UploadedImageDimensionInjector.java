@@ -35,9 +35,18 @@ public class UploadedImageDimensionInjector {
     private static final Pattern PIXEL_VALUE_PATTERN = Pattern.compile("(?i)^\\s*(\\d+)\\s*(px)?\\s*$");
     private static final Pattern STYLE_DECLARATION_PATTERN = Pattern.compile("(?i)^\\s*(width|height)\\s*:\\s*(\\d+)\\s*(px)?\\s*$");
     private static final Pattern IMG_PATH_PATTERN = Pattern.compile("(?i)/(?:img|uploadedImg)/([^/?#]+)");
+    private static final int MAX_DIMENSION_CACHE_ENTRIES = 2000;
+    private static final ImageDimension MISSING_DIMENSION = new ImageDimension(-1, -1);
 
     private final String uploadPath;
     private final String imageUploadPath;
+    private final Map<String, ImageDimension> dimensionCache = Collections.synchronizedMap(
+            new LinkedHashMap<String, ImageDimension>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, ImageDimension> eldest) {
+                    return size() > MAX_DIMENSION_CACHE_ENTRIES;
+                }
+            });
 
     private volatile Path resolvedUploadPath;
     private volatile Path resolvedImageUploadPath;
@@ -275,6 +284,17 @@ public class UploadedImageDimensionInjector {
     }
 
     private ImageDimension readImageDimension(UploadedImageRef ref) {
+        String cacheKey = ref.uid + ":" + ref.fileName;
+        ImageDimension cached = dimensionCache.get(cacheKey);
+        if (cached != null) {
+            return cached == MISSING_DIMENSION ? null : cached;
+        }
+        ImageDimension resolved = readImageDimensionFromDisk(ref);
+        dimensionCache.put(cacheKey, resolved != null ? resolved : MISSING_DIMENSION);
+        return resolved;
+    }
+
+    private ImageDimension readImageDimensionFromDisk(UploadedImageRef ref) {
         Path imagePath = findUploadedImagePath(ref.uid, ref.fileName);
         if (imagePath == null || !Files.isRegularFile(imagePath)) {
             return null;
@@ -369,7 +389,7 @@ public class UploadedImageDimensionInjector {
         Pattern pattern = Pattern.compile("(?i)\\b" + Pattern.quote(attributeName) + "\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'>]+)");
         Matcher matcher = pattern.matcher(imgTag);
         if (matcher.find()) {
-            return matcher.replaceFirst(attributeName + "=\"" + value + "\"");
+            return matcher.replaceFirst(Matcher.quoteReplacement(attributeName + "=\"" + value + "\""));
         }
         int insertPos = imgTag.lastIndexOf("/>");
         if (insertPos < 0) {

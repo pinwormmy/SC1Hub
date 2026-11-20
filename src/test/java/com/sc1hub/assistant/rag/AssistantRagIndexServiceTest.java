@@ -185,6 +185,53 @@ class AssistantRagIndexServiceTest {
         verify(embeddingClient, never()).embedText(anyString());
     }
 
+    @Test
+    void update_reindexesEditedPostByModDateAndPrunesDeletedPosts() throws Exception {
+        Date regDate = new Date(1_700_000_000_000L);
+        Date modDate = new Date(1_700_000_600_000L);
+        writeExistingIndex(regDate);
+        AssistantRagIndex seeded = readIndex();
+        AssistantRagChunk deletedChunk = new AssistantRagChunk();
+        deletedChunk.setId("promotionboard:2:0:deleted");
+        deletedChunk.setBoardTitle("promotionboard");
+        deletedChunk.setPostNum(2);
+        deletedChunk.setTitle("gone");
+        deletedChunk.setRegDate(regDate);
+        deletedChunk.setUrl("/boards/promotionboard/readPost?postNum=2");
+        deletedChunk.setChunkIndex(0);
+        deletedChunk.setText("gone body");
+        deletedChunk.setVector(new float[]{0.2f, 0.3f});
+        seeded.getChunks().add(deletedChunk);
+        objectMapper.writeValue(tempDir.resolve("rag-index.json").toFile(), seeded);
+
+        BoardListDTO board = new BoardListDTO();
+        board.setBoardTitle("PromotionBoard");
+        BoardDTO edited = new BoardDTO();
+        edited.setPostNum(1);
+        edited.setTitle("edited title");
+        edited.setContent("edited body");
+        edited.setRegDate(regDate);
+        edited.setModDate(modDate);
+
+        when(boardMapper.getBoardList()).thenReturn(Collections.singletonList(board));
+        when(boardMapper.selectActivePostNumsForRag("promotionboard")).thenReturn(Collections.singletonList(1));
+        when(boardMapper.selectNewPostsForRag("promotionboard", 2, ragProperties.getMaxPostsPerBoard()))
+                .thenReturn(Collections.emptyList());
+        when(boardMapper.selectUpdatedPostsForRag("promotionboard", regDate, ragProperties.getMaxPostsPerBoard()))
+                .thenReturn(Collections.singletonList(edited));
+        when(embeddingClient.embedText(anyString())).thenReturn(new float[]{0.5f, 0.6f});
+
+        AssistantRagIndexService.UpdateResult result = indexService.update();
+
+        assertTrue(result.isReady());
+        assertEquals(1, result.getUpdatedPosts());
+        AssistantRagIndex saved = readIndex();
+        assertEquals(1, saved.getChunks().size());
+        assertEquals(1, saved.getChunks().get(0).getPostNum());
+        assertEquals("edited title", saved.getChunks().get(0).getTitle());
+        assertEquals(modDate, saved.getChunks().get(0).getModDate());
+    }
+
     /** 서로 다른 본문을 가진 글 2개짜리 게시판. 임베딩 호출이 글당 1회 필요하다. */
     private void stubTwoPostBoard() throws Exception {
         BoardListDTO board = new BoardListDTO();

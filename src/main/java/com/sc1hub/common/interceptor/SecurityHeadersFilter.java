@@ -8,8 +8,10 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UriUtils;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 모든 응답에 브라우저 보안 헤더를 붙인다. TLS 종단은 앞단 프록시(openresty)가 하므로 HTTP→HTTPS
@@ -45,14 +47,40 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
 
     private boolean isSensitivePath(HttpServletRequest request) {
         String uri = request.getRequestURI();
+        if (uri == null) {
+            return false;
+        }
         String contextPath = request.getContextPath();
         String path = contextPath != null && !contextPath.isEmpty() && uri.startsWith(contextPath)
                 ? uri.substring(contextPath.length())
                 : uri;
-        return path.startsWith("/adminPage")
-                || path.startsWith("/modifyMemberByAdmin")
-                || path.equals("/myPage")
-                || path.equals("/modifyMyInfo")
-                || path.startsWith("/api/admin/");
+        String normalized = normalizePath(path);
+        return normalized.startsWith("/adminPage")
+                || normalized.startsWith("/modifyMemberByAdmin")
+                || normalized.equals("/myPage")
+                || normalized.equals("/modifyMyInfo")
+                || normalized.startsWith("/api/admin/");
+    }
+
+    private String normalizePath(String rawPath) {
+        String decoded;
+        try {
+            decoded = UriUtils.decode(rawPath, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            decoded = rawPath;
+        }
+        String[] segments = decoded.split("/", -1);
+        StringBuilder cleaned = new StringBuilder(decoded.length());
+        for (int i = 0; i < segments.length; i++) {
+            String segment = segments[i];
+            int semicolon = segment.indexOf(';');
+            String cleanSegment = semicolon >= 0 ? segment.substring(0, semicolon) : segment;
+            if (i > 0) {
+                cleaned.append('/');
+            }
+            cleaned.append(cleanSegment);
+        }
+        String result = cleaned.toString().replaceAll("/{2,}", "/");
+        return result.isEmpty() ? "/" : result;
     }
 }

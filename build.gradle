@@ -1,5 +1,5 @@
 plugins {
-	id 'org.springframework.boot' version '3.1.12'
+	id 'org.springframework.boot' version '3.5.16'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'java'
 	id 'war'
@@ -14,11 +14,8 @@ java {
 	}
 }
 
-// Cafe24 serves Tomcat 10.0.x (Servlet 5.0 / JSP 3.0). Spring Framework 6.0 keeps a
-// Servlet 5.0 runtime baseline, so the build pins the 10.0 API rather than Boot's
-// managed 10.1: compiling against Servlet 6.0 would let a 10.1-only call slip through.
-ext['tomcat.version'] = '10.0.27'
-def jakartaJstlVersion = '2.0.0'
+// Lightsail runs Apache Tomcat 10.1.x (Servlet 6.0 / JSP 3.1 / Jakarta EE 10),
+// matching Spring Framework 6.2 and Spring Boot 3.5.
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
@@ -38,20 +35,17 @@ dependencies {
 	// Password hashing only — the full Spring Security starter would register filters
 	// and auth machinery this session-based app does not use.
 	implementation 'org.springframework.security:spring-security-crypto'
-	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
-	implementation 'org.springframework.boot:spring-boot-starter-mail'
+	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.5'
 	implementation 'org.jsoup:jsoup:1.23.1'
 	implementation 'com.anthropic:anthropic-java:2.34.0'
-	// JSTL 2.0 is the Jakarta EE 9 release matching JSP 3.0. JSTL 3.0 targets EE 10 and
-	// renames every taglib URI to jakarta.tags.*, which Tomcat 10.0 cannot resolve.
-	// Its transitive Servlet/JSP/EL APIs are container-provided; Boot's dependency
-	// management would otherwise resolve them to the Servlet 6.0 set Tomcat 10.0 lacks.
-	implementation("jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api:${jakartaJstlVersion}") {
+	// JSTL 3.0 targets Jakarta EE 10 / Tomcat 10.1 (jakarta.tags.*).
+	// Exclude transitive Servlet/JSP/EL APIs so container-provided jars never enter WEB-INF/lib.
+	implementation('jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api') {
 		exclude group: 'jakarta.servlet', module: 'jakarta.servlet-api'
 		exclude group: 'jakarta.servlet.jsp', module: 'jakarta.servlet.jsp-api'
 		exclude group: 'jakarta.el', module: 'jakarta.el-api'
 	}
-	implementation("org.glassfish.web:jakarta.servlet.jsp.jstl:${jakartaJstlVersion}") {
+	implementation('org.glassfish.web:jakarta.servlet.jsp.jstl') {
 		exclude group: 'jakarta.servlet', module: 'jakarta.servlet-api'
 		exclude group: 'jakarta.servlet.jsp', module: 'jakarta.servlet.jsp-api'
 		exclude group: 'jakarta.el', module: 'jakarta.el-api'
@@ -63,10 +57,6 @@ dependencies {
 
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	providedCompile 'org.springframework.boot:spring-boot-starter-tomcat'
-	// Jasper drags in ECJ 3.18, which does not know release 17 and silently downgrades the
-	// JSP bytecode to 12. It is excluded here so it cannot precede the compiler below on
-	// the JspC classpath; the server has its own copy and precompiling means none is used
-	// at runtime anyway.
 	providedRuntime('org.apache.tomcat.embed:tomcat-embed-jasper') {
 		exclude group: 'org.eclipse.jdt', module: 'ecj'
 	}
@@ -75,10 +65,6 @@ dependencies {
 	jspCompiler 'org.eclipse.jdt:ecj:3.33.0'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	// spring-test's MockHttpServletRequest implements the Servlet 6.0 interface, so the
-	// mocks need that API even though production runs on Tomcat 10.0's Servlet 5.0.
-	// Test-scoped only: the WAR must keep shipping no servlet API at all.
-	testImplementation 'jakarta.servlet:jakarta.servlet-api:6.0.0'
 	testRuntimeOnly 'com.h2database:h2'
 }
 
@@ -147,8 +133,8 @@ tasks.register('generatePrecompiledJspWebXml') {
 		webXml.setText("""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <web-app xmlns=\"https://jakarta.ee/xml/ns/jakartaee\"
 		xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"
-		xsi:schemaLocation=\"https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_5_0.xsd\"
-		version=\"5.0\">
+		xsi:schemaLocation=\"https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd\"
+		version=\"6.0\">
 ${fragment}
 </web-app>
 """, 'UTF-8')
@@ -160,7 +146,6 @@ tasks.named('bootWar') {
 	webXml = generatedJspWebXml.get().asFile
 	layered {
 		enabled = false
-		includeLayerTools = false
 	}
 	from(generatedJspClassesDir) {
 		into 'WEB-INF/classes'

@@ -36,7 +36,8 @@ class SecurityHeadersFilterTest {
     @Test
     void marksSensitivePagesNoStore() throws Exception {
         for (String uri : new String[]{"/adminPage", "/myPage", "/modifyMyInfo",
-                "/modifyMemberByAdmin", "/api/admin/chat/sanctions"}) {
+                "/modifyMemberByAdmin", "/api/admin/chat/sanctions",
+                "/%61dminPage", "/adminPage;v=1", "/my%50age"}) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
             MockHttpServletResponse response = new MockHttpServletResponse();
             filter.doFilter(request, response, new MockFilterChain());

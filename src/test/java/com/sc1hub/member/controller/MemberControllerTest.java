@@ -1,5 +1,6 @@
 package com.sc1hub.member.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.common.security.AttackContentDetector;
 import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.common.security.WriteRateLimiter;
@@ -18,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.ui.ExtendedModelMap;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -225,7 +228,7 @@ class MemberControllerTest {
 
         String view = controller.submitModifyMyInfo(submitted, "current-password", session, new ExtendedModelMap());
 
-        assertEquals("myPage", view);
+        assertEquals("redirect:/myPage", view);
         assertEquals("owner", submitted.getId());
         assertEquals(refreshed, session.getAttribute("member"));
         verify(memberService).submitModifyMyInfo(submitted);
@@ -319,5 +322,56 @@ class MemberControllerTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, throttled.getStatusCode());
         verify(offenderTracker).strike(eq("203.0.113.9"), eq(true), isNull(), isNull(), anyString());
         verify(memberService, times(1)).isUniqueId("validid");
+    }
+
+    @Test
+    void memberDto_omitsPasswordWhenSerializedToJson() throws Exception {
+        MemberDTO member = new MemberDTO();
+        member.setId("owner");
+        member.setPw("secret-hash");
+        member.setNickName("닉네임");
+
+        String json = new ObjectMapper().writeValueAsString(member);
+
+        assertFalse(json.contains("secret-hash"));
+        assertFalse(json.contains("\"pw\""));
+        assertTrue(json.contains("\"id\":\"owner\""));
+    }
+
+    @Test
+    void submitModifyMemberByAdmin_rejectsSelfDemotion() {
+        MemberDTO admin = new MemberDTO();
+        admin.setId("admin");
+        admin.setGrade(3);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", admin);
+
+        MemberDTO submitted = new MemberDTO();
+        submitted.setId("admin");
+        submitted.setGrade(1);
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        String view = controller.submitModifyMemberByAdmin(submitted, session, model);
+
+        assertEquals("alert", view);
+        assertEquals("/adminPage", model.get("url"));
+        verify(memberService, never()).submitModifyMemberByAdmin(any(MemberDTO.class));
+        verify(sessionRegistry, never()).invalidateMember(anyString());
+    }
+
+    @Test
+    void deleteMember_rejectsSelfDeletion() {
+        MemberDTO admin = new MemberDTO();
+        admin.setId("admin");
+        admin.setGrade(3);
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute("member", admin);
+
+        ResponseEntity<Map<String, Boolean>> response = controller.deleteMember("admin", session);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(Boolean.FALSE, response.getBody().get("success"));
+        verify(memberService, never()).deleteMember(anyString());
+        verify(sessionRegistry, never()).invalidateMember(anyString());
     }
 }

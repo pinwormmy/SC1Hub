@@ -38,7 +38,7 @@
     </select>
 
     <select id="getMemberList" resultType="com.sc1hub.member.dto.MemberDTO">
-        select *
+        select id, nickname, realname, email, phone, grade, reg_date
         from member
         where <include refid="searchKeyword" />
         order by reg_date desc, id desc

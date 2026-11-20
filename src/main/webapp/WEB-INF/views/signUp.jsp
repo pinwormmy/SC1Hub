@@ -99,26 +99,26 @@
     });
 
     const checkUniqueId = (inputId) => {
-      fetch("<%=request.getContextPath()%>/checkUniqueId?id=" + inputId)
+      fetch("<%=request.getContextPath()%>/checkUniqueId?id=" + encodeURIComponent(inputId))
         .then(response => response.json())
         .then(data => {
           if (data === 0) {
-            idCheckText.innerHTML = "해당 ID 사용가능합니다.";
+            idCheckText.textContent = "해당 ID 사용가능합니다.";
             isUniqueIdValid = true;
           } else {
-            idCheckText.innerHTML = "사용할 수 없는 ID입니다.";
+            idCheckText.textContent = "사용할 수 없는 ID입니다.";
             isUniqueIdValid = false;
           }
         })
-        .catch(error => {
-          alert("(아이디중복검사)서버 요청 실패...", error);
+        .catch(() => {
+          alert("(아이디중복검사)서버 요청 실패...");
         });
     };
 
     nickName.addEventListener("focusout", function () {
         const nickNameValue = nickName.value;
         if (nickNameValue === "") {
-            nickNameCheckText.innerHTML = "별명을 입력해주세요.";
+            nickNameCheckText.textContent = "별명을 입력해주세요.";
             isUniqueNickNameValid = false;
             return;
         }
@@ -126,19 +126,19 @@
     });
 
     const checkUniqueNickName = (nickName) => {
-        fetch("<%=request.getContextPath()%>/checkUniqueNickName?nickName=" + nickName)
+        fetch("<%=request.getContextPath()%>/checkUniqueNickName?nickName=" + encodeURIComponent(nickName))
             .then(response => response.json())
             .then(data => {
                 if (data === 0) {
-                    nickNameCheckText.innerHTML = "해당 별명 사용 가능합니다.";
+                    nickNameCheckText.textContent = "해당 별명 사용 가능합니다.";
                     isUniqueNickNameValid = true;
                 } else {
-                    nickNameCheckText.innerHTML = "사용할 수 없는 별명입니다.";
+                    nickNameCheckText.textContent = "사용할 수 없는 별명입니다.";
                     isUniqueNickNameValid = false;
                 }
             })
-            .catch(error => {
-                alert("서버 요청 실패...", error);
+            .catch(() => {
+                alert("서버 요청 실패...");
             });
     };
 

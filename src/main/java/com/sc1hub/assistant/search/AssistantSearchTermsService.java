@@ -1,9 +1,9 @@
 package com.sc1hub.assistant.search;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.dto.AliasDictionaryDTO;
 import com.sc1hub.assistant.mapper.AliasDictionaryMapper;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -149,51 +149,18 @@ public class AssistantSearchTermsService {
     }
 
     private List<String> parseTerms(String raw) {
-        String trimmed = raw == null ? "" : raw.trim();
-        if (!StringUtils.hasText(trimmed)) {
-            return Collections.emptyList();
-        }
-        if (looksLikeJsonArray(trimmed)) {
-            try {
-                return objectMapper.readValue(trimmed, new TypeReference<List<String>>() {});
-            } catch (Exception ignored) {
-                // Fallback to text parsing
-            }
-        }
-        String[] tokens = trimmed.split("[,\\n\\r]+");
-        List<String> results = new ArrayList<>();
-        for (String token : tokens) {
-            if (StringUtils.hasText(token)) {
-                results.add(token.trim());
-            }
-        }
-        return results.isEmpty() ? Collections.singletonList(trimmed) : results;
-    }
-
-    private static boolean looksLikeJsonArray(String value) {
-        String trimmed = value.trim();
-        return trimmed.startsWith("[") && trimmed.endsWith("]");
+        return AssistantTextUtils.parseTerms(raw, objectMapper);
     }
 
     private static String normalizeForMatch(String text) {
         if (!StringUtils.hasText(text)) {
             return "";
         }
-        String stripped = stripHtmlToText(text);
+        String stripped = AssistantTextUtils.stripHtmlToText(text);
         return stripped.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
     private static String stripHtmlToText(String html) {
-        if (html == null) {
-            return "";
-        }
-        String text = html.replaceAll("(?s)<[^>]*>", " ");
-        text = text.replace("&nbsp;", " ");
-        text = text.replace("&amp;", "&");
-        text = text.replace("&lt;", "<");
-        text = text.replace("&gt;", ">");
-        text = text.replace("&quot;", "\"");
-        text = text.replace("&#39;", "'");
-        return text.replaceAll("\\s+", " ").trim();
+        return AssistantTextUtils.stripHtmlToText(html);
     }
 }

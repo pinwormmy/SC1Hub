@@ -17,6 +17,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpSession;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -40,6 +42,7 @@ public class ChatRoomService {
     public static final String ROLE_AI = "AI";
 
     private static final String SESSION_GUEST_NICKNAME = "chatGuestNickname";
+    private static final ZoneId CHAT_ZONE = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final int MAX_DELETION_EVENTS = 50;
     private static final int MAX_FLUSH_BATCH = 100;
@@ -435,7 +438,7 @@ public class ChatRoomService {
         message.setRole(role);
         message.setContent(content);
         message.setIp(ip);
-        message.setCreatedAt(LocalDateTime.now());
+        message.setCreatedAt(LocalDateTime.now(CHAT_ZONE));
         message.setRegDate(formatTime(message.getCreatedAt()));
 
         lock.lock();
@@ -450,15 +453,25 @@ public class ChatRoomService {
         }
 
         pendingWrites.add(message);
+        if (pendingWrites.size() > MAX_PENDING_WRITES) {
+            trimPendingWrites();
+        }
         return message;
     }
 
     private void checkFlood(String memberId, String ip) {
         String key = StringUtils.hasText(memberId) ? "member:" + memberId : "ip:" + ip;
         long now = System.currentTimeMillis();
-        Long previous = lastPostAt.put(key, now);
-        if (previous != null && now - previous < chatProperties.getMinIntervalMillis()) {
-            lastPostAt.put(key, previous);
+        long minInterval = chatProperties.getMinIntervalMillis();
+        AtomicBoolean rejected = new AtomicBoolean(false);
+        lastPostAt.compute(key, (k, previous) -> {
+            if (previous != null && now - previous < minInterval) {
+                rejected.set(true);
+                return previous;
+            }
+            return now;
+        });
+        if (rejected.get()) {
             throw new ChatRejectedException(HttpStatus.TOO_MANY_REQUESTS, "너무 빠르게 입력하고 있습니다. 잠시 후 다시 시도해주세요.");
         }
         if (lastPostAt.size() > MAX_FLOOD_ENTRIES) {

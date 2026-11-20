@@ -104,8 +104,15 @@ public class ContentAdminController {
             @RequestParam(value = "upload", required = false) MultipartFile upload,
             HttpServletRequest request) throws Exception {
         String normalizedBoardTitle = requireBoard(boardTitle);
-        ContentPostRequest payload = composePayload(form, upload, request);
-        return publish(normalizedBoardTitle, payload, request);
+        validateFormBeforeUpload(form, upload, request, true);
+        PostImageResponse image = storeOptionalImage(upload, request);
+        try {
+            ContentPostRequest payload = composePayload(form, image);
+            return publish(normalizedBoardTitle, payload, request);
+        } catch (Exception e) {
+            cleanupStoredImage(image);
+            throw e;
+        }
     }
 
     @PutMapping(value = "/boards/{boardTitle}/posts/{postNum}", consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -113,7 +120,9 @@ public class ContentAdminController {
     public ResponseEntity<ContentPostResponse> updatePost(@PathVariable String boardTitle,
             @PathVariable int postNum, @RequestBody ContentPostRequest payload, HttpServletRequest request)
             throws Exception {
-        return update(requireBoard(boardTitle), postNum, payload, request);
+        String normalizedBoardTitle = requireBoard(boardTitle);
+        BoardDTO existingPost = requirePost(normalizedBoardTitle, postNum);
+        return updateExisting(normalizedBoardTitle, existingPost, payload, request);
     }
 
     @PutMapping(value = "/boards/{boardTitle}/posts/{postNum}",
@@ -123,8 +132,16 @@ public class ContentAdminController {
             @RequestParam(value = "upload", required = false) MultipartFile upload,
             HttpServletRequest request) throws Exception {
         String normalizedBoardTitle = requireBoard(boardTitle);
-        ContentPostRequest payload = composePayload(form, upload, request);
-        return update(normalizedBoardTitle, postNum, payload, request);
+        BoardDTO existingPost = requirePost(normalizedBoardTitle, postNum);
+        validateFormBeforeUpload(form, upload, request, false);
+        PostImageResponse image = storeOptionalImage(upload, request);
+        try {
+            ContentPostRequest payload = composePayload(form, image);
+            return updateExisting(normalizedBoardTitle, existingPost, payload, request);
+        } catch (Exception e) {
+            cleanupStoredImage(image);
+            throw e;
+        }
     }
 
     @DeleteMapping(value = "/boards/{boardTitle}/posts/{postNum}")
@@ -153,11 +170,11 @@ public class ContentAdminController {
         return ResponseEntity.created(URI.create(url)).body(response);
     }
 
-    private ResponseEntity<ContentPostResponse> update(String normalizedBoardTitle, int postNum,
+    private ResponseEntity<ContentPostResponse> updateExisting(String normalizedBoardTitle, BoardDTO existingPost,
             ContentPostRequest payload, HttpServletRequest request) throws Exception {
-        BoardDTO existingPost = requirePost(normalizedBoardTitle, postNum);
         validate(payload);
 
+        int postNum = existingPost.getPostNum();
         BoardDTO post = new BoardDTO();
         post.setPostNum(postNum);
         post.setTitle(payload.getTitle().trim());
@@ -173,11 +190,42 @@ public class ContentAdminController {
         return ResponseEntity.ok().location(URI.create(url)).body(response);
     }
 
-    private ContentPostRequest composePayload(ContentPostForm form, MultipartFile upload,
-            HttpServletRequest request) throws IOException {
-        PostImageResponse image = upload == null || upload.isEmpty()
-                ? null
-                : postImageService.store(upload, request.getContextPath());
+    private void validateFormBeforeUpload(ContentPostForm form, MultipartFile upload,
+            HttpServletRequest request, boolean publishMode) {
+        if (form == null) {
+            throw new IllegalArgumentException("게시글 내용을 확인해주세요.");
+        }
+        if (!StringUtils.hasText(form.getTitle()) || form.getTitle().trim().length() > MAX_TITLE_LENGTH) {
+            throw new IllegalArgumentException("제목은 1자 이상 200자 이하로 입력해주세요.");
+        }
+        boolean hasUpload = upload != null && !upload.isEmpty();
+        boolean hasYoutube = StringUtils.hasText(form.getYoutubeUrl());
+        if (!hasUpload && !hasYoutube && !StringUtils.hasText(form.getContent())) {
+            throw new IllegalArgumentException("본문은 1자 이상 500,000자 이하로 입력해주세요.");
+        }
+        if (form.getContent() != null && form.getContent().length() > MAX_CONTENT_LENGTH) {
+            throw new IllegalArgumentException("본문은 1자 이상 500,000자 이하로 입력해주세요.");
+        }
+        contentPostComposer.validateYoutubeUrl(form.getYoutubeUrl());
+        if (publishMode) {
+            resolveWriter(form.getWriter(), request.getSession(false));
+        }
+    }
+
+    private PostImageResponse storeOptionalImage(MultipartFile upload, HttpServletRequest request) throws IOException {
+        if (upload == null || upload.isEmpty()) {
+            return null;
+        }
+        return postImageService.store(upload, request.getContextPath());
+    }
+
+    private void cleanupStoredImage(PostImageResponse image) {
+        if (image != null) {
+            postImageService.deleteStoredImageQuietly(image.getUrl());
+        }
+    }
+
+    private ContentPostRequest composePayload(ContentPostForm form, PostImageResponse image) {
         ContentPostRequest payload = new ContentPostRequest();
         payload.setTitle(form.getTitle());
         payload.setWriter(form.getWriter());
@@ -229,8 +277,12 @@ public class ContentAdminController {
     }
 
     private String resolveWriter(ContentPostRequest payload, HttpSession session) {
+        return resolveWriter(payload.getWriter(), session);
+    }
+
+    private String resolveWriter(String requestedWriter, HttpSession session) {
         MemberDTO member = session == null ? null : (MemberDTO) session.getAttribute("member");
-        String writer = member == null ? payload.getWriter() : member.getNickName();
+        String writer = member == null ? requestedWriter : member.getNickName();
         if (!StringUtils.hasText(writer) && member == null) {
             writer = DEFAULT_API_WRITER;
         }

@@ -19,6 +19,9 @@ import com.sc1hub.assistant.anthropic.AnthropicAssistantClient;
 import com.sc1hub.assistant.anthropic.AnthropicAssistantException;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotClient;
 import com.sc1hub.assistant.openai.OpenAiAssistantBotException;
+import com.sc1hub.assistant.service.AssistantBotDuplicateValidator.DuplicateCheck;
+import com.sc1hub.assistant.service.AssistantBotScheduleCalculator.AutoPublishCandidate;
+import com.sc1hub.assistant.support.AssistantTextUtils;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.support.GuestPasswordHasher;
@@ -39,8 +42,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -50,7 +52,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -66,8 +67,6 @@ public class AssistantBotService {
     private static final String OUTCOME_FAILED = "failed";
     private static final String ALREADY_PUBLISHING_ERROR = "이미 발행되었거나 다른 요청이 발행 중인 초안입니다.";
     private static final String AUTO_PUBLISH_ALREADY_RUNNING = "auto_publish_already_running";
-    private static final Pattern NON_TEXT_PATTERN = Pattern.compile("[^가-힣a-z0-9]");
-    private static final Pattern TITLE_COMMENT_COUNT_PATTERN = Pattern.compile("\\s*\\(\\s*\\d+\\s*\\)\\s*$");
     private static final String TOPIC_LANE_STAR_CHAT = "스타수다";
     private static final String TOPIC_LANE_DAILY_LIFE = "일상글";
     private static final String TOPIC_LANE_LIGHT_CHAT = "잡담/뻘글";
@@ -76,8 +75,6 @@ public class AssistantBotService {
     private static final String POST_STRATEGY_FRESH = "fresh";
     private static final String AUTO_DRAFT_SKIPPED_AFTER_GENERATION = "draft_skipped_after_generation:";
     private static final String AUTO_DRAFT_BUDGET_EXCEEDED = "generate_call_budget_exceeded";
-    private static final String CHAT_RETRY_COOLDOWN = "chat_retry_cooldown";
-    private static final String CHAT_RETRY_LIMIT_REACHED = "chat_retry_limit_reached";
     private static final String PROVIDER_OPENAI = "openai";
     private static final String PROVIDER_ANTHROPIC = "anthropic";
     private static final String GOSU_BOT_NAME = "고수봇";
@@ -103,6 +100,8 @@ public class AssistantBotService {
     private final ObjectMapper objectMapper;
     private final ChatRoomService chatRoomService;
     private final Clock clock;
+    private final AssistantBotScheduleCalculator scheduleCalculator;
+    private final AssistantBotDuplicateValidator duplicateValidator;
     private final ReentrantLock autoPublishLock = new ReentrantLock();
     private LocalDate generateCallBudgetDate;
     private int generateCallBudgetUsed;
@@ -120,7 +119,11 @@ public class AssistantBotService {
                                ChatRoomService chatRoomService) {
         this(botProperties, assistantProperties, boardService, boardMapper, assistantBotMapper,
                 geminiClient, openAiAssistantBotClient, anthropicAssistantClient, objectMapper, chatRoomService,
-                Clock.systemDefaultZone());
+                Clock.system(resolveBotZone(botProperties)));
+    }
+
+    private static java.time.ZoneId resolveBotZone(AssistantBotProperties botProperties) {
+        return AssistantBotScheduleCalculator.resolveZoneId(botProperties);
     }
 
     AssistantBotService(AssistantBotProperties botProperties,
@@ -145,6 +148,8 @@ public class AssistantBotService {
         this.objectMapper = objectMapper;
         this.chatRoomService = chatRoomService;
         this.clock = clock;
+        this.scheduleCalculator = new AssistantBotScheduleCalculator(botProperties);
+        this.duplicateValidator = new AssistantBotDuplicateValidator(botProperties);
     }
 
     public AssistantBotDraftResponseDTO generateDraft(AssistantBotDraftRequestDTO request) {
@@ -907,6 +912,11 @@ public class AssistantBotService {
             return AutoPublishResult.failed(persona.getName(), "chat_anthropic_error");
         } catch (Exception e) {
             log.error("봇 채팅 발행 실패. personaName={}", persona.getName(), e);
+            try {
+                insertAutoPublishSkippedHistory(persona, boardTitle, MODE_CHAT, null, "chat_error");
+            } catch (Exception historyError) {
+                log.warn("봇 채팅 실패 이력 기록 중 추가 오류. personaName={}", persona.getName(), historyError);
+            }
             return AutoPublishResult.failed(persona.getName(), "chat_error");
         }
     }
@@ -983,10 +993,7 @@ public class AssistantBotService {
     }
 
     private List<Integer> resolveChatAutoPublishSlots(PersonaProperties persona, LocalDate date, int dailyLimit) {
-        if (persona == null || date == null || dailyLimit <= 0) {
-            return Collections.emptyList();
-        }
-        return botProperties.buildDailyAutoPublishSlots(date, MODE_CHAT, dailyLimit, persona.getBoardTitle(), persona.getName());
+        return scheduleCalculator.resolveChatAutoPublishSlots(persona, date, dailyLimit);
     }
 
     private String buildChatWaitingDetail(PersonaProperties persona,
@@ -996,16 +1003,8 @@ public class AssistantBotService {
                                           int attemptedChatToday,
                                           int attemptedChatInRetryWindow,
                                           int chatDailyLimit) {
-        String retryWaitingDetail = resolveChatRetryWaitingDetail(persona,
-                publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
-        if (StringUtils.hasText(retryWaitingDetail)) {
-            return retryWaitingDetail;
-        }
-        Integer nextSlot = resolveNextUpcomingChatSlot(persona, date, now, chatDailyLimit);
-        if (nextSlot == null) {
-            return publishedChatToday >= chatDailyLimit ? "daily_limits_reached" : "no_remaining_slot_today";
-        }
-        return "waiting_random_slot:chat=" + formatMinuteOfDay(nextSlot);
+        return scheduleCalculator.buildChatWaitingDetail(
+                persona, date, now, publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
     }
 
     private int countChatAttemptsInRetryWindow(PersonaProperties persona,
@@ -1024,42 +1023,20 @@ public class AssistantBotService {
                                                  int attemptedChatToday,
                                                  int attemptedChatInRetryWindow,
                                                  int chatDailyLimit) {
-        if (publishedChatToday >= chatDailyLimit) {
-            return "daily_limits_reached";
-        }
-        int maxAttemptsPerDay = resolveChatMaxAttemptsPerDay(persona);
-        if (attemptedChatToday >= maxAttemptsPerDay) {
-            return CHAT_RETRY_LIMIT_REACHED;
-        }
-        if (attemptedChatToday > publishedChatToday && attemptedChatInRetryWindow > 0) {
-            return CHAT_RETRY_COOLDOWN;
-        }
-        return null;
+        return scheduleCalculator.resolveChatRetryWaitingDetail(
+                persona, publishedChatToday, attemptedChatToday, attemptedChatInRetryWindow, chatDailyLimit);
     }
 
     private int resolveChatDailyLimit(PersonaProperties persona) {
-        if (persona != null && persona.getAutoPublishChatDailyLimit() != null) {
-            return Math.max(0, persona.getAutoPublishChatDailyLimit());
-        }
-        return Math.max(0, botProperties.getAutoPublishChatDailyLimit());
+        return scheduleCalculator.resolveChatDailyLimit(persona);
     }
 
     private int resolveChatMaxAttemptsPerDay(PersonaProperties persona) {
-        if (persona != null && persona.getAutoPublishChatMaxAttemptsPerDay() != null
-                && persona.getAutoPublishChatMaxAttemptsPerDay() > 0) {
-            return persona.getAutoPublishChatMaxAttemptsPerDay();
-        }
-        return Math.max(1, botProperties.getAutoPublishChatMaxAttemptsPerDay());
+        return scheduleCalculator.resolveChatMaxAttemptsPerDay(persona);
     }
 
     private Integer resolveNextUpcomingChatSlot(PersonaProperties persona, LocalDate date, LocalTime now, int chatDailyLimit) {
-        int nowMinuteOfDay = toMinuteOfDay(now);
-        for (Integer slot : resolveChatAutoPublishSlots(persona, date, chatDailyLimit)) {
-            if (slot != null && slot > nowMinuteOfDay) {
-                return slot;
-            }
-        }
-        return null;
+        return scheduleCalculator.resolveNextUpcomingChatSlot(persona, date, now, chatDailyLimit);
     }
 
     String buildChatPrompt(PersonaProperties persona,
@@ -1166,7 +1143,7 @@ public class AssistantBotService {
         }
 
         sb.append("\n출력은 반드시 JSON 하나만 반환한다.\n");
-        sb.append("{\"analysis\":{\"topic\":\"\",\"risk_notes\":[]},\"chat\":{\"body\":\"\"}}\n");
+        sb.append("{\"analysis\":{\"topic\":\"\",\"risk_notes\":[],\"response_mode\":\"standalone_strategy\"},\"chat\":{\"body\":\"\"}}\n");
         sb.append("JSON 이외의 설명, 코드블록, 사족은 절대 출력하지 마라.\n");
 
         return truncatePrompt(sb.toString());
@@ -1332,25 +1309,10 @@ public class AssistantBotService {
                                                                        int handledPostThisMinute,
                                                                        int handledCommentThisMinute,
                                                                        int handledPostRecoveryCooldown) {
-        List<AutoPublishCandidate> candidates = new ArrayList<>();
-        int nowMinuteOfDay = toMinuteOfDay(now);
-
-        int postDailyLimit = Math.max(0, botProperties.getAutoPublishPostDailyLimit());
-        List<Integer> postSlots = resolveAutoPublishSlots(persona, date, MODE_POST, postDailyLimit);
-        if (isPublishMinute(postSlots, nowMinuteOfDay, handledPostToday, handledPostThisMinute, postDailyLimit)
-                || shouldRecoverMissedPostAfterLastSlot(postSlots, nowMinuteOfDay, handledPostToday,
-                handledPostThisMinute, handledPostRecoveryCooldown, postDailyLimit)) {
-            candidates.add(new AutoPublishCandidate(MODE_POST, nowMinuteOfDay));
-        }
-
-        int commentDailyLimit = Math.max(0, botProperties.getAutoPublishCommentDailyLimit());
-        List<Integer> commentSlots = resolveAutoPublishSlots(persona, date, MODE_COMMENT, commentDailyLimit);
-        if (isPublishMinute(commentSlots, nowMinuteOfDay, handledCommentToday, handledCommentThisMinute)) {
-            candidates.add(new AutoPublishCandidate(MODE_COMMENT, nowMinuteOfDay));
-        }
-
-        candidates.sort(Comparator.comparingInt(candidate -> candidate.minuteOfDay));
-        return candidates;
+        return scheduleCalculator.resolveDueAutoPublishCandidates(
+                persona, date, now, handledPostToday, handledCommentToday,
+                handledPostThisMinute, handledCommentThisMinute, handledPostRecoveryCooldown,
+                supportsAutoComment(persona));
     }
 
     private String buildWaitingDetail(PersonaProperties persona,
@@ -1358,63 +1320,27 @@ public class AssistantBotService {
                                       LocalTime now,
                                       int handledPostToday,
                                       int handledCommentToday) {
-        Integer nextPostSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, date, MODE_POST, now);
-        Integer nextCommentSlot = resolveNextUpcomingRandomAutoPublishSlot(persona, date, MODE_COMMENT, now);
-        if (nextPostSlot == null && nextCommentSlot == null) {
-            return (handledPostToday >= botProperties.getAutoPublishPostDailyLimit()
-                    && handledCommentToday >= botProperties.getAutoPublishCommentDailyLimit())
-                    ? "daily_limits_reached"
-                    : "no_remaining_slot_today";
-        }
-
-        List<String> parts = new ArrayList<>();
-        if (nextPostSlot != null && toMinuteOfDay(now) < nextPostSlot) {
-            parts.add("post=" + formatMinuteOfDay(nextPostSlot));
-        }
-        if (nextCommentSlot != null && toMinuteOfDay(now) < nextCommentSlot) {
-            parts.add("comment=" + formatMinuteOfDay(nextCommentSlot));
-        }
-        if (parts.isEmpty()) {
-            return "waiting_next_due_slot";
-        }
-        return "waiting_random_slot:" + String.join(",", parts);
+        return scheduleCalculator.buildWaitingDetail(
+                persona, date, now, handledPostToday, handledCommentToday, supportsAutoComment(persona));
     }
 
     private Integer resolveNextUpcomingRandomAutoPublishSlot(PersonaProperties persona,
                                                              LocalDate date,
                                                              String mode,
                                                              LocalTime now) {
-        List<Integer> slots = resolveAutoPublishSlots(
-                persona,
-                date,
-                mode,
-                MODE_POST.equals(mode) ? botProperties.getAutoPublishPostDailyLimit() : botProperties.getAutoPublishCommentDailyLimit()
-        );
-        int nowMinuteOfDay = toMinuteOfDay(now);
-        for (Integer slot : slots) {
-            if (slot != null && slot > nowMinuteOfDay) {
-                return slot;
-            }
-        }
-        return null;
+        return scheduleCalculator.resolveNextUpcomingRandomAutoPublishSlot(
+                persona, date, mode, now, supportsAutoComment(persona));
     }
 
     private int toMinuteOfDay(LocalTime time) {
-        return time.getHour() * 60 + time.getMinute();
+        return scheduleCalculator.toMinuteOfDay(time);
     }
 
     private boolean isPublishMinute(List<Integer> slots,
                                     int nowMinuteOfDay,
                                     int handledToday,
                                     int handledThisMinute) {
-        if (slots == null || slots.isEmpty() || handledThisMinute > 0) {
-            return false;
-        }
-        int dueSlotCount = countSlotsAtOrBeforeMinute(slots, nowMinuteOfDay);
-        if (botProperties.isAutoPublishCatchUpEnabled()) {
-            return dueSlotCount > 0 && handledToday < dueSlotCount;
-        }
-        return hasSlotAtMinute(slots, nowMinuteOfDay) && handledToday < dueSlotCount;
+        return scheduleCalculator.isPublishMinute(slots, nowMinuteOfDay, handledToday, handledThisMinute);
     }
 
     private boolean isPublishMinute(List<Integer> slots,
@@ -1422,122 +1348,23 @@ public class AssistantBotService {
                                     int handledToday,
                                     int handledThisMinute,
                                     int dailyLimit) {
-        if (slots == null || slots.isEmpty() || dailyLimit <= 0 || handledThisMinute > 0) {
-            return false;
-        }
-        int dueSlotCount = countSlotsAtOrBeforeMinute(slots, nowMinuteOfDay);
-        if (botProperties.isAutoPublishCatchUpEnabled()) {
-            return hasSlotAtMinute(slots, nowMinuteOfDay)
-                    && handledToday < Math.min(Math.max(0, dailyLimit), dueSlotCount);
-        }
-        return hasSlotAtMinute(slots, nowMinuteOfDay) && handledToday < dueSlotCount;
-    }
-
-    private int countSlotsAtOrBeforeMinute(List<Integer> slots, int minuteOfDay) {
-        int count = 0;
-        for (Integer slot : slots) {
-            if (slot != null && slot <= minuteOfDay) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private boolean hasSlotAtMinute(List<Integer> slots, int minuteOfDay) {
-        for (Integer slot : slots) {
-            if (slot != null && slot == minuteOfDay) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean shouldRecoverMissedPostAfterLastSlot(List<Integer> slots,
-                                                         int nowMinuteOfDay,
-                                                         int handledToday,
-                                                         int handledThisMinute,
-                                                         int handledRecoveryCooldown,
-                                                         int dailyLimit) {
-        if (!botProperties.isAutoPublishCatchUpEnabled()
-                || slots == null
-                || slots.isEmpty()
-                || dailyLimit <= 0
-                || handledThisMinute > 0
-                || handledToday >= dailyLimit
-                || handledRecoveryCooldown > 0) {
-            return false;
-        }
-        Integer lastSlot = slots.get(slots.size() - 1);
-        return lastSlot != null && nowMinuteOfDay > lastSlot;
+        return scheduleCalculator.isPublishMinute(slots, nowMinuteOfDay, handledToday, handledThisMinute, dailyLimit);
     }
 
     private List<Integer> resolveAutoPublishSlots(PersonaProperties persona,
                                                   LocalDate date,
                                                   String mode,
                                                   int dailyLimit) {
-        if (persona == null || date == null || !StringUtils.hasText(mode) || dailyLimit <= 0) {
-            return Collections.emptyList();
-        }
-        if (MODE_COMMENT.equals(mode) && !supportsAutoComment(persona)) {
-            return Collections.emptyList();
-        }
-
-        List<Integer> primarySlots = botProperties.buildDailyAutoPublishSlots(
-                date,
-                mode,
-                dailyLimit,
-                persona.getBoardTitle(),
-                persona.getName()
-        );
-        if (!MODE_POST.equals(mode) || !botProperties.isAutoPublishCatchUpEnabled()) {
-            return primarySlots;
-        }
-
-        int retrySlots = Math.max(0, botProperties.getAutoPublishCatchUpPostRetrySlots());
-        if (retrySlots <= 0 || primarySlots.isEmpty()) {
-            return primarySlots;
-        }
-
-        int lastPrimarySlot = primarySlots.get(primarySlots.size() - 1);
-        if (lastPrimarySlot >= (24 * 60) - 1) {
-            return primarySlots;
-        }
-
-        List<Integer> catchUpSlots = botProperties.buildDailyAutoPublishSlotsInRange(
-                date,
-                mode + "_catchup",
-                retrySlots,
-                persona.getBoardTitle(),
-                persona.getName(),
-                lastPrimarySlot + 1,
-                (24 * 60) - 1
-        );
-        if (catchUpSlots.isEmpty()) {
-            return primarySlots;
-        }
-
-        List<Integer> combinedSlots = new ArrayList<>(primarySlots);
-        combinedSlots.addAll(catchUpSlots);
-        Collections.sort(combinedSlots);
-        return combinedSlots;
+        return scheduleCalculator.resolveAutoPublishSlots(
+                persona, date, mode, dailyLimit, supportsAutoComment(persona));
     }
 
     private List<String> formatMinuteSlots(List<Integer> slots) {
-        if (slots == null || slots.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<String> formatted = new ArrayList<>();
-        for (Integer slot : slots) {
-            if (slot == null) {
-                continue;
-            }
-            formatted.add(formatMinuteOfDay(slot));
-        }
-        return formatted;
+        return scheduleCalculator.formatMinuteSlots(slots);
     }
 
     private String formatMinuteOfDay(int minuteOfDay) {
-        return String.format("%02d:%02d", minuteOfDay / 60, minuteOfDay % 60);
+        return scheduleCalculator.formatMinuteOfDay(minuteOfDay);
     }
 
     private CandidateDraft validateCandidate(String mode,
@@ -2041,14 +1868,54 @@ public class AssistantBotService {
         history.setTopic("skip");
         history.setDraftTitle(null);
         history.setDraftBody("");
-        if (MODE_POST.equals(normalizeMode(mode))) {
-            history.setRawJson("{\"analysis\":{\"topic\":\"skip\",\"post_strategy\":\"fresh\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
-                    + "\"post\":{\"title\":\"\",\"body\":\"\"},"
-                    + "\"self_review\":{\"naturalness\":100,\"novelty\":100,\"engagement\":0,\"needs_revision\":false}}");
+        String safeReason = safeText(reason, 80);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        String normalizedMode = normalizeMode(mode);
+        if (MODE_POST.equals(normalizedMode)) {
+            Map<String, Object> analysis = new LinkedHashMap<>();
+            analysis.put("topic", "skip");
+            analysis.put("post_strategy", "fresh");
+            analysis.put("risk_notes", Collections.singletonList(safeReason));
+            Map<String, Object> post = new LinkedHashMap<>();
+            post.put("title", "");
+            post.put("body", "");
+            Map<String, Object> review = new LinkedHashMap<>();
+            review.put("naturalness", 100);
+            review.put("novelty", 100);
+            review.put("engagement", 0);
+            review.put("needs_revision", false);
+            payload.put("analysis", analysis);
+            payload.put("post", post);
+            payload.put("self_review", review);
+        } else if (MODE_CHAT.equals(normalizedMode)) {
+            Map<String, Object> analysis = new LinkedHashMap<>();
+            analysis.put("topic", "skip");
+            analysis.put("risk_notes", Collections.singletonList(safeReason));
+            Map<String, Object> chat = new LinkedHashMap<>();
+            chat.put("body", "");
+            payload.put("analysis", analysis);
+            payload.put("chat", chat);
         } else {
-            history.setRawJson("{\"analysis\":{\"comment_type\":\"skip\",\"tone_match\":\"\",\"risk_notes\":[\"" + safeText(reason, 80) + "\"]},"
-                    + "\"reply\":{\"should_reply\":false,\"body\":\"\"},"
-                    + "\"self_review\":{\"naturalness\":100,\"context_fit\":100,\"conflict_risk\":0,\"needs_revision\":false}}");
+            Map<String, Object> analysis = new LinkedHashMap<>();
+            analysis.put("comment_type", "skip");
+            analysis.put("tone_match", "");
+            analysis.put("risk_notes", Collections.singletonList(safeReason));
+            Map<String, Object> reply = new LinkedHashMap<>();
+            reply.put("should_reply", false);
+            reply.put("body", "");
+            Map<String, Object> review = new LinkedHashMap<>();
+            review.put("naturalness", 100);
+            review.put("context_fit", 100);
+            review.put("conflict_risk", 0);
+            review.put("needs_revision", false);
+            payload.put("analysis", analysis);
+            payload.put("reply", reply);
+            payload.put("self_review", review);
+        }
+        try {
+            history.setRawJson(objectMapper.writeValueAsString(payload));
+        } catch (Exception e) {
+            history.setRawJson("{\"analysis\":{\"topic\":\"skip\"}}");
         }
         history.setStatus(STATUS_SKIPPED);
         return history;
@@ -2077,74 +1944,19 @@ public class AssistantBotService {
                                               List<BoardDTO> recentPosts,
                                               List<CommentDTO> recentComments,
                                               List<AssistantBotHistoryDTO> recentHistory) {
-        double threshold = clampThreshold(botProperties.getDuplicateSimilarityThreshold());
-        String normalizedTitle = normalizeText(title);
-        String normalizedBody = normalizeText(body);
-
-        for (AssistantBotHistoryDTO history : recentHistory) {
-            if (history == null) {
-                continue;
-            }
-            String historyMode = normalizeMode(history.getGenerationMode());
-            if (MODE_POST.equals(mode) && MODE_POST.equals(historyMode)) {
-                if (hasRepeatedTitleOpening(title, history.getDraftTitle())) {
-                    return DuplicateCheck.of("최근 봇 게시글 제목 첫머리 패턴이 겹칩니다.");
-                }
-                if (isTooSimilar(normalizedTitle, normalizeText(history.getDraftTitle()), threshold)) {
-                    return DuplicateCheck.of("최근 봇 게시글 제목과 너무 비슷합니다.");
-                }
-                if (isTooSimilar(normalizedBody, normalizeText(history.getDraftBody()), threshold)) {
-                    return DuplicateCheck.of("최근 봇 게시글 본문과 너무 비슷합니다.");
-                }
-            }
-            if (MODE_COMMENT.equals(mode) && MODE_COMMENT.equals(historyMode)) {
-                if (isTooSimilar(normalizedBody, normalizeText(history.getDraftBody()), threshold)) {
-                    return DuplicateCheck.of("최근 봇 댓글과 너무 비슷합니다.");
-                }
-            }
-        }
-
-        if (MODE_POST.equals(mode)) {
-            for (BoardDTO post : recentPosts) {
-                if (post == null) {
-                    continue;
-                }
-                if (hasRepeatedTitleOpening(title, post.getTitle())) {
-                    return DuplicateCheck.of("최근 게시글 제목 첫머리 패턴이 겹칩니다.");
-                }
-                if (isTooSimilar(normalizedTitle, normalizeText(post.getTitle()), threshold)) {
-                    return DuplicateCheck.of("최근 게시글 제목과 너무 비슷합니다.");
-                }
-                if (isTooSimilar(normalizedBody, normalizeText(stripHtml(post.getContent())), Math.min(0.82, threshold + 0.08))) {
-                    return DuplicateCheck.of("최근 게시글 본문 전개와 너무 비슷합니다.");
-                }
-            }
-        } else {
-            for (CommentDTO comment : recentComments) {
-                if (comment == null) {
-                    continue;
-                }
-                if (isTooSimilar(normalizedBody, normalizeText(stripHtml(comment.getContent())), threshold)) {
-                    return DuplicateCheck.of("최근 댓글과 너무 비슷합니다.");
-                }
-            }
-        }
-        return DuplicateCheck.notDuplicate();
+        return duplicateValidator.findDuplicateIssue(
+                mode, title, body, recentPosts, recentComments, recentHistory);
     }
 
     private JsonNode parseJson(String raw) {
         if (!StringUtils.hasText(raw)) {
             return null;
         }
-        String cleaned = raw.trim()
-                .replace("```json", "")
-                .replace("```JSON", "")
-                .replace("```", "")
-                .trim();
+        String cleaned = AssistantTextUtils.stripCodeFences(raw);
         try {
             return objectMapper.readTree(cleaned);
         } catch (Exception ignored) {
-            String extracted = extractFirstJsonObject(cleaned);
+            String extracted = AssistantTextUtils.extractFirstJsonObject(cleaned);
             if (!StringUtils.hasText(extracted)) {
                 return null;
             }
@@ -2154,46 +1966,6 @@ public class AssistantBotService {
                 return null;
             }
         }
-    }
-
-    private String extractFirstJsonObject(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return null;
-        }
-        int start = raw.indexOf('{');
-        if (start < 0) {
-            return null;
-        }
-        int depth = 0;
-        boolean inString = false;
-        boolean escaped = false;
-        for (int i = start; i < raw.length(); i++) {
-            char ch = raw.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) {
-                continue;
-            }
-            if (ch == '{') {
-                depth++;
-            } else if (ch == '}') {
-                depth--;
-                if (depth == 0) {
-                    return raw.substring(start, i + 1);
-                }
-            }
-        }
-        return null;
     }
 
     private String extractGeneratedTitle(String mode, JsonNode result) {
@@ -2374,71 +2146,7 @@ public class AssistantBotService {
     }
 
     private boolean isTooSimilar(String left, String right, double threshold) {
-        if (!StringUtils.hasText(left) || !StringUtils.hasText(right)) {
-            return false;
-        }
-        if (left.equals(right)) {
-            return true;
-        }
-        if (left.length() >= 8 && right.contains(left)) {
-            return true;
-        }
-        if (right.length() >= 8 && left.contains(right)) {
-            return true;
-        }
-        return trigramSimilarity(left, right) >= threshold;
-    }
-
-    private boolean hasRepeatedTitleOpening(String leftTitle, String rightTitle) {
-        String left = normalizeTitleForOpeningCompare(leftTitle);
-        String right = normalizeTitleForOpeningCompare(rightTitle);
-        if (!StringUtils.hasText(left) || !StringUtils.hasText(right)) {
-            return false;
-        }
-
-        String leftTokenPrefix = buildLeadingTokenKey(left, 2);
-        String rightTokenPrefix = buildLeadingTokenKey(right, 2);
-        if (StringUtils.hasText(leftTokenPrefix)
-                && Objects.equals(leftTokenPrefix, rightTokenPrefix)
-                && normalizeText(leftTokenPrefix).length() >= 4) {
-            return true;
-        }
-
-        return sharedPrefixLength(normalizeText(left), normalizeText(right)) >= 6;
-    }
-
-    private double trigramSimilarity(String left, String right) {
-        Set<String> leftSet = buildNgrams(left, 3);
-        Set<String> rightSet = buildNgrams(right, 3);
-        if (leftSet.isEmpty() || rightSet.isEmpty()) {
-            return 0.0;
-        }
-        int intersection = 0;
-        for (String item : leftSet) {
-            if (rightSet.contains(item)) {
-                intersection++;
-            }
-        }
-        int union = leftSet.size() + rightSet.size() - intersection;
-        if (union <= 0) {
-            return 0.0;
-        }
-        return (double) intersection / union;
-    }
-
-    private Set<String> buildNgrams(String text, int size) {
-        Set<String> grams = new LinkedHashSet<>();
-        if (!StringUtils.hasText(text)) {
-            return grams;
-        }
-        if (text.length() <= size) {
-            grams.add(text);
-            return grams;
-        }
-        for (int i = 0; i <= text.length() - size; i++) {
-            grams.add(text.substring(i, i + size));
-        }
-        return grams;
+        return duplicateValidator.isTooSimilar(left, right, threshold);
     }
 
     private BoardDTO findPublishedPost(String boardTitle, BoardDTO submittedPost, String writer) throws Exception {
@@ -2650,14 +2358,7 @@ public class AssistantBotService {
     }
 
     private static String stripHtml(String html) {
-        if (!StringUtils.hasText(html)) {
-            return "";
-        }
-        return html.replaceAll("(?is)<br\\s*/?>", "\n")
-                .replaceAll("(?is)<[^>]+>", " ")
-                .replace("&nbsp;", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
+        return AssistantTextUtils.stripHtmlToText(html);
     }
 
     private static String safeText(String text, int maxChars) {
@@ -2692,20 +2393,8 @@ public class AssistantBotService {
         return mode.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static String normalizeText(String text) {
-        if (!StringUtils.hasText(text)) {
-            return "";
-        }
-        String lowered = text.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
-        return NON_TEXT_PATTERN.matcher(lowered).replaceAll("");
-    }
-
-    private static String normalizeTitleForOpeningCompare(String title) {
-        if (!StringUtils.hasText(title)) {
-            return "";
-        }
-        String trimmed = TITLE_COMMENT_COUNT_PATTERN.matcher(title.trim()).replaceAll("");
-        return trimmed.replaceAll("\\s+", " ").trim();
+    private String normalizeText(String text) {
+        return duplicateValidator.normalizeText(text);
     }
 
     private static String normalizePostStrategy(String strategy) {
@@ -2722,8 +2411,8 @@ public class AssistantBotService {
         return null;
     }
 
-    private static double clampThreshold(double threshold) {
-        return Math.max(0.45, Math.min(threshold, 0.95));
+    private double clampThreshold(double threshold) {
+        return duplicateValidator.clampThreshold(threshold);
     }
 
     private static double clampProbability(double probability) {
@@ -3276,47 +2965,7 @@ public class AssistantBotService {
     }
 
     private String extractTitleOpeningHint(String title) {
-        String normalized = normalizeTitleForOpeningCompare(title);
-        if (!StringUtils.hasText(normalized)) {
-            return null;
-        }
-        String[] tokens = normalized.split(" ");
-        if (tokens.length >= 3) {
-            return String.join(" ", tokens[0], tokens[1], tokens[2]);
-        }
-        if (tokens.length == 2) {
-            return String.join(" ", tokens[0], tokens[1]);
-        }
-        if (normalized.length() <= 12) {
-            return normalized;
-        }
-        return normalized.substring(0, 12).trim();
-    }
-
-    private String buildLeadingTokenKey(String text, int tokenCount) {
-        if (!StringUtils.hasText(text) || tokenCount <= 0) {
-            return "";
-        }
-        String[] tokens = text.trim().split("\\s+");
-        if (tokens.length < tokenCount) {
-            return "";
-        }
-        List<String> selected = new ArrayList<>();
-        for (int i = 0; i < tokenCount; i++) {
-            if (StringUtils.hasText(tokens[i])) {
-                selected.add(tokens[i]);
-            }
-        }
-        return String.join(" ", selected);
-    }
-
-    private int sharedPrefixLength(String left, String right) {
-        int max = Math.min(left.length(), right.length());
-        int matched = 0;
-        while (matched < max && left.charAt(matched) == right.charAt(matched)) {
-            matched++;
-        }
-        return matched;
+        return duplicateValidator.extractTitleOpeningHint(title);
     }
 
     private String inferPostStrategy(String title, List<BoardDTO> recentPosts) {
@@ -3329,72 +2978,15 @@ public class AssistantBotService {
     }
 
     private Set<String> collectFrequentRecentTitleKeywords(List<BoardDTO> recentPosts, int limit) {
-        if (recentPosts == null || recentPosts.isEmpty() || limit <= 0) {
-            return Collections.emptySet();
-        }
-        Map<String, Integer> counts = new HashMap<>();
-        List<String> firstSeenOrder = new ArrayList<>();
-        for (BoardDTO post : recentPosts) {
-            if (post == null) {
-                continue;
-            }
-            for (String keyword : extractTitleKeywords(post.getTitle())) {
-                counts.put(keyword, counts.getOrDefault(keyword, 0) + 1);
-                if (counts.get(keyword) == 1) {
-                    firstSeenOrder.add(keyword);
-                }
-            }
-        }
-
-        LinkedHashSet<String> selected = new LinkedHashSet<>();
-        for (String keyword : firstSeenOrder) {
-            if (selected.size() >= limit) {
-                break;
-            }
-            if (counts.getOrDefault(keyword, 0) >= 2) {
-                selected.add(keyword);
-            }
-        }
-        if (!selected.isEmpty()) {
-            return selected;
-        }
-
-        for (String keyword : firstSeenOrder) {
-            if (selected.size() >= limit) {
-                break;
-            }
-            selected.add(keyword);
-        }
-        return selected;
+        return duplicateValidator.collectFrequentRecentTitleKeywords(recentPosts, limit);
     }
 
     private Set<String> extractTitleKeywords(String title) {
-        String normalized = normalizeTitleForOpeningCompare(title);
-        if (!StringUtils.hasText(normalized)) {
-            return Collections.emptySet();
-        }
-        LinkedHashSet<String> keywords = new LinkedHashSet<>();
-        for (String token : normalized.split("\\s+")) {
-            String cleaned = normalizeText(token);
-            if (!StringUtils.hasText(cleaned) || cleaned.length() < 2) {
-                continue;
-            }
-            keywords.add(cleaned);
-        }
-        return keywords;
+        return duplicateValidator.extractTitleKeywords(title);
     }
 
     private int countOverlap(Set<String> left, Set<String> right) {
-        if (left == null || right == null || left.isEmpty() || right.isEmpty()) {
-            return 0;
-        }
-        int overlap = 0;
-        for (String item : left) {
-            if (right.contains(item)) {
-                overlap++;
-            }
-        }
-        return overlap;
+        return duplicateValidator.countOverlap(left, right);
     }
 
     private static final class CandidateDraft {
@@ -3438,24 +3030,6 @@ public class AssistantBotService {
         }
     }
 
-    private static final class DuplicateCheck {
-        private final boolean duplicate;
-        private final String feedback;
-
-        private DuplicateCheck(boolean duplicate, String feedback) {
-            this.duplicate = duplicate;
-            this.feedback = feedback;
-        }
-
-        static DuplicateCheck of(String feedback) {
-            return new DuplicateCheck(true, feedback);
-        }
-
-        static DuplicateCheck notDuplicate() {
-            return new DuplicateCheck(false, null);
-        }
-    }
-
     private static final class KeywordOverlapCheck {
         private final boolean invalid;
         private final String feedback;
@@ -3471,16 +3045,6 @@ public class AssistantBotService {
 
         static KeywordOverlapCheck valid() {
             return new KeywordOverlapCheck(false, null);
-        }
-    }
-
-    private static final class AutoPublishCandidate {
-        private final String mode;
-        private final int minuteOfDay;
-
-        private AutoPublishCandidate(String mode, int minuteOfDay) {
-            this.mode = mode;
-            this.minuteOfDay = minuteOfDay;
         }
     }
 

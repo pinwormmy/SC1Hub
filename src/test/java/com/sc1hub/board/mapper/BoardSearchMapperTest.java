@@ -5,6 +5,7 @@ import com.sc1hub.common.dto.PageDTO;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -68,6 +69,28 @@ class BoardSearchMapperTest {
             default -> List.of(1, 2, 3);
         };
         assertSearch(searchType, expected);
+    }
+
+    @Test
+    void blankKeywordListsAllNonNoticePostsAndPercentWildcardIsEscaped() throws Exception {
+        PageDTO blank = new PageDTO();
+        blank.setSearchType("title");
+        blank.setKeyword("");
+        blank.setDisplayPostLimit(15);
+
+        PageDTO wildcard = new PageDTO();
+        wildcard.setSearchType("title");
+        wildcard.setKeyword("%");
+        wildcard.setDisplayPostLimit(15);
+
+        try (SqlSession session = sessions.openSession()) {
+            BoardMapper mapper = session.getMapper(BoardMapper.class);
+            assertEquals(4, mapper.countTotalPost("funboard", blank));
+            assertEquals(List.of(1, 2, 3, 5), mapper.showPostList("funboard", blank).stream()
+                    .map(BoardDTO::getPostNum).sorted().toList());
+            assertEquals(0, mapper.countTotalPost("funboard", wildcard));
+            assertEquals(List.of(), mapper.showPostList("funboard", wildcard));
+        }
     }
 
     private void assertSearch(String searchType, List<Integer> expected) throws Exception {

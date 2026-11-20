@@ -49,15 +49,21 @@ public class WebConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/static/js/")
                 .setCacheControl(versionedAssetCache);
         // Uploaded post images need controller-based recovery for legacy filenames.
+        CacheControl staticAssetCache = CacheControl.maxAge(30, TimeUnit.DAYS)
+                .cachePublic();
         registry.addResourceHandler("/favicon.ico")
-                .addResourceLocations("classpath:/static/favicon.ico");
+                .addResourceLocations("classpath:/static/favicon.ico")
+                .setCacheControl(staticAssetCache);
+        registry.addResourceHandler("/images/**")
+                .addResourceLocations("classpath:/static/images/")
+                .setCacheControl(staticAssetCache);
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(visitorCountInterceptor)
                 .addPathPatterns(patterns(
-                        "/", "/guidelines", "/login", "/signAgreement", "/signUp",
+                        "/", "/guidelines", "/build-timer", "/login", "/signAgreement", "/signUp",
                         "/findId", "/findPassword", "/myPage", "/modifyMyInfo",
                         "/adminPage/**", "/boards/*", "/boards/*/readPost",
                         "/boards/*/writePost", "/boards/*/modifyPost"));
@@ -72,7 +78,8 @@ public class WebConfig implements WebMvcConfigurer {
         // AntPathMatcher(원본 URI 기준) 로 후퇴했고, 핸들러 매핑은 디코딩된 경로를 쓰므로
         // "/boards/noticeboard/submit%50ost" 한 글자 인코딩만으로 관리자·로그인 검사를 건너뛸 수 있었다.
         registry.addInterceptor(boardLvInterceptor)
-                .addPathPatterns(patterns("/boards/*/writePost", "/boards/*/modifyPost", "/boards/*/modifyPost/**",
+                .addPathPatterns(patterns("/boards/*/writePost", "/boards/*/submitPost",
+                        "/boards/*/modifyPost", "/boards/*/modifyPost/**", "/boards/*/submitModifyPost",
                         "/boards/*/deletePost", "/boards/*/deletePost/**"))
                 .excludePathPatterns(patterns("/boards/funBoard/**", "/boards/funboard/**"));
         registry.addInterceptor(memberLoginInterceptor)
@@ -82,8 +89,8 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns(patterns("/adminPage/**", "/modifyMemberByAdmin/**", "/submitModifyMemberByAdmin", "/deleteMember",
                         "/boards/*/writePost", "/boards/*/submitPost", "/boards/*/submitModifyPost",
                         "/boards/*/modifyPost", "/boards/*/modifyPost/**",
-                        "/boards/*/deletePost", "/boards/*/deletePost/**", "/boards/*/movePost",
-                        "/migrate/**", "/api/admin/**"))
+                        "/boards/*/deletePost", "/boards/*/deletePost/**",
+                        "/api/admin/**"))
                 // 회원 작성이 허용되는 게시판. URL 은 소문자로 정규화되므로 소문자 패턴이 실제로 매칭되는 쪽이다.
                 .excludePathPatterns(patterns("/boards/videoLinkBoard/**", "/boards/videolinkboard/**",
                         "/boards/promotionBoard/**", "/boards/promotionboard/**",

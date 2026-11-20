@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -25,6 +26,7 @@ public class SeoSitemapService {
     static final long CACHE_MINUTES = 10L;
     private static final long CACHE_MILLIS = TimeUnit.MINUTES.toMillis(CACHE_MINUTES);
     private static final String XML_HEADER = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+    private static final ZoneId SITEMAP_ZONE = ZoneId.of("Asia/Seoul");
 
     private final BoardService boardService;
     private final Clock clock;
@@ -32,7 +34,7 @@ public class SeoSitemapService {
 
     @Autowired
     public SeoSitemapService(BoardService boardService) {
-        this(boardService, Clock.systemDefaultZone());
+        this(boardService, Clock.system(SITEMAP_ZONE));
     }
 
     SeoSitemapService(BoardService boardService, Clock clock) {
@@ -52,19 +54,27 @@ public class SeoSitemapService {
             if (current != null && now - current.createdAtMillis < CACHE_MILLIS) {
                 return current.xml;
             }
-            String xml = buildSitemapXml();
-            cachedSitemap = new CachedSitemap(now, xml);
-            return xml;
+            BuildResult built = buildSitemapXml();
+            if (built.hadError) {
+                if (current != null) {
+                    return current.xml;
+                }
+                return built.xml;
+            }
+            cachedSitemap = new CachedSitemap(now, built.xml);
+            return built.xml;
         }
     }
 
-    private String buildSitemapXml() {
+    private BuildResult buildSitemapXml() {
         List<SitemapEntry> boardEntries = new ArrayList<>();
         Set<String> seenUrls = new LinkedHashSet<>();
         String homeUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/";
         String guidelinesUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/guidelines";
+        String buildTimerUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/build-timer";
         seenUrls.add(homeUrl);
         seenUrls.add(guidelinesUrl);
+        seenUrls.add(buildTimerUrl);
 
         List<BoardListDTO> boards = boardService.getBoardList();
         if (boards == null) {
@@ -72,15 +82,21 @@ public class SeoSitemapService {
         }
         // 홈은 최신 글 목록을 싣고 있으므로 사이트 전체에서 가장 최근 글의 날짜를 따라간다.
         LocalDate latest = null;
+        boolean hadError = false;
         for (BoardListDTO board : boards) {
-            latest = later(latest, addBoardEntries(boardEntries, seenUrls, board));
+            BoardResult result = addBoardEntries(boardEntries, seenUrls, board);
+            latest = later(latest, result.latest);
+            if (result.hadError) {
+                hadError = true;
+            }
         }
 
-        List<SitemapEntry> entries = new ArrayList<>(boardEntries.size() + 2);
+        List<SitemapEntry> entries = new ArrayList<>(boardEntries.size() + 3);
         entries.add(new SitemapEntry(homeUrl, latest));
         entries.add(new SitemapEntry(guidelinesUrl, null));
+        entries.add(new SitemapEntry(buildTimerUrl, null));
         entries.addAll(boardEntries);
-        return render(entries);
+        return new BuildResult(render(entries), hadError);
     }
 
     private static LocalDate later(LocalDate a, LocalDate b) {
@@ -91,9 +107,9 @@ public class SeoSitemapService {
     }
 
     /** 게시판 목록과 글 URL을 더하고, 그 게시판에서 가장 최근 글의 날짜를 돌려준다(없으면 null). */
-    private LocalDate addBoardEntries(List<SitemapEntry> entries, Set<String> seenUrls, BoardListDTO board) {
+    private BoardResult addBoardEntries(List<SitemapEntry> entries, Set<String> seenUrls, BoardListDTO board) {
         if (board == null) {
-            return null;
+            return new BoardResult(null, false);
         }
 
         final String boardTitle;
@@ -101,14 +117,16 @@ public class SeoSitemapService {
             boardTitle = BoardTitleNormalizer.requireValid(board.getBoardTitle());
         } catch (IllegalArgumentException e) {
             log.warn("사이트맵에서 올바르지 않은 게시판 식별자를 제외합니다: {}", board.getBoardTitle());
-            return null;
+            return new BoardResult(null, false);
         }
 
         String boardUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/boards/" + boardTitle;
         List<BoardDTO> posts = null;
+        boolean hadError = false;
         try {
             posts = boardService.getSitemapPosts(boardTitle);
         } catch (Exception e) {
+            hadError = true;
             log.warn("사이트맵 게시글 조회에 실패했습니다. boardTitle={}", boardTitle, e);
         }
         if (posts == null) {
@@ -130,7 +148,7 @@ public class SeoSitemapService {
             String postUrl = boardUrl + "/readPost?postNum=" + post.getPostNum();
             addEntry(entries, seenUrls, postUrl, lastChanged(post));
         }
-        return latest;
+        return new BoardResult(latest, hadError);
     }
 
     /** 글을 고친 적이 있으면 수정일, 없으면 작성일. */
@@ -169,6 +187,12 @@ public class SeoSitemapService {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&apos;");
+    }
+
+    private record BuildResult(String xml, boolean hadError) {
+    }
+
+    private record BoardResult(LocalDate latest, boolean hadError) {
     }
 
     private static final class CachedSitemap {

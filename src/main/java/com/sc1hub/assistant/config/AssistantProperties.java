@@ -13,7 +13,7 @@ import java.util.List;
 public class AssistantProperties {
     private boolean enabled = true;
     private boolean requireLogin = false;
-    // AI 검색 LLM 프로바이더: gemini(searchModel/searchThinkingLevel) 또는 openai(searchModel/searchReasoningEffort)
+    // AI 검색 LLM 프로바이더: anthropic(searchModel/searchEffort), openai(searchModel/searchReasoningEffort), gemini(searchModel/searchThinkingLevel)
     private String searchProvider = "gemini";
     private int maxRelatedPosts = 3;
     private int contextPosts = 3;
@@ -61,17 +61,10 @@ public class AssistantProperties {
     private int llmRelatedPostsRateLimitPerMinute = 5;
 
     /**
-     * Returns true when the given member is an assistant admin, matching either the configured
-     * admin grade or the configured admin id. Centralizes the check previously duplicated across
-     * the assistant admin controllers.
+     * 관리자 판정은 사이트 전체(AdminInterceptor, BoardServiceImpl 등)와 동일하게 등급 기준으로만 수행한다.
+     * 계정이 강등된 경우 ID 문자열 예외로 관리자 권한이 남지 않도록 한다.
      */
     public boolean isAdmin(MemberDTO member) {
-        if (member == null) {
-            return false;
-        }
-        if (member.getGrade() == adminGrade) {
-            return true;
-        }
-        return adminId != null && adminId.equals(member.getId());
+        return member != null && member.getGrade() == adminGrade;
     }
 }

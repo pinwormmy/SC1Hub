@@ -45,4 +45,16 @@ class WriteRateLimiterTest {
         assertEquals(1, limiter.count("flood" + (WriteRateLimiter.MAX_ENTRIES * 2 - 1)));
         assertTrue(limiter.size() <= WriteRateLimiter.MAX_ENTRIES);
     }
+
+    @Test
+    void protectsGlobalAndStrikeKeysFromEvictionDuringFlood() {
+        WriteRateLimiter limiter = new WriteRateLimiter();
+        assertTrue(limiter.allow("guest:global", 100, 60_000L));
+        assertTrue(limiter.allow("strikes:all", 100, 60_000L));
+        for (int i = 0; i < WriteRateLimiter.MAX_ENTRIES + 500; i++) {
+            assertTrue(limiter.allow("guest-ip:" + i, 10, 60_000L));
+        }
+        assertEquals(1, limiter.count("guest:global"));
+        assertEquals(1, limiter.count("strikes:all"));
+    }
 }

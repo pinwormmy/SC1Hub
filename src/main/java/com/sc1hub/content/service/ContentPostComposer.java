@@ -86,6 +86,12 @@ public class ContentPostComposer {
         html.append(source.outerHtml());
     }
 
+    public void validateYoutubeUrl(String youtubeUrl) {
+        if (StringUtils.hasText(youtubeUrl)) {
+            toYoutubeVideoId(youtubeUrl);
+        }
+    }
+
     String toYoutubeEmbedUrl(String rawUrl) {
         return YOUTUBE_EMBED_PREFIX + toYoutubeVideoId(rawUrl);
     }

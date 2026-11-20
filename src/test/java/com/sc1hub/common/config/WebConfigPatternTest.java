@@ -9,10 +9,10 @@ class WebConfigPatternTest {
 
     @Test
     void rejectsPatternsThatPathPatternParserCannotParse() {
-        // "**" 가 가운데 오는 패턴은 Spring 6 파서가 거부해 인터셉터가 AntPathMatcher(원본 URI) 로 후퇴한다.
-        // 그 후퇴가 인코딩 우회("/boards/x/submit%50ost")의 원인이었으므로 등록 자체를 막는다.
-        assertThrows(IllegalStateException.class, () -> WebConfig.patterns("/**/writePost"));
-        assertThrows(IllegalStateException.class, () -> WebConfig.patterns("/adminPage/**", "/**/modifyPost/**"));
+        // Spring 6.2 PathPatternParser 가 거부하는 잘못된 패턴을 넣으면 인터셉터가 AntPathMatcher(원본 URI) 로
+        // 조용히 후퇴해 인코딩 우회("/boards/x/submit%50ost")가 생길 수 있으므로 등록 자체를 막는다.
+        assertThrows(IllegalStateException.class, () -> WebConfig.patterns("/boards/**/modifyPost/**"));
+        assertThrows(IllegalStateException.class, () -> WebConfig.patterns("/adminPage/**", "/boards/{unclosed"));
     }
 
     @Test

@@ -1,12 +1,16 @@
 package com.sc1hub.common.security;
 
+import com.sc1hub.board.service.PostContentSanitizer;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 사용자가 제출한 텍스트에서 공격 의도를 가진 페이로드를 찾는다. 저장 전 정화(sanitizer)와 별개로,
@@ -49,9 +53,7 @@ public class AttackContentDetector {
                     FLAGS)),
             new Rule("js-uri", Pattern.compile("\\b(?:javascript|vbscript)\\s*:", FLAGS)),
             new Rule("html-injection", Pattern.compile("<\\s*(?:svg|object|embed|meta|base|form|link|style|math|xml)\\b[^>]{0,300}=", FLAGS)),
-            new Rule("foreign-iframe", Pattern.compile(
-                    "<\\s*iframe\\b(?![^>]{0,300}\\bsrc\\s*=\\s*[\"']?https?://(?:www\\.)?(?:youtube(?:-nocookie)?\\.com|youtu\\.be)/)",
-                    FLAGS)),
+            new Rule("foreign-iframe", buildForeignIframePattern()),
             new Rule("html-data-uri", Pattern.compile("data\\s*:\\s*text/html|\\bsrcdoc\\s*=", FLAGS)),
             new Rule("sql-injection", Pattern.compile(
                     "\\bunion\\b\\s+(?:all\\s+)?select\\b|\\b(?:or|and)\\b\\s+['\"]?\\d+['\"]?\\s*=\\s*['\"]?\\d+"
@@ -128,6 +130,17 @@ public class AttackContentDetector {
             }
         }
         return count;
+    }
+
+    private static Pattern buildForeignIframePattern() {
+        Set<String> allowedHosts = new LinkedHashSet<>(PostContentSanitizer.ALLOWED_IFRAME_HOSTS);
+        allowedHosts.add("youtu.be");
+        String hostAlternation = allowedHosts.stream()
+                .map(Pattern::quote)
+                .collect(Collectors.joining("|"));
+        return Pattern.compile(
+                "<\\s*iframe\\b(?![^>]{0,300}\\bsrc\\s*=\\s*[\"']?https?://(?:" + hostAlternation + ")/)",
+                FLAGS);
     }
 
     /** 규칙 이름 목록(문서·테스트용). */

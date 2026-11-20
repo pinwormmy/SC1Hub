@@ -12,6 +12,7 @@ import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.sc1hub.assistant.config.AnthropicProperties;
 import com.sc1hub.common.monitoring.MetaspaceUsageLogger;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -40,9 +41,7 @@ public class AnthropicAssistantClient {
 
     private final AnthropicProperties properties;
     private final MetaspaceUsageLogger metaspaceUsageLogger;
-    private volatile AnthropicClient client;
-    private String clientApiKey;
-    private String clientBaseUrl;
+    private volatile ClientHolder clientHolder;
 
     public AnthropicAssistantClient(AnthropicProperties properties,
                                     MetaspaceUsageLogger metaspaceUsageLogger) {
@@ -159,12 +158,13 @@ public class AnthropicAssistantClient {
 
     private AnthropicClient resolveClient(String apiKey) {
         String baseUrl = StringUtils.hasText(properties.getBaseUrl()) ? properties.getBaseUrl().trim() : "";
-        AnthropicClient current = client;
-        if (current != null && apiKey.equals(clientApiKey) && baseUrl.equals(clientBaseUrl)) {
-            return current;
+        ClientHolder current = clientHolder;
+        if (current != null && apiKey.equals(current.apiKey) && baseUrl.equals(current.baseUrl)) {
+            return current.client;
         }
         synchronized (this) {
-            if (client == null || !apiKey.equals(clientApiKey) || !baseUrl.equals(clientBaseUrl)) {
+            current = clientHolder;
+            if (current == null || !apiKey.equals(current.apiKey) || !baseUrl.equals(current.baseUrl)) {
                 AnthropicOkHttpClient.Builder builder = AnthropicOkHttpClient.builder()
                         .apiKey(apiKey)
                         .timeout(REQUEST_TIMEOUT)
@@ -172,12 +172,36 @@ public class AnthropicAssistantClient {
                 if (StringUtils.hasText(baseUrl)) {
                     builder.baseUrl(baseUrl);
                 }
-                client = builder.build();
-                clientApiKey = apiKey;
-                clientBaseUrl = baseUrl;
+                AnthropicClient created = builder.build();
+                ClientHolder previous = clientHolder;
+                clientHolder = new ClientHolder(created, apiKey, baseUrl);
+                closeQuietly(previous);
             }
-            return client;
+            return clientHolder.client;
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        synchronized (this) {
+            ClientHolder previous = clientHolder;
+            clientHolder = null;
+            closeQuietly(previous);
+        }
+    }
+
+    private void closeQuietly(ClientHolder holder) {
+        if (holder == null || holder.client == null) {
+            return;
+        }
+        try {
+            holder.client.close();
+        } catch (Exception e) {
+            log.debug("Anthropic client shutdown warning", e);
+        }
+    }
+
+    private record ClientHolder(AnthropicClient client, String apiKey, String baseUrl) {
     }
 
     // structured output은 문자열 길이 제약(minLength/maxLength)을 지원하지 않는다.

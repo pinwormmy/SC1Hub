@@ -20,7 +20,11 @@ public class MemberSessionRegistry {
         if (memberId == null || session == null) {
             return;
         }
-        sessionsByMember.computeIfAbsent(memberId, key -> ConcurrentHashMap.newKeySet()).add(session);
+        sessionsByMember.compute(memberId, (key, existing) -> {
+            Set<HttpSession> sessions = existing != null ? existing : ConcurrentHashMap.newKeySet();
+            sessions.add(session);
+            return sessions;
+        });
     }
 
     public void unregister(String memberId, HttpSession session) {

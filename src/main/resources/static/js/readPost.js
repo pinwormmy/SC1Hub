@@ -80,8 +80,7 @@ async function addComment() {
         if (response.ok) {
             const text = await response.text();  // 먼저 텍스트로 응답을 받습니다.
             try {
-                const data = JSON.parse(text);  // 그 다음 JSON으로 파싱을 시도합니다.
-                console.log(data);
+                JSON.parse(text);
                 await showCommentList();
                 commentContent.value = "";
                 if (!isLoggedIn) {
@@ -90,7 +89,6 @@ async function addComment() {
                 }
             } catch (e) {
                 console.error("JSON 파싱 오류:", e);
-                console.log("서버에서 받은 응답:", text);
             }
         } else {
             const errorMessage = await extractErrorMessage(response, "댓글 추가 실패");
@@ -130,7 +128,6 @@ async function pageSettingAndLoadComment(commentPage) {
 
         if (response.ok) {
             const data = await response.json();
-            console.log(data);
             await loadCommentFetch(data);
             renderCommentPagination(document.getElementById("comments-page"), data);
         } else {
@@ -288,11 +285,11 @@ async function deleteComment(commentNum, passwordRequired) {
 
 // 추천 기능
 let isRecommended = false;
+let isRecommending = false;
 
 function updateRecommendButtonText(isRecommended, recommendCount) {
-    console.log("updateRecommendButtonText - isRecommended:", isRecommended, "recommendCount:", recommendCount);  // 로그 추가
     const recommendButton = document.querySelector('.recommend-div button');
-    if (recommendCount !== undefined) {  // 추천 수가 undefined가 아닌 경우에만 텍스트를 업데이트합니다.
+    if (recommendButton && recommendCount !== undefined) {
         recommendButton.textContent = isRecommended ? "추천취소(M) : " + recommendCount : "추천(M) : " + recommendCount;
     }
 }
@@ -302,37 +299,37 @@ async function addRecommend(postNum) {
         alert("추천 기능을 사용하려면 로그인이 필요합니다.");
         return;
     }
-
-    // 현재 사용자가 이미 추천했는지 확인
-    const checkData = await fetchData(boardPath + "/checkRecommendation?postNum=" + postNum, "GET");
-    if (checkData && checkData.checkRecommend !== undefined) {
-        isRecommended = checkData.checkRecommend;
+    if (isRecommending) {
+        return;
     }
-    console.log("Initial isRecommended:", isRecommended);  // 디버깅 로그
+    isRecommending = true;
+    try {
+        const checkData = await fetchData(boardPath + "/checkRecommendation?postNum=" + postNum, "GET");
+        if (checkData && checkData.checkRecommend !== undefined) {
+            isRecommended = checkData.checkRecommend;
+        }
 
-    let url = isRecommended ? boardPath + "/cancelRecommendation" : boardPath + "/addRecommendation";
-    let method = isRecommended ? "POST" : "POST";
+        const url = isRecommended ? boardPath + "/cancelRecommendation" : boardPath + "/addRecommendation";
+        await fetchData(url, "POST", { postNum: postNum });
 
-    const body = { postNum: postNum };
-    await fetchData(url, method, body);  // 추천 상태 변경
+        const recommendCount = await fetchRecommendCount(postNum);
+        const updatedCheckData = await fetchData(boardPath + "/checkRecommendation?postNum=" + postNum, "GET");
+        if (updatedCheckData && updatedCheckData.checkRecommend !== undefined) {
+            isRecommended = updatedCheckData.checkRecommend;
+        }
 
-    const recommendCount = await fetchRecommendCount(postNum);  // 추천수 업데이트
-    console.log("Fetched recommendCount:", recommendCount);  // 디버깅 로그
-
-    // 다시 한번 현재 사용자가 추천했는지 확인
-    const updatedCheckData = await fetchData(boardPath + "/checkRecommendation?postNum=" + postNum, "GET");
-    if (updatedCheckData && updatedCheckData.checkRecommend !== undefined) {
-        isRecommended = updatedCheckData.checkRecommend;
+        updateRecommendButtonText(isRecommended, recommendCount);
+    } catch (error) {
+        console.error("추천 처리 중 오류 발생:", error);
+        alert("추천 처리 중 오류가 발생했습니다.");
+    } finally {
+        isRecommending = false;
     }
-    console.log("Updated isRecommended:", isRecommended);  // 디버깅 로그
-
-    updateRecommendButtonText(isRecommended, recommendCount);
 }
 
 async function fetchRecommendCount(postNum) {
     const data = await fetchData(boardPath + "/getRecommendCount?postNum=" + postNum, "GET");
-    console.log("fetchRecommendCount 응답:", data);  // 응답 로깅
-    if (data !== undefined && data !== null) {  // 조건 수정
+    if (data !== undefined && data !== null) {
         return data;
     } else {
         console.error("추천 수를 가져오는 데 실패했습니다:", data);
@@ -346,7 +343,6 @@ window.addEventListener('load', async () => {
             const data = await fetchData(boardPath + "/checkRecommendation?postNum=" + postNum, "GET");
             if (data) {
                 isRecommended = data.checkRecommend;
-                console.log("window.onload - isRecommended:", isRecommended);  // 로그 추가
                 updateRecommendButtonText(isRecommended, recommendCount);
             }
         } catch (error) {
@@ -372,9 +368,6 @@ window.addEventListener('load', async () => {
 
 async function movePost(postNum) {
     const moveToBoard = document.getElementById('moveToBoard').value;
-
-    console.log("게시판이동 기능 디버그 - 게시물번호값: " + postNum);
-    console.log("게시판이동 기능 디버그 - 선택게시판: " + moveToBoard);
     if (!moveToBoard) {
         alert('이동할 게시판을 선택해주세요.');
         return;

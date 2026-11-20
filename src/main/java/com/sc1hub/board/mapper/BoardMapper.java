@@ -144,10 +144,7 @@ public interface BoardMapper {
                         @Param("sinceRegDate") Date sinceRegDate,
                         @Param("limit") int limit) throws Exception;
 
+        List<Integer> selectActivePostNumsForRag(@Param("boardTitle") String boardTitle) throws Exception;
+
         AssistantRagBoardSnapshot selectBoardRagStats(@Param("boardTitle") String boardTitle) throws Exception;
-
-        // Migration
-        void addCommentColumns(String tableName);
-
-        void modifyIdColumn(String tableName);
 }

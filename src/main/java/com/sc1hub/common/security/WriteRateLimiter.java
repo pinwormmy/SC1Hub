@@ -44,10 +44,19 @@ public class WriteRateLimiter {
 
     private void evictOldest(int howMany) {
         Iterator<Map.Entry<String, Window>> iterator = windows.entrySet().iterator();
-        for (int removed = 0; removed < howMany && iterator.hasNext(); removed++) {
-            iterator.next();
+        int removed = 0;
+        while (removed < howMany && iterator.hasNext()) {
+            Map.Entry<String, Window> entry = iterator.next();
+            if (isProtectedKey(entry.getKey())) {
+                continue;
+            }
             iterator.remove();
+            removed++;
         }
+    }
+
+    private static boolean isProtectedKey(String key) {
+        return key != null && (key.endsWith(":global") || "strikes:all".equals(key));
     }
 
     /** 현재 윈도의 누적 횟수(만료됐으면 0). */

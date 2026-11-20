@@ -118,4 +118,22 @@ class LoginAttemptGuardTest {
         // 100자로 잘린 키와 동일하게 취급된다.
         assertTrue(guard.isBlocked("a".repeat(100)));
     }
+
+    @Test
+    void ipLockoutSurvivesAccountExpiryCleanupAtFullCapacity() {
+        for (int i = 0; i < LoginAttemptGuard.IP_MAX_FAILURES; i++) {
+            guard.recordIpFailure("203.0.113.77");
+        }
+        assertTrue(guard.isIpBlocked("203.0.113.77"));
+
+        for (int i = 0; i < LoginAttemptGuard.MAX_TRACKED_ACCOUNTS; i++) {
+            guard.recordFailure("account-" + i);
+        }
+
+        // 6분 뒤: 계정 잠금(5분)은 만료되지만 IP 잠금(15분)은 유지되어야 한다.
+        now.set(now.get().plus(Duration.ofMinutes(6)));
+        guard.recordFailure("trigger-cleanup");
+
+        assertTrue(guard.isIpBlocked("203.0.113.77"));
+    }
 }

@@ -23,6 +23,8 @@ class LightsailDeployScriptTest {
         assertTrue(nginx.contains("proxy_set_header X-Forwarded-Proto https;"));
         // X-Real-IP marks plain HTTP for PlainHttpRedirectFilter, so a client value must never pass.
         assertTrue(nginx.contains("proxy_set_header X-Real-IP \"\";"));
+        assertTrue(nginx.contains("proxy_set_header X-Forwarded-Host \"\";"));
+        assertTrue(nginx.contains("ssl_reject_handshake on;"));
         assertFalse(nginx.contains("X-Real-IP $remote_addr"));
         assertTrue(nginx.contains("return 301 https://sc1hub.com$request_uri;"));
         assertTrue(nginx.contains("server 127.0.0.1:8645;"));
@@ -64,12 +66,14 @@ class LightsailDeployScriptTest {
         String install = read(DIR.resolve("remote-install.sh"));
 
         assertTrue(deploy.contains("git merge-base --is-ancestor HEAD origin/main"));
+        assertTrue(deploy.contains("git ls-files --others --exclude-standard -- src build.gradle settings.gradle deploy"));
         assertTrue(deploy.contains("ALLOW_UNRELEASED_COMMIT:-false"));
         assertTrue(deploy.contains("./gradlew clean build"));
         assertTrue(deploy.contains("Deploy to Lightsail now? [y/N]"));
         assertTrue(install.contains("Apache Tomcat/10\\.1\\."));
         assertTrue(install.contains("/boards/pvstboard/readPost?postNum=2"));
         assertTrue(install.contains("verify_through_nginx"));
+        assertFalse(install.contains("curl -kfsS"));
         assertTrue(install.contains("verify_metaspace_headroom"));
         assertTrue(install.contains("percent >= 95"));
         assertTrue(install.contains("rollback_and_restart"));
