@@ -63,7 +63,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(visitorCountInterceptor)
                 .addPathPatterns(patterns(
-                        "/", "/guidelines", "/build-timer", "/login", "/signAgreement", "/signUp",
+                        "/", "/guidelines", "/build-timer", "/keyboard-test", "/login", "/signAgreement", "/signUp",
                         "/findId", "/findPassword", "/myPage", "/modifyMyInfo",
                         "/adminPage/**", "/boards/*", "/boards/*/readPost",
                         "/boards/*/writePost", "/boards/*/modifyPost"));

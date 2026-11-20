@@ -46,6 +46,7 @@ class SeoSitemapServiceTest {
         assertTrue(first.contains("<loc>https://sc1hub.com/boards/tvszboard</loc>\n    <lastmod>2026-07-01</lastmod>"));
         assertTrue(first.contains("<loc>https://sc1hub.com/guidelines</loc>\n  </url>"));
         assertTrue(first.contains("<loc>https://sc1hub.com/build-timer</loc>\n  </url>"));
+        assertTrue(first.contains("<loc>https://sc1hub.com/keyboard-test</loc>\n  </url>"));
         assertFalse(first.contains("/login"));
         assertTrue(first == second);
         verify(boardService, times(1)).getBoardList();

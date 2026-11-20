@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const boardPath = path.startsWith('/boards/') ? path.split('/').slice(0, 3).join('/') : path;
     const communityBoards = ['/boards/noticeboard', '/boards/videolinkboard', '/boards/promotionboard', '/boards/funboard'];
     const section = path === '/' ? 'home' : path === '/build-timer' ? 'tools'
+        : path === '/keyboard-test' ? 'keyboard'
         : communityBoards.includes(boardPath) ? 'community' : path.startsWith('/boards/') ? 'strategy' : null;
     document.querySelectorAll('[data-nav-section]').forEach((link) => {
         if (link.dataset.navSection === section) link.setAttribute('aria-current', 'page');

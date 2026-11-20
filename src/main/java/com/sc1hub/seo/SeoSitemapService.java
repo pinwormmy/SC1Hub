@@ -72,9 +72,11 @@ public class SeoSitemapService {
         String homeUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/";
         String guidelinesUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/guidelines";
         String buildTimerUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/build-timer";
+        String keyboardTestUrl = SeoUrlPolicy.CANONICAL_ORIGIN + "/keyboard-test";
         seenUrls.add(homeUrl);
         seenUrls.add(guidelinesUrl);
         seenUrls.add(buildTimerUrl);
+        seenUrls.add(keyboardTestUrl);
 
         List<BoardListDTO> boards = boardService.getBoardList();
         if (boards == null) {
@@ -91,10 +93,11 @@ public class SeoSitemapService {
             }
         }
 
-        List<SitemapEntry> entries = new ArrayList<>(boardEntries.size() + 3);
+        List<SitemapEntry> entries = new ArrayList<>(boardEntries.size() + 4);
         entries.add(new SitemapEntry(homeUrl, latest));
         entries.add(new SitemapEntry(guidelinesUrl, null));
         entries.add(new SitemapEntry(buildTimerUrl, null));
+        entries.add(new SitemapEntry(keyboardTestUrl, null));
         entries.addAll(boardEntries);
         return new BuildResult(render(entries), hadError);
     }

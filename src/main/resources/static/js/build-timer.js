@@ -51,6 +51,11 @@
     const elapsed = () => state.baseMs + (state.runStart === null ? 0 : performance.now() - state.runStart);
     const running = () => state.runStart !== null;
     const stepText = (step) => (step.supply ? step.supply + ' ' : '') + step.action;
+    const trackEvent = (eventName, params) => {
+        if (typeof window.gtag === 'function') {
+            window.gtag('event', eventName, params || {});
+        }
+    };
 
     // --- speech ---------------------------------------------------------
     const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
@@ -273,7 +278,13 @@
             const firstStart = !state.started;
             state.started = true;
             startClock();
-            if (firstStart) speak(stepText(state.build.steps[0]));
+            if (firstStart) {
+                speak(stepText(state.build.steps[0]));
+                trackEvent('build_timer_start', {
+                    build_id: state.build.id,
+                    matchup: state.build.matchup
+                });
+            }
         }
         renderNow();
         renderSteps();
@@ -287,6 +298,11 @@
         if (state.current >= steps.length) {
             saveRun();
             speak('빌드 끝');
+            trackEvent('build_timer_complete', {
+                build_id: state.build.id,
+                matchup: state.build.matchup,
+                duration_sec: Math.round(elapsed() / 1000)
+            });
         } else {
             speak(stepText(steps[state.current]));
         }
@@ -317,7 +333,7 @@
         renderAll();
     };
 
-    const selectBuild = (id) => {
+    const selectBuild = (id, trackSelection = false) => {
         const build = builds.find((candidate) => candidate.id === id) || builds[0];
         reset();
         state.build = build;
@@ -328,9 +344,15 @@
         ui.summary.textContent = build.summary;
         store.write({ buildId: build.id });
         renderAll();
+        if (trackSelection) {
+            trackEvent('build_timer_select', {
+                build_id: state.build.id,
+                matchup: state.build.matchup
+            });
+        }
     };
 
-    ui.build.addEventListener('change', () => selectBuild(ui.build.value));
+    ui.build.addEventListener('change', () => selectBuild(ui.build.value, true));
     ui.start.addEventListener('click', toggleStart);
     ui.step.addEventListener('click', nextStep);
     ui.undo.addEventListener('click', previousStep);
@@ -350,7 +372,7 @@
 
     document.querySelectorAll('[data-bt-select]').forEach((button) => {
         button.addEventListener('click', () => {
-            selectBuild(button.dataset.btSelect);
+            selectBuild(button.dataset.btSelect, true);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     });

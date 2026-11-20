@@ -2,6 +2,7 @@ package com.sc1hub.buildtimer.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.buildtimer.dto.BuildTimerBuildDTO;
 import com.sc1hub.buildtimer.dto.BuildTimerCheckpointDTO;
 import org.springframework.core.io.ClassPathResource;
@@ -10,8 +11,12 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -26,12 +31,14 @@ public class BuildTimerService {
 
     private final List<BuildTimerBuildDTO> builds;
     private final String buildsJson;
+    private final Map<String, List<BuildTimerBuildDTO>> buildsBySourceUrl;
 
     public BuildTimerService(ObjectMapper objectMapper) {
         List<BuildTimerBuildDTO> loaded = loadBuilds(objectMapper);
         validateBuilds(loaded);
         this.builds = List.copyOf(loaded);
         this.buildsJson = toScriptSafeJson(objectMapper, builds);
+        this.buildsBySourceUrl = indexBySourceUrl(this.builds);
     }
 
     public List<BuildTimerBuildDTO> getBuilds() {
@@ -41,6 +48,34 @@ public class BuildTimerService {
     /** &lt;script type="application/json"&gt; 안에 그대로 넣어도 태그가 닫히지 않는 JSON. */
     public String getBuildsJson() {
         return buildsJson;
+    }
+
+    public List<BuildTimerBuildDTO> findByPost(String boardTitle, int postNum) {
+        if (boardTitle == null || boardTitle.isBlank() || postNum <= 0) {
+            return List.of();
+        }
+        String normalizedBoard = BoardTitleNormalizer.normalizeNullable(boardTitle);
+        String key = normalizeSourceUrl("/boards/" + normalizedBoard + "/readPost?postNum=" + postNum);
+        return buildsBySourceUrl.getOrDefault(key, List.of());
+    }
+
+    private static Map<String, List<BuildTimerBuildDTO>> indexBySourceUrl(List<BuildTimerBuildDTO> builds) {
+        Map<String, List<BuildTimerBuildDTO>> grouped = new HashMap<>();
+        for (BuildTimerBuildDTO build : builds) {
+            String key = normalizeSourceUrl(build.getSourceUrl());
+            if (!key.isEmpty()) {
+                grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(build);
+            }
+        }
+        Map<String, List<BuildTimerBuildDTO>> immutable = new HashMap<>(grouped.size());
+        for (Map.Entry<String, List<BuildTimerBuildDTO>> entry : grouped.entrySet()) {
+            immutable.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
+        return Map.copyOf(immutable);
+    }
+
+    private static String normalizeSourceUrl(String sourceUrl) {
+        return sourceUrl == null ? "" : sourceUrl.trim().toLowerCase(Locale.ROOT);
     }
 
     private static List<BuildTimerBuildDTO> loadBuilds(ObjectMapper objectMapper) {

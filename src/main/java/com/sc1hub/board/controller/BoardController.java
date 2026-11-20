@@ -1,5 +1,7 @@
 package com.sc1hub.board.controller;
 
+import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
+import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.board.dto.BoardDTO;
 import com.sc1hub.board.dto.BoardListDataDTO;
 import com.sc1hub.board.dto.BoardListDTO;
@@ -9,6 +11,8 @@ import com.sc1hub.board.dto.RecommendDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.BoardTitleNormalizer;
 import com.sc1hub.board.support.GuestPasswordHasher;
+import com.sc1hub.buildtimer.dto.BuildTimerBuildDTO;
+import com.sc1hub.buildtimer.service.BuildTimerService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.common.security.AttackContentDetector;
@@ -74,6 +78,7 @@ public class BoardController {
     private static final String ATTACK_CONTENT_MESSAGE = "허용되지 않는 내용(스크립트·주입 구문·과다 링크 등)이 포함되어 있어 등록할 수 없습니다.";
     private static final int POST_MAX_LINKS = 5;
     private static final int NEIGHBOR_POSTS_PER_SIDE = 3;
+    private static final int RELATED_POSTS_LIMIT = 4;
     private static final int COMMENT_MAX_LINKS = 3;
 
     private final BoardService boardService;
@@ -84,11 +89,14 @@ public class BoardController {
     private final OffenderTracker offenderTracker;
     private final GuestPasswordHasher guestPasswordHasher;
     private final LoginAttemptGuard guestPasswordAttemptGuard;
+    private final AssistantRagSearchService assistantRagSearchService;
+    private final BuildTimerService buildTimerService;
 
     public BoardController(BoardService boardService, MemberService memberService,
                            SeoMetadataService seoMetadataService, DuplicateContentGuard duplicateContentGuard,
                            AttackContentDetector attackContentDetector, OffenderTracker offenderTracker,
-                           GuestPasswordHasher guestPasswordHasher, LoginAttemptGuard guestPasswordAttemptGuard) {
+                           GuestPasswordHasher guestPasswordHasher, LoginAttemptGuard guestPasswordAttemptGuard,
+                           AssistantRagSearchService assistantRagSearchService, BuildTimerService buildTimerService) {
         this.boardService = boardService;
         this.memberService = memberService;
         this.seoMetadataService = seoMetadataService;
@@ -97,6 +105,8 @@ public class BoardController {
         this.offenderTracker = offenderTracker;
         this.guestPasswordHasher = guestPasswordHasher;
         this.guestPasswordAttemptGuard = guestPasswordAttemptGuard;
+        this.assistantRagSearchService = assistantRagSearchService;
+        this.buildTimerService = buildTimerService;
     }
 
     @GetMapping(value = "/{boardTitle}")
@@ -155,6 +165,10 @@ public class BoardController {
         model.addAttribute("guestWritable", isGuestWritableBoard(boardTitle));
         model.addAttribute("post", post);
         model.addAttribute("neighborPosts", loadNeighborPosts(boardTitle, postNum));
+        List<AssistantRelatedPostDTO> relatedPosts = loadRelatedPosts(boardTitle, postNum);
+        model.addAttribute("relatedPosts", relatedPosts);
+        model.addAttribute("relatedBoardNames", loadRelatedBoardNames(relatedPosts));
+        model.addAttribute("matchingTimerBuilds", loadMatchingTimerBuilds(boardTitle, postNum));
         seoMetadataService.applyPost(model, request, koreanTitle, post);
         return "board/readPost";
     }
@@ -166,6 +180,68 @@ public class BoardController {
             return neighbors == null ? Collections.emptyList() : neighbors;
         } catch (Exception e) {
             log.warn("이웃 글 조회에 실패했습니다. boardTitle={}, postNum={}", boardTitle, postNum, e);
+            return Collections.emptyList();
+        }
+    }
+
+    private List<AssistantRelatedPostDTO> loadRelatedPosts(String boardTitle, int postNum) {
+        if (assistantRagSearchService == null) {
+            return Collections.emptyList();
+        }
+        try {
+            List<AssistantRelatedPostDTO> related = assistantRagSearchService.findSimilarPosts(
+                    boardTitle, postNum, RELATED_POSTS_LIMIT);
+            return related == null ? Collections.emptyList() : related;
+        } catch (Exception e) {
+            log.warn("유사 공략 추천 조회에 실패했습니다. boardTitle={}, postNum={}", boardTitle, postNum, e);
+            return Collections.emptyList();
+        }
+    }
+
+    private Map<String, String> loadRelatedBoardNames(List<AssistantRelatedPostDTO> relatedPosts) {
+        if (relatedPosts == null || relatedPosts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> boardNames = new HashMap<>();
+        try {
+            List<BoardListDTO> boards = boardService.getBoardList();
+            if (boards != null) {
+                for (BoardListDTO board : boards) {
+                    if (board != null && board.getBoardTitle() != null && board.getKoreanTitle() != null) {
+                        boardNames.put(board.getBoardTitle().trim().toLowerCase(java.util.Locale.ROOT),
+                                board.getKoreanTitle());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("관련 공략 게시판 이름 조회에 실패했습니다.", e);
+        }
+        for (AssistantRelatedPostDTO related : relatedPosts) {
+            if (related == null || related.getBoardTitle() == null) {
+                continue;
+            }
+            String key = related.getBoardTitle().trim().toLowerCase(java.util.Locale.ROOT);
+            if (!boardNames.containsKey(key)) {
+                try {
+                    String korean = boardService.getKoreanTitle(key);
+                    boardNames.put(key, korean != null ? korean : related.getBoardTitle());
+                } catch (Exception e) {
+                    boardNames.put(key, related.getBoardTitle());
+                }
+            }
+        }
+        return boardNames;
+    }
+
+    private List<BuildTimerBuildDTO> loadMatchingTimerBuilds(String boardTitle, int postNum) {
+        if (buildTimerService == null) {
+            return Collections.emptyList();
+        }
+        try {
+            List<BuildTimerBuildDTO> matched = buildTimerService.findByPost(boardTitle, postNum);
+            return matched == null ? Collections.emptyList() : matched;
+        } catch (Exception e) {
+            log.warn("매칭 빌드 타이머 조회에 실패했습니다. boardTitle={}, postNum={}", boardTitle, postNum, e);
             return Collections.emptyList();
         }
     }

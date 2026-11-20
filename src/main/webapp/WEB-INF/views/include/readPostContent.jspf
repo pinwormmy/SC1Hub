@@ -16,6 +16,18 @@
     </c:if>
     <span>조회 ${post.views}</span>
 </div>
+<c:if test="${not empty matchingTimerBuilds}">
+    <div class="sc-post-timer-cta">
+        <span class="sc-post-timer-cta__label">이 빌드 인구수 순서로 연습하기</span>
+        <div class="sc-post-timer-cta__links">
+            <c:forEach var="timerBuild" items="${matchingTimerBuilds}">
+                <a class="btn sc-post-timer-cta__btn" href="/build-timer?build=<c:out value='${timerBuild.id}'/>">
+                    <c:out value="${timerBuild.matchup}"/> · <c:out value="${timerBuild.name}"/> 타이머 <span aria-hidden="true">→</span>
+                </a>
+            </c:forEach>
+        </div>
+    </div>
+</c:if>
 <div class="row">
     <div class="post-content">
         ${post.content}
@@ -26,6 +38,24 @@
     </div>
 
     <%@include file="./coupangDynamicAd.jspf" %>
+
+    <c:if test="${not empty relatedPosts}">
+        <nav class="sc-related-posts" aria-label="함께 보면 좋은 공략">
+            <h2 class="sc-related-posts__heading">함께 보면 좋은 공략</h2>
+            <ul class="sc-related-posts__list">
+                <c:forEach var="related" items="${relatedPosts}">
+                    <c:set var="relatedBoardLabel" value="${not empty relatedBoardNames[related.boardTitle] ? relatedBoardNames[related.boardTitle] : related.boardTitle}" />
+                    <li>
+                        <span class="sc-related-posts__badge"><c:out value="${relatedBoardLabel}"/></span>
+                        <a href="<c:out value='${related.url}'/>"><c:out value="${related.title}"/></a>
+                        <c:if test="${not empty related.regDate}">
+                            <span class="sc-related-posts__date"><fmt:formatDate value="${related.regDate}" pattern="yyyy-MM-dd"/></span>
+                        </c:if>
+                    </li>
+                </c:forEach>
+            </ul>
+        </nav>
+    </c:if>
 
     <div id="comments">
         <div class="mb">

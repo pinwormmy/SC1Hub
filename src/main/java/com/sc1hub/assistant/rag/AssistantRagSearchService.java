@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc1hub.assistant.config.AssistantProperties;
 import com.sc1hub.assistant.config.AssistantRagProperties;
 import com.sc1hub.assistant.config.GeminiProperties;
+import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
 import com.sc1hub.assistant.gemini.GeminiEmbeddingClient;
 import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.mapper.BoardMapper;
@@ -18,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -28,6 +30,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @Service
@@ -153,6 +156,138 @@ public class AssistantRagSearchService {
         return results;
     }
 
+    /**
+     * 이미 메모리에 적재된 RAG 임베딩 벡터만을 이용해 외부 LLM·임베딩 호출 없이 유사 공략을 찾는다.
+     */
+    public List<AssistantRelatedPostDTO> findSimilarPosts(String boardTitle, int postNum, int limit) {
+        if (!ragProperties.isEnabled() || !StringUtils.hasText(boardTitle) || postNum <= 0 || limit <= 0) {
+            return Collections.emptyList();
+        }
+        String targetBoard = normalizeBoardTitle(boardTitle);
+        if (isExcludedBoardTitle(targetBoard)) {
+            return Collections.emptyList();
+        }
+        LoadedIndex index = getOrLoadIndex();
+        if (index == null || index.index.getChunks() == null || index.index.getChunks().isEmpty()) {
+            return Collections.emptyList();
+        }
+        String cacheKey = targetBoard + ":" + postNum + ":" + limit;
+        List<AssistantRelatedPostDTO> cached = index.similarPostsCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<AssistantRagChunk> chunks = index.index.getChunks();
+        double[] sumVector = aggregatePostUnitVector(chunks, index.norms, targetBoard, postNum);
+        double postNorm = sumVector == null ? 0.0 : norm(sumVector);
+        if (sumVector == null || postNorm == 0.0) {
+            index.similarPostsCache.put(cacheKey, Collections.emptyList());
+            return Collections.emptyList();
+        }
+
+        double minScore = ragProperties.getMinScore() > 0.0 ? ragProperties.getMinScore() : 0.3;
+        Map<String, SimilarPostCandidate> bestByPost = collectSimilarCandidates(
+                chunks, index.norms, targetBoard, postNum, sumVector, postNorm, minScore);
+        List<SimilarPostCandidate> candidates = new ArrayList<>(bestByPost.values());
+        candidates.sort((a, b) -> {
+            int byScore = Double.compare(b.score, a.score);
+            if (byScore != 0) {
+                return byScore;
+            }
+            Date dateA = a.chunk.getRegDate();
+            Date dateB = b.chunk.getRegDate();
+            if (dateA != null && dateB != null) {
+                int byDate = dateB.compareTo(dateA);
+                if (byDate != 0) {
+                    return byDate;
+                }
+            } else if (dateA != null || dateB != null) {
+                return dateB != null ? 1 : -1;
+            }
+            return Integer.compare(b.chunk.getPostNum(), a.chunk.getPostNum());
+        });
+
+        int maxResults = Math.min(limit, candidates.size());
+        List<AssistantRelatedPostDTO> results = new ArrayList<>(maxResults);
+        for (int i = 0; i < maxResults; i += 1) {
+            SimilarPostCandidate candidate = candidates.get(i);
+            AssistantRelatedPostDTO dto = new AssistantRelatedPostDTO();
+            dto.setBoardTitle(candidate.boardTitle);
+            dto.setPostNum(candidate.chunk.getPostNum());
+            dto.setTitle(candidate.chunk.getTitle());
+            dto.setRegDate(candidate.chunk.getRegDate());
+            dto.setUrl("/boards/" + candidate.boardTitle + "/readPost?postNum=" + candidate.chunk.getPostNum());
+            results.add(dto);
+        }
+
+        List<AssistantRelatedPostDTO> immutableResults = Collections.unmodifiableList(results);
+        index.similarPostsCache.put(cacheKey, immutableResults);
+        return immutableResults;
+    }
+
+    private double[] aggregatePostUnitVector(List<AssistantRagChunk> chunks, double[] norms,
+                                             String targetBoard, int postNum) {
+        double[] sumVector = null;
+        for (int i = 0; i < chunks.size(); i += 1) {
+            AssistantRagChunk chunk = chunks.get(i);
+            if (chunk == null || chunk.getPostNum() != postNum) {
+                continue;
+            }
+            if (!targetBoard.equals(normalizeBoardTitle(chunk.getBoardTitle()))) {
+                continue;
+            }
+            float[] vector = chunk.getVector();
+            double chunkNorm = norms[i];
+            if (vector == null || vector.length == 0 || chunkNorm <= 0.0) {
+                continue;
+            }
+            if (sumVector == null) {
+                sumVector = new double[vector.length];
+            } else if (vector.length != sumVector.length) {
+                continue;
+            }
+            for (int d = 0; d < vector.length; d += 1) {
+                sumVector[d] += vector[d] / chunkNorm;
+            }
+        }
+        return sumVector;
+    }
+
+    private Map<String, SimilarPostCandidate> collectSimilarCandidates(List<AssistantRagChunk> chunks, double[] norms,
+                                                                       String targetBoard, int postNum,
+                                                                       double[] sumVector, double postNorm,
+                                                                       double minScore) {
+        Map<String, SimilarPostCandidate> bestByPost = new HashMap<>();
+        for (int i = 0; i < chunks.size(); i += 1) {
+            AssistantRagChunk chunk = chunks.get(i);
+            if (chunk == null || chunk.getPostNum() <= 0 || !StringUtils.hasText(chunk.getTitle())) {
+                continue;
+            }
+            String candidateBoard = normalizeBoardTitle(chunk.getBoardTitle());
+            if (!isIndexableBoardTitle(candidateBoard) || isExcludedBoardTitle(candidateBoard)) {
+                continue;
+            }
+            if (candidateBoard.equals(targetBoard) && chunk.getPostNum() == postNum) {
+                continue;
+            }
+            float[] vector = chunk.getVector();
+            double chunkNorm = norms[i];
+            if (vector == null || vector.length != sumVector.length || chunkNorm <= 0.0) {
+                continue;
+            }
+            double score = dot(sumVector, vector) / (postNorm * chunkNorm);
+            if (score < minScore) {
+                continue;
+            }
+            String postKey = candidateBoard + ":" + chunk.getPostNum();
+            SimilarPostCandidate existing = bestByPost.get(postKey);
+            if (existing == null || score > existing.score) {
+                bestByPost.put(postKey, new SimilarPostCandidate(candidateBoard, chunk, score));
+            }
+        }
+        return bestByPost;
+    }
+
     private float[] getQueryEmbedding(String query) {
         String normalized = normalizeQuery(query);
         if (!StringUtils.hasText(normalized)) {
@@ -257,6 +392,14 @@ public class AssistantRagSearchService {
         return sum;
     }
 
+    private static double dot(double[] a, float[] b) {
+        double sum = 0.0;
+        for (int i = 0; i < a.length; i += 1) {
+            sum += a[i] * (double) b[i];
+        }
+        return sum;
+    }
+
     private static double norm(float[] vector) {
         if (vector == null || vector.length == 0) {
             return 0.0;
@@ -264,6 +407,17 @@ public class AssistantRagSearchService {
         double sum = 0.0;
         for (float v : vector) {
             sum += (double) v * (double) v;
+        }
+        return Math.sqrt(sum);
+    }
+
+    private static double norm(double[] vector) {
+        if (vector == null || vector.length == 0) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        for (double v : vector) {
+            sum += v * v;
         }
         return Math.sqrt(sum);
     }
@@ -427,6 +581,7 @@ public class AssistantRagSearchService {
         private final double[] norms;
         private final long lastModifiedMillis;
         private final SignatureCheck signatureCheck;
+        private final Map<String, List<AssistantRelatedPostDTO>> similarPostsCache = new ConcurrentHashMap<>();
 
         private LoadedIndex(AssistantRagIndex index, double[] norms, long lastModifiedMillis, SignatureCheck signatureCheck) {
             this.index = index;
@@ -434,6 +589,9 @@ public class AssistantRagSearchService {
             this.lastModifiedMillis = lastModifiedMillis;
             this.signatureCheck = signatureCheck;
         }
+    }
+
+    private record SimilarPostCandidate(String boardTitle, AssistantRagChunk chunk, double score) {
     }
 
     private static final class SignatureCheck {

@@ -76,6 +76,23 @@ class BuildTimerServiceTest {
         assertEquals(service.getBuilds().get(0).getSteps(), List.of(parsed[0].getSteps().toArray()));
     }
 
+    @Test
+    void findByPost_returnsMatchingBuildsIgnoringBoardCase() {
+        List<BuildTimerBuildDTO> tvzMatches = service.findByPost("tvszboard", 3);
+        assertEquals(1, tvzMatches.size());
+        assertEquals("tvz-2barracks-academy", tvzMatches.get(0).getId());
+
+        List<BuildTimerBuildDTO> caseInsensitiveMatches = service.findByPost("tVsZBoard", 3);
+        assertEquals(1, caseInsensitiveMatches.size());
+        assertEquals("tvz-2barracks-academy", caseInsensitiveMatches.get(0).getId());
+
+        List<BuildTimerBuildDTO> multiMatches = service.findByPost("pvszboard", 5);
+        assertEquals(2, multiMatches.size());
+
+        assertTrue(service.findByPost("tipboard", 9999).isEmpty());
+        assertTrue(service.findByPost("tipboard", 0).isEmpty());
+    }
+
     private static void assertNotBlank(String value, String context) {
         assertTrue(value != null && !value.isBlank(), context);
     }

@@ -26,7 +26,25 @@
                     <h1 id="scHomeTitle">스타크래프트1 빌드와 실전 운영</h1>
                     <p>내 종족과 상대 종족에 맞는 공략을 찾아보세요.</p>
                 </div>
-                <a class="btn sc-primary-action" href="/boards/tipboard">꿀팁보급고 보러가기 <span aria-hidden="true">→</span></a>
+                <div class="sc-home-intro__actions">
+                    <a class="btn sc-primary-action" href="/boards/tipboard">꿀팁보급고 보러가기 <span aria-hidden="true">→</span></a>
+                    <a class="btn" href="/keyboard-test">키보드 테스트</a>
+                </div>
+            </div>
+            <div class="sc-container sc-home-ask">
+                <form id="scHomeAskForm" class="sc-home-ask__form" role="search">
+                    <label for="scHomeAskInput" class="sc-visually-hidden">스타크래프트1 AI 공략 질문</label>
+                    <input id="scHomeAskInput" class="sc-home-ask__input" type="search" maxlength="800" autocomplete="off"
+                           placeholder="스타1 빌드·상성·설정을 물어보세요 (예: 테프전 팩더블 타이밍)">
+                    <button type="submit" id="scHomeAskSubmit" class="btn sc-primary-action">AI 질문</button>
+                </form>
+                <div class="sc-home-ask__chips" aria-label="예시 질문">
+                    <button type="button" class="sc-home-ask__chip" data-ask-prompt="테프전 팩더블 운영">테프전 팩더블 운영</button>
+                    <button type="button" class="sc-home-ask__chip" data-ask-prompt="저프전 973 빌드 타이밍">저프전 973 빌드 타이밍</button>
+                    <button type="button" class="sc-home-ask__chip" data-ask-prompt="프테전 23넥 운영">프테전 23넥 운영</button>
+                    <button type="button" class="sc-home-ask__chip" data-ask-prompt="스타 키 씹힘 해결법">스타 키 씹힘 해결법</button>
+                </div>
+                <div id="scHomeAskResult" class="sc-home-ask__result" aria-live="polite" hidden></div>
             </div>
         </section>
         <div class="section-inner">
@@ -69,6 +87,7 @@
                 </div> <!-- End sc-row -->
             </div>
         </div>
+        <script src="/js/home-assistant.js?v=${applicationScope.assetVersion}" defer></script>
         <%@include file="./include/footer.jspf" %>
     </body>
 

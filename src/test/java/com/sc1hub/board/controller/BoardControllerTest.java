@@ -1,10 +1,16 @@
 package com.sc1hub.board.controller;
 
+import com.sc1hub.assistant.dto.AssistantRelatedPostDTO;
+import com.sc1hub.assistant.rag.AssistantRagSearchService;
 import com.sc1hub.board.dto.BoardDTO;
+import com.sc1hub.board.dto.BoardListDTO;
 import com.sc1hub.board.dto.BoardListDataDTO;
 import com.sc1hub.board.dto.CommentDTO;
 import com.sc1hub.board.service.BoardService;
 import com.sc1hub.board.support.GuestPasswordHasher;
+import com.sc1hub.buildtimer.dto.BuildTimerBuildDTO;
+import com.sc1hub.buildtimer.dto.BuildTimerStepDTO;
+import com.sc1hub.buildtimer.service.BuildTimerService;
 import com.sc1hub.common.dto.PageDTO;
 import com.sc1hub.common.exception.ResourceNotFoundException;
 import com.sc1hub.common.security.AttackContentDetector;
@@ -13,6 +19,7 @@ import com.sc1hub.common.security.OffenderTracker;
 import com.sc1hub.member.dto.MemberDTO;
 import com.sc1hub.member.service.LoginAttemptGuard;
 import com.sc1hub.member.service.MemberService;
+import com.sc1hub.seo.SeoMetadataService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -82,6 +89,15 @@ class BoardControllerTest {
 
     @Spy
     private LoginAttemptGuard guestPasswordAttemptGuard = new LoginAttemptGuard();
+
+    @Mock
+    private SeoMetadataService seoMetadataService;
+
+    @Mock
+    private AssistantRagSearchService assistantRagSearchService;
+
+    @Mock
+    private BuildTimerService buildTimerService;
 
     @InjectMocks
     private BoardController boardController;
@@ -276,6 +292,70 @@ class BoardControllerTest {
                 () -> boardController.readPost("tipBoard", 999, new ExtendedModelMap(), request));
 
         verify(boardService, never()).increaseViewCount(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void readPost_attachesRelatedPostsBoardNamesAndMatchingTimerBuilds() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/boards/tvszboard/readPost");
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(3);
+        post.setTitle("투배럭 아카 빌드");
+        post.setContent("<p>본문</p>");
+
+        AssistantRelatedPostDTO related = new AssistantRelatedPostDTO();
+        related.setBoardTitle("tipboard");
+        related.setPostNum(92);
+        related.setTitle("키 씹힘 해결법");
+        related.setUrl("/boards/tipboard/readPost?postNum=92");
+
+        BoardListDTO tipBoard = new BoardListDTO();
+        tipBoard.setBoardTitle("tipboard");
+        tipBoard.setKoreanTitle("꿀팁보급고");
+
+        BuildTimerBuildDTO timerBuild = new BuildTimerBuildDTO(
+                "tvz-2barracks-academy", "terran", "테저전", "투배럭 아카", "요약",
+                "투배럭 아카", "/boards/tvszboard/readPost?postNum=3", null,
+                List.of(new BuildTimerStepDTO("9", "서플")), List.of());
+
+        when(boardService.getKoreanTitle("tvszboard")).thenReturn("테저전 게시판");
+        when(boardService.readPost("tvszboard", 3)).thenReturn(post);
+        when(boardService.getNeighborPosts("tvszboard", 3, 3)).thenReturn(Collections.emptyList());
+        when(assistantRagSearchService.findSimilarPosts("tvszboard", 3, 4)).thenReturn(List.of(related));
+        when(boardService.getBoardList()).thenReturn(List.of(tipBoard));
+        when(buildTimerService.findByPost("tvszboard", 3)).thenReturn(List.of(timerBuild));
+
+        Model model = new ExtendedModelMap();
+        String view = boardController.readPost("tvszboard", 3, model, request);
+
+        assertEquals("board/readPost", view);
+        assertEquals(List.of(related), model.asMap().get("relatedPosts"));
+        assertEquals(Map.of("tipboard", "꿀팁보급고"), model.asMap().get("relatedBoardNames"));
+        assertEquals(List.of(timerBuild), model.asMap().get("matchingTimerBuilds"));
+    }
+
+    @Test
+    void readPost_fallsBackToEmptyListsWhenRelatedOrTimerLookupFails() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/boards/tipboard/readPost");
+        BoardDTO post = new BoardDTO();
+        post.setPostNum(11);
+        post.setTitle("장비 추천");
+        post.setContent("<p>본문</p>");
+
+        when(boardService.getKoreanTitle("tipboard")).thenReturn("꿀팁보급고");
+        when(boardService.readPost("tipboard", 11)).thenReturn(post);
+        when(boardService.getNeighborPosts("tipboard", 11, 3)).thenReturn(Collections.emptyList());
+        when(assistantRagSearchService.findSimilarPosts("tipboard", 11, 4))
+                .thenThrow(new RuntimeException("rag unavailable"));
+        when(buildTimerService.findByPost("tipboard", 11))
+                .thenThrow(new RuntimeException("timer unavailable"));
+
+        Model model = new ExtendedModelMap();
+        String view = boardController.readPost("tipboard", 11, model, request);
+
+        assertEquals("board/readPost", view);
+        assertEquals(Collections.emptyList(), model.asMap().get("relatedPosts"));
+        assertEquals(Collections.emptyMap(), model.asMap().get("relatedBoardNames"));
+        assertEquals(Collections.emptyList(), model.asMap().get("matchingTimerBuilds"));
     }
 
     @Test
