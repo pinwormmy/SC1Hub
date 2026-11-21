@@ -1,7 +1,12 @@
 /* Build-order practice timer (/build-timer). Uses the shared --sc-* theme tokens only. */
 .sc-bt { display: grid; gap: 16px; max-width: 960px; margin: 0 auto 32px; }
-.sc-bt-intro h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+.sc-bt-intro h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 24px; font-weight: 600; margin: 0 0 6px; }
 .sc-bt-intro p { margin: 0; color: var(--sc-text-dim); font-size: 14px; }
+.sc-bt-intro .sc-bt-beta-note { margin-top: 6px; font-size: 13px; color: var(--sc-text-dim); }
+.sc-bt-beta {
+    display: inline-flex; align-items: center; padding: 2px 8px; font-size: 12px; font-weight: 600; line-height: 1.4;
+    color: var(--sc-attention); background: var(--sc-attention-subtle); border: 1px solid var(--sc-attention); border-radius: 999px;
+}
 .sc-bt kbd {
     display: inline-block; min-width: 20px; padding: 0 5px; margin: 0 2px; font-size: 11px; line-height: 18px; text-align: center;
     color: var(--sc-text); background: var(--sc-bg-panel); border: 1px solid var(--sc-line); border-bottom-width: 2px; border-radius: var(--sc-radius-sm);
@@ -82,6 +87,29 @@
 .sc-bt-catalog__links { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
 .sc-bt-catalog__pick { min-height: 28px; padding: 2px 10px; font-size: 12px; }
 
+/* beta feedback form */
+.sc-bt-feedback form { display: grid; gap: 12px; }
+.sc-bt-fb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sc-bt-fb-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sc-bt-fb-field label { margin: 0; font-size: 13px; font-weight: 600; color: var(--sc-text); }
+.sc-bt-fb-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sc-bt-fb-field select,
+.sc-bt-fb-field input[type="text"],
+.sc-bt-fb-textarea {
+    width: 100%; max-width: 100%; min-width: 0; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    color: var(--sc-text); background: var(--sc-bg-panel); border: 1px solid var(--sc-line); border-radius: var(--sc-radius-sm);
+}
+.sc-bt-fb-field select { min-height: 36px; padding: 4px 8px; }
+.sc-bt-fb-textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+.sc-bt-fb-meta { margin: 0; font-size: 12px; color: var(--sc-text-dim); }
+.sc-bt-fb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.sc-bt-fb-actions button { min-height: 36px; padding: 6px 16px; font-size: 14px; font-weight: 600; }
+.sc-bt-fb-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+.sc-bt-fb-status { margin: 0; font-size: 13px; font-weight: 600; }
+.sc-bt-fb-status[hidden] { display: none; }
+.sc-bt-fb-status.is-ok { color: var(--sc-success-fg); }
+.sc-bt-fb-status.is-error { color: var(--sc-danger); }
+
 @media (max-width: 767px) {
     .sc-bt-intro h1 { font-size: 20px; }
     .sc-bt-stage { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
@@ -92,6 +120,7 @@
     .sc-bt-actions button:not(.sc-bt-step) { flex: 1 1 0; padding: 6px 8px; }
     .sc-bt-keys { display: none; }
     .sc-bt-columns { grid-template-columns: 1fr; }
+    .sc-bt-fb-grid { grid-template-columns: 1fr; }
     .sc-bt-steps { max-height: none; }
     .sc-bt-steps__item, .sc-bt-checkpoints li { padding: 7px 12px; }
 }

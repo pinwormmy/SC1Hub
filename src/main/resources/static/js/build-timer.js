@@ -17,7 +17,10 @@
         clock: $('scBtClock'), now: $('scBtNow'), next: $('scBtNext'), alert: $('scBtAlert'),
         start: $('scBtStart'), step: $('scBtStep'), undo: $('scBtUndo'), reset: $('scBtReset'),
         minus: $('scBtMinus'), plus: $('scBtPlus'), voice: $('scBtVoice'), lead: $('scBtLead'),
-        steps: $('scBtSteps'), checkpoints: $('scBtCheckpoints'), note: $('scBtNote')
+        steps: $('scBtSteps'), checkpoints: $('scBtCheckpoints'), note: $('scBtNote'),
+        fbForm: $('scBtFeedbackForm'), fbCategory: $('scBtFbCategory'), fbBuild: $('scBtFbBuild'),
+        fbMessage: $('scBtFbMessage'), fbContact: $('scBtFbContact'), fbWebsite: $('scBtFbWebsite'),
+        fbCount: $('scBtFbCount'), fbSubmit: $('scBtFbSubmit'), fbStatus: $('scBtFbStatus')
     };
 
     // Storage may be blocked (private mode, previews); the timer works without it.
@@ -41,7 +44,8 @@
         previous: [],       // splits of the last saved run of this build, shown for comparison
         lastShownSecond: -1,
         tickId: null,
-        wakeLock: null
+        wakeLock: null,
+        fbBuildDirty: false
     };
 
     const formatClock = (ms) => {
@@ -342,6 +346,10 @@
         ui.source.href = build.sourceUrl;
         ui.source.textContent = '원문 보기';
         ui.summary.textContent = build.summary;
+        if (ui.fbBuild && !state.fbBuildDirty
+                && Array.from(ui.fbBuild.options).some((option) => option.value === build.id)) {
+            ui.fbBuild.value = build.id;
+        }
         store.write({ buildId: build.id });
         renderAll();
         if (trackSelection) {
@@ -381,7 +389,7 @@
         if (event.altKey || event.ctrlKey || event.metaKey) return;
         const target = event.target;
         if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|SUMMARY|A)$/.test(target.tagName))) return;
-        if (target && target.closest && target.closest('#scTerminal')) return;
+        if (target && target.closest && target.closest('#scTerminal, #scBtFeedback')) return;
         if (event.key === ' ' && target && target.tagName === 'BUTTON' && target !== ui.start && target !== ui.step) return;
         switch (event.key) {
             case ' ':
@@ -413,6 +421,81 @@
         button.addEventListener('keyup', (event) => { if (event.key === ' ') event.preventDefault(); });
     });
     window.addEventListener('pagehide', saveRun);
+
+    // --- beta feedback --------------------------------------------------
+    const updateFeedbackCount = () => {
+        if (!ui.fbMessage || !ui.fbCount) return;
+        const length = Array.from(ui.fbMessage.value).length;
+        ui.fbCount.textContent = length + ' / 1000';
+    };
+    const showFeedbackStatus = (text, ok) => {
+        if (!ui.fbStatus) return;
+        ui.fbStatus.textContent = text;
+        ui.fbStatus.classList.toggle('is-ok', !!ok);
+        ui.fbStatus.classList.toggle('is-error', !ok);
+        ui.fbStatus.hidden = !text;
+    };
+    if (ui.fbBuild) {
+        ui.fbBuild.addEventListener('change', () => {
+            state.fbBuildDirty = true;
+        });
+    }
+    if (ui.fbMessage) {
+        ui.fbMessage.addEventListener('input', updateFeedbackCount);
+        updateFeedbackCount();
+    }
+    if (ui.fbForm) {
+        ui.fbForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const message = ui.fbMessage ? ui.fbMessage.value.trim() : '';
+            if (Array.from(message).length < 5) {
+                showFeedbackStatus('피드백 내용을 5자 이상 입력해주세요.', false);
+                if (ui.fbMessage) ui.fbMessage.focus();
+                return;
+            }
+            const category = ui.fbCategory ? ui.fbCategory.value : 'general';
+            const buildId = ui.fbBuild ? ui.fbBuild.value : '';
+            const contact = ui.fbContact ? ui.fbContact.value.trim() : '';
+            const website = ui.fbWebsite ? ui.fbWebsite.value : '';
+
+            if (ui.fbSubmit) {
+                ui.fbSubmit.disabled = true;
+                ui.fbSubmit.textContent = '전송 중...';
+            }
+            showFeedbackStatus('', true);
+            try {
+                const response = await fetch('/api/build-timer/feedback', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json'
+                    },
+                    body: JSON.stringify({ category, buildId, message, contact, website })
+                });
+                const data = await response.json().catch(() => null);
+                if (response.ok && data && data.success) {
+                    showFeedbackStatus(data.message || '피드백이 접수되었습니다. 소중한 의견 감사합니다!', true);
+                    if (ui.fbMessage) ui.fbMessage.value = '';
+                    updateFeedbackCount();
+                    trackEvent('build_timer_feedback_submit', {
+                        category,
+                        build_id: buildId || 'all'
+                    });
+                } else {
+                    const errorMessage = (data && data.error) ? data.error : '피드백 전송에 실패했습니다. 잠시 후 다시 시도해주세요.';
+                    showFeedbackStatus(errorMessage, false);
+                }
+            } catch (e) {
+                showFeedbackStatus('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', false);
+            } finally {
+                if (ui.fbSubmit) {
+                    ui.fbSubmit.disabled = false;
+                    ui.fbSubmit.textContent = '피드백 보내기';
+                }
+            }
+        });
+    }
 
     const saved = store.read();
     if (typeof saved.voice === 'boolean' && synth) ui.voice.checked = saved.voice;

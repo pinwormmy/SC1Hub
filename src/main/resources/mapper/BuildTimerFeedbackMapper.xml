@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.sc1hub.buildtimer.mapper.BuildTimerFeedbackMapper">
+
+    <insert id="insertFeedback" useGeneratedKeys="true" keyProperty="id">
+        insert into build_timer_feedback(
+            build_id, build_label, category, message, contact, member_id, nickname, ip, user_agent, status, reg_date
+        ) values (
+            #{buildId}, #{buildLabel}, #{category}, #{message}, #{contact}, #{memberId}, #{nickname}, #{ip}, #{userAgent}, #{status}, now()
+        )
+    </insert>
+
+    <select id="selectRecentFeedback" resultType="com.sc1hub.buildtimer.dto.BuildTimerFeedbackDTO">
+        select id,
+               build_id as buildId,
+               build_label as buildLabel,
+               category,
+               message,
+               contact,
+               member_id as memberId,
+               nickname,
+               ip,
+               user_agent as userAgent,
+               status,
+               reg_date as regDate
+        from build_timer_feedback
+        <if test="status != null and status != ''">
+            where status = #{status}
+        </if>
+        order by id desc
+        limit #{limit}
+    </select>
+
+    <select id="countFeedback" resultType="int">
+        select count(*)
+        from build_timer_feedback
+        <if test="status != null and status != ''">
+            where status = #{status}
+        </if>
+    </select>
+
+    <update id="updateStatus">
+        update build_timer_feedback
+        set status = #{status}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteFeedback">
+        delete from build_timer_feedback
+        where id = #{id}
+    </delete>
+
+</mapper>

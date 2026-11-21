@@ -13,8 +13,9 @@
         <div class="container">
             <main class="sc-bt">
                 <div class="sc-bt-intro">
-                    <h1>빌드오더 연습 타이머</h1>
+                    <h1>빌드오더 연습 타이머 <span class="sc-bt-beta">(beta)</span></h1>
                     <p>게임 시작과 함께 타이머를 켜고, 한 단계를 끝낼 때마다 <kbd>Space</kbd>나 <strong>다음 단계</strong>를 누르세요. 다음 할 일을 읽어 주고, 원글에 시간이 적힌 체크포인트는 미리 알려 줍니다.</p>
+                    <p class="sc-bt-beta-note">현재 베타 버전으로 운영 중입니다. 타이밍 오차, 빌드 추가 요청, 불편한 점이 있으면 <a href="#scBtFeedback">피드백 보내기</a>로 바로 알려 주세요.</p>
                 </div>
 
                 <section class="sc-bt-panel" aria-labelledby="scBtControlsTitle">
@@ -110,6 +111,62 @@
                             <li>체크포인트 시간은 원문 기준이며 맵, 스폰 위치, 정찰 결과에 따라 앞뒤로 달라집니다. 원문에 시간이 없는 빌드는 체크포인트가 없습니다.</li>
                             <li>단계마다 누른 시간이 기록되고, 같은 빌드를 다시 하면 지난번 기록과 나란히 보여 줍니다. 기록은 이 브라우저에만 남습니다.</li>
                         </ul>
+                    </div>
+                </section>
+
+                <section id="scBtFeedback" class="sc-bt-panel sc-bt-feedback" aria-labelledby="scBtFeedbackTitle">
+                    <div class="sc-bt-panel__header">
+                        <h2 id="scBtFeedbackTitle">베타 피드백 보내기</h2>
+                        <span class="sc-bt-hint">로그인 없이 전송 가능</span>
+                    </div>
+                    <div class="sc-bt-panel__body">
+                        <form id="scBtFeedbackForm" novalidate>
+                            <div class="sc-bt-fb-grid">
+                                <div class="sc-bt-fb-field">
+                                    <label for="scBtFbCategory">분류</label>
+                                    <select id="scBtFbCategory" name="category">
+                                        <option value="timing">타이밍 오차 제보</option>
+                                        <option value="build_request">빌드 추가 요청</option>
+                                        <option value="bug">버그·오류 제보</option>
+                                        <option value="ux">음성 안내·사용성 개선</option>
+                                        <option value="general">기타 의견</option>
+                                    </select>
+                                </div>
+                                <div class="sc-bt-fb-field">
+                                    <label for="scBtFbBuild">대상 빌드</label>
+                                    <select id="scBtFbBuild" name="buildId">
+                                        <option value="">전체 / 공통</option>
+                                        <c:forEach var="build" items="${builds}">
+                                            <option value="<c:out value='${build.id}'/>"><c:out value="${build.matchup}"/> · <c:out value="${build.name}"/></option>
+                                        </c:forEach>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="sc-bt-fb-field">
+                                <div class="sc-bt-fb-label-row">
+                                    <label for="scBtFbMessage">내용</label>
+                                    <span id="scBtFbCount" class="sc-bt-hint">0 / 1000</span>
+                                </div>
+                                <textarea id="scBtFbMessage" name="message" class="sc-bt-fb-textarea" rows="3" maxlength="1000" required
+                                          placeholder="예) 테저전 투배럭 아카 체크포인트가 실게임과 다릅니다 / 저프전 9드론 빌드도 추가해 주세요"></textarea>
+                            </div>
+                            <div class="sc-bt-fb-field">
+                                <label for="scBtFbContact">닉네임 또는 연락처 (선택)</label>
+                                <input type="text" id="scBtFbContact" name="contact" maxlength="100"
+                                       placeholder="답변이 필요하거나 남길 닉네임·이메일·디스코드 등이 있으면 입력">
+                                <c:if test="${not empty member}">
+                                    <p class="sc-bt-fb-meta"><c:out value="${member.nickName}"/>님으로 기록됩니다. 추가 연락처가 필요하면 입력하세요.</p>
+                                </c:if>
+                            </div>
+                            <div class="sc-visually-hidden" aria-hidden="true">
+                                <label for="scBtFbWebsite">웹사이트</label>
+                                <input type="text" id="scBtFbWebsite" name="website" tabindex="-1" autocomplete="off">
+                            </div>
+                            <div class="sc-bt-fb-actions">
+                                <button type="submit" id="scBtFbSubmit" class="btn-primary">피드백 보내기</button>
+                                <p id="scBtFbStatus" class="sc-bt-fb-status" role="status" aria-live="polite" hidden></p>
+                            </div>
+                        </form>
                     </div>
                 </section>
 

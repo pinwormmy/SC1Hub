@@ -51,9 +51,9 @@ class PublicWriteSecurityInterceptorTest {
     @Test
     void containmentBlocksGuestAndMemberWritesButKeepsReadsAndLogin() throws Exception {
         var guard = guard(false, false);
-        for (String path : new String[]{"/api/chat/messages", "/boards/funboard/submitPost",
-                "/boards/tipboard/addComment", "/imageUpload", "/submitSignUp",
-                "/submitModifyMyInfo"}) {
+        for (String path : new String[]{"/api/chat/messages", "/api/build-timer/feedback",
+                "/boards/funboard/submitPost", "/boards/tipboard/addComment", "/imageUpload",
+                "/submitSignUp", "/submitModifyMyInfo"}) {
             var request = new MockHttpServletRequest("POST", path);
             var response = new MockHttpServletResponse();
             assertFalse(guard.preHandle(request, response, null), path);
@@ -219,9 +219,29 @@ class PublicWriteSecurityInterceptorTest {
         assertEquals(429, response.getStatus());
     }
 
+    @Test
+    void buildTimerFeedbackRequiresGuestWriteSwitchAndRespectsRateLimit() throws Exception {
+        MockHttpServletResponse disabledGuest = new MockHttpServletResponse();
+        assertFalse(guard(true, false).preHandle(
+                new MockHttpServletRequest("POST", "/api/build-timer/feedback"), disabledGuest, null));
+        assertEquals(401, disabledGuest.getStatus());
+
+        var guard = guard(true, true);
+        for (int i = 0; i < PublicWriteSecurityInterceptor.GUEST_FEEDBACK_PER_IP_PER_10_MINUTES; i++) {
+            var request = new MockHttpServletRequest("POST", "/api/build-timer/feedback");
+            request.addHeader("X-Forwarded-For", "203.0.113.45");
+            assertTrue(guard.preHandle(request, new MockHttpServletResponse(), null));
+        }
+        var overLimit = new MockHttpServletRequest("POST", "/api/build-timer/feedback");
+        overLimit.addHeader("X-Forwarded-For", "203.0.113.45");
+        var limitResponse = new MockHttpServletResponse();
+        assertFalse(guard.preHandle(overLimit, limitResponse, null));
+        assertEquals(429, limitResponse.getStatus());
+    }
+
     @RestController
     static class ContainmentProbeController {
-        @PostMapping({"/api/chat/messages", "/submitSignUp", "/imageUpload", "/boards/{boardTitle}/submitPost"})
+        @PostMapping({"/api/chat/messages", "/api/build-timer/feedback", "/submitSignUp", "/imageUpload", "/boards/{boardTitle}/submitPost"})
         String write() {
             throw new AssertionError("A contained write must not reach its controller");
         }

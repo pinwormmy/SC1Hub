@@ -1,5 +1,7 @@
 package com.sc1hub;
 
+import com.sc1hub.buildtimer.controller.BuildTimerFeedbackAdminController;
+import com.sc1hub.buildtimer.controller.BuildTimerFeedbackController;
 import org.junit.jupiter.api.Test;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +75,10 @@ class PlatformContextIntegrationTest {
                 "MyBatis mapper resources must resolve from the configured classpath pattern");
         assertTrue(sqlSessionFactory.getConfiguration().hasStatement(
                 "com.sc1hub.chat.mapper.ChatMapper.selectMaxId", false));
+        assertTrue(sqlSessionFactory.getConfiguration().hasStatement(
+                "com.sc1hub.buildtimer.mapper.BuildTimerFeedbackMapper.insertFeedback", false));
+        assertNotNull(applicationContext.getBean(BuildTimerFeedbackController.class));
+        assertNotNull(applicationContext.getBean(BuildTimerFeedbackAdminController.class));
     }
 
     @Test

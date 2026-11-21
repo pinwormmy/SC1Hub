@@ -27,6 +27,7 @@ PRE_START_SQL=(
   20260711_create_visitor_daily_identity.sql
   20260901_drop_member_reset_token.sql
   20261013_add_post_mod_date.sql
+  20261121_create_build_timer_feedback.sql
 )
 # Applied only while Tomcat is stopped: the running release may still query these tables.
 STOPPED_SQL=(

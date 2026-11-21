@@ -56,5 +56,6 @@ class BuildTimerControllerTest {
         assertTrue(String.valueOf(result.getModelAndView().getModel().get("structuredDataJson"))
                 .contains("https://sc1hub.com/build-timer"));
         assertTrue(String.valueOf(result.getModelAndView().getModel().get("pageTitle")).contains("빌드오더"));
+        assertTrue(String.valueOf(result.getModelAndView().getModel().get("pageTitle")).contains("(beta)"));
     }
 }

@@ -34,7 +34,7 @@
             <a href="/" data-nav-section="home">둘러보기</a>
             <a href="/boards/tvszboard" data-nav-section="strategy">공략게시판</a>
             <a href="/boards/funboard" data-nav-section="community">커뮤니티</a>
-            <a href="/build-timer" data-nav-section="tools">빌드 타이머</a>
+            <a href="/build-timer" data-nav-section="tools">빌드 타이머 <span class="sc-nav-beta">(beta)</span></a>
             <a href="/keyboard-test" data-nav-section="keyboard">키보드 테스트</a>
             <a href="#scTerminal" data-chat-open>공개채팅</a>
         </nav>

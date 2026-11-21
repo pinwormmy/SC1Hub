@@ -214,6 +214,11 @@
     font-size: 13px;
     color: var(--sc-text);
 }
+.admin-bt-fb-msg {
+    max-width: 360px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 @media (max-width: 768px) {
     .admin-card {
         padding: 14px;
@@ -271,6 +276,10 @@
     .page-link {
         min-width: 34px;
         height: 34px;
+    }
+    .admin-bt-fb-msg {
+        max-width: none;
+        text-align: right;
     }
 }
 </style>
@@ -475,6 +484,39 @@
                                 <p class="admin-card-subtitle">자동 발행 설정, 슬롯, 최근 생성 이력</p>
                             </div>
                             <button type="button" class="admin-btn admin-btn--ghost" onclick="location.href='/adminPage/ops'">확인하기</button>
+                        </div>
+                    </div>
+                    <div class="admin-card admin-card--bt-feedback">
+                        <div class="admin-card-header">
+                            <div>
+                                <h2 class="admin-card-title">빌드 타이머 (beta) 피드백</h2>
+                                <p class="admin-card-subtitle" id="adminBtFeedbackSummary">불러오는 중…</p>
+                            </div>
+                            <div class="admin-actions">
+                                <select class="admin-indexing-input" id="adminBtFeedbackFilter" aria-label="피드백 상태 필터">
+                                    <option value="">전체</option>
+                                    <option value="NEW">미확인</option>
+                                    <option value="REVIEWED">확인</option>
+                                    <option value="DONE">완료</option>
+                                </select>
+                                <button type="button" class="admin-btn admin-btn--ghost" id="adminBtFeedbackRefreshBtn">새로고침</button>
+                            </div>
+                        </div>
+                        <div class="admin-table-wrap">
+                            <table class="admin-memberlist" id="adminBtFeedbackTable">
+                                <thead>
+                                    <tr>
+                                        <th width="13%">등록일</th>
+                                        <th width="11%">분류</th>
+                                        <th width="16%">빌드</th>
+                                        <th width="29%">내용</th>
+                                        <th width="13%">작성자/연락처</th>
+                                        <th width="8%">상태</th>
+                                        <th width="10%">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
                     <div class="admin-card admin-card--indexing">
@@ -854,6 +896,191 @@ async function confirmDelete(id) {
     });
 
     refresh();
+})();
+
+(function() {
+    var summaryEl = document.getElementById('adminBtFeedbackSummary');
+    var filterEl = document.getElementById('adminBtFeedbackFilter');
+    var refreshBtn = document.getElementById('adminBtFeedbackRefreshBtn');
+    var tableBody = document.querySelector('#adminBtFeedbackTable tbody');
+    if (!summaryEl || !filterEl || !refreshBtn || !tableBody) {
+        return;
+    }
+
+    var CATEGORY_LABELS = {
+        timing: '타이밍 오차',
+        build_request: '빌드 요청',
+        bug: '버그·오류',
+        ux: '음성·사용성',
+        general: '기타'
+    };
+    var STATUS_LABELS = {
+        NEW: '미확인',
+        REVIEWED: '확인',
+        DONE: '완료'
+    };
+
+    function createCell(label, text, extraClass) {
+        var td = document.createElement('td');
+        td.setAttribute('data-label', label);
+        if (extraClass) {
+            td.className = extraClass;
+        }
+        td.textContent = text == null || text === '' ? '-' : String(text);
+        return td;
+    }
+
+    function formatActor(row) {
+        var parts = [];
+        if (row.nickname) {
+            parts.push(row.nickname);
+        } else if (row.memberId) {
+            parts.push(row.memberId);
+        } else {
+            parts.push('비회원');
+        }
+        if (row.contact) {
+            parts.push('(' + row.contact + ')');
+        }
+        return parts.join(' ');
+    }
+
+    function renderRows(items) {
+        tableBody.textContent = '';
+        if (!items || !items.length) {
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.className = 'admin-empty';
+            td.colSpan = 7;
+            td.textContent = '접수된 피드백이 없습니다.';
+            tr.appendChild(td);
+            tableBody.appendChild(tr);
+            return;
+        }
+
+        items.forEach(function(row) {
+            var tr = document.createElement('tr');
+            tr.appendChild(createCell('등록일', row.regDate));
+            tr.appendChild(createCell('분류', CATEGORY_LABELS[row.category] || row.category));
+            tr.appendChild(createCell('빌드', row.buildLabel || '전체 / 공통'));
+            tr.appendChild(createCell('내용', row.message, 'admin-bt-fb-msg'));
+            tr.appendChild(createCell('작성자/연락처', formatActor(row)));
+            tr.appendChild(createCell('상태', STATUS_LABELS[row.status] || row.status));
+
+            var actionTd = document.createElement('td');
+            actionTd.setAttribute('data-label', '관리');
+            var actionWrap = document.createElement('div');
+            actionWrap.className = 'admin-actions';
+
+            if (row.status !== 'REVIEWED') {
+                var reviewBtn = document.createElement('button');
+                reviewBtn.type = 'button';
+                reviewBtn.className = 'admin-btn admin-btn--ghost';
+                reviewBtn.textContent = '확인';
+                reviewBtn.setAttribute('data-bt-fb-status', 'REVIEWED');
+                reviewBtn.setAttribute('data-bt-fb-id', String(row.id));
+                actionWrap.appendChild(reviewBtn);
+            }
+            if (row.status !== 'DONE') {
+                var doneBtn = document.createElement('button');
+                doneBtn.type = 'button';
+                doneBtn.className = 'admin-btn admin-btn--ghost';
+                doneBtn.textContent = '완료';
+                doneBtn.setAttribute('data-bt-fb-status', 'DONE');
+                doneBtn.setAttribute('data-bt-fb-id', String(row.id));
+                actionWrap.appendChild(doneBtn);
+            }
+            var deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'admin-btn admin-btn--danger';
+            deleteBtn.textContent = '삭제';
+            deleteBtn.setAttribute('data-bt-fb-delete', String(row.id));
+            actionWrap.appendChild(deleteBtn);
+
+            actionTd.appendChild(actionWrap);
+            tr.appendChild(actionTd);
+            tableBody.appendChild(tr);
+        });
+    }
+
+    async function loadFeedback() {
+        var statusFilter = filterEl.value;
+        var url = '/api/admin/build-timer/feedback?limit=50'
+            + (statusFilter ? '&status=' + encodeURIComponent(statusFilter) : '');
+        try {
+            var response = await fetch(url, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' }
+            });
+            var data = await response.json();
+            if (!response.ok || !data) {
+                summaryEl.textContent = '피드백 목록을 불러오지 못했습니다.';
+                renderRows([]);
+                return;
+            }
+            summaryEl.textContent = '미확인 ' + (data.newCount || 0) + '건 · 전체 ' + (data.totalCount || 0) + '건';
+            renderRows(Array.isArray(data.items) ? data.items : []);
+        } catch (e) {
+            summaryEl.textContent = '피드백 목록을 불러오지 못했습니다.';
+            renderRows([]);
+        }
+    }
+
+    refreshBtn.addEventListener('click', loadFeedback);
+    filterEl.addEventListener('change', loadFeedback);
+
+    tableBody.addEventListener('click', async function(event) {
+        var target = event.target instanceof Element ? event.target : null;
+        if (!target) {
+            return;
+        }
+        var statusBtn = target.closest('[data-bt-fb-status]');
+        if (statusBtn) {
+            var id = statusBtn.getAttribute('data-bt-fb-id');
+            var nextStatus = statusBtn.getAttribute('data-bt-fb-status');
+            try {
+                var res = await fetch('/api/admin/build-timer/feedback/' + encodeURIComponent(id) + '/status', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json'
+                    },
+                    body: JSON.stringify({ status: nextStatus })
+                });
+                if (!res.ok) {
+                    alert('피드백 상태 변경에 실패했습니다.');
+                }
+            } catch (e) {
+                alert('피드백 상태 변경 중 오류가 발생했습니다.');
+            }
+            loadFeedback();
+            return;
+        }
+        var deleteBtn = target.closest('[data-bt-fb-delete]');
+        if (deleteBtn) {
+            var delId = deleteBtn.getAttribute('data-bt-fb-delete');
+            if (!confirm('이 피드백을 삭제할까요?')) {
+                return;
+            }
+            try {
+                var delRes = await fetch('/api/admin/build-timer/feedback/' + encodeURIComponent(delId), {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: { Accept: 'application/json' }
+                });
+                if (!delRes.ok) {
+                    alert('피드백 삭제에 실패했습니다.');
+                }
+            } catch (e) {
+                alert('피드백 삭제 중 오류가 발생했습니다.');
+            }
+            loadFeedback();
+        }
+    });
+
+    loadFeedback();
 })();
 </script>
 

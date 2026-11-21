@@ -18,7 +18,7 @@
 </div>
 <c:if test="${not empty matchingTimerBuilds}">
     <div class="sc-post-timer-cta">
-        <span class="sc-post-timer-cta__label">이 빌드 인구수 순서로 연습하기</span>
+        <span class="sc-post-timer-cta__label">이 빌드 인구수 순서로 연습하기 <span class="sc-post-timer-cta__beta">(beta)</span></span>
         <div class="sc-post-timer-cta__links">
             <c:forEach var="timerBuild" items="${matchingTimerBuilds}">
                 <a class="btn sc-post-timer-cta__btn" href="/build-timer?build=<c:out value='${timerBuild.id}'/>">

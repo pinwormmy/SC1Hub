@@ -40,6 +40,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
     static final int MEMBER_COMMENTS_PER_10_MINUTES = 20;
     static final int NEW_MEMBER_COMMENTS_PER_10_MINUTES = 6;
     static final int MEMBER_CHAT_PER_MINUTE = 30;
+    static final int MEMBER_FEEDBACK_PER_10_MINUTES = 5;
     static final int SIGNUPS_PER_IP_PER_HOUR = 3;
     static final int SIGNUPS_PER_HOUR_GLOBAL = 30;
     static final int GUEST_WRITES_PER_IP_PER_MINUTE = 10;
@@ -47,6 +48,7 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
     static final int GUEST_POSTS_PER_IP_PER_10_MINUTES = 3;
     static final int GUEST_COMMENTS_PER_IP_PER_10_MINUTES = 10;
     static final int GUEST_UPLOADS_PER_IP_PER_10_MINUTES = 5;
+    static final int GUEST_FEEDBACK_PER_IP_PER_10_MINUTES = 5;
 
     private final ContentApiTokenAuthenticator tokenAuthenticator;
     private final SecuritySwitches switches;
@@ -99,9 +101,10 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
         boolean post = boardWrite && action.equals("submitPost");
         boolean comment = boardWrite && action.equals("addComment");
         boolean chat = path.equals("/api/chat/messages");
+        boolean feedback = path.equals("/api/build-timer/feedback");
         boolean upload = path.equals("/imageUpload");
         boolean contentWrite = boardWrite || path.startsWith("/api/chat/")
-                || path.equals("/imageUpload") || signup || path.equals("/submitModifyMyInfo");
+                || feedback || path.equals("/imageUpload") || signup || path.equals("/submitModifyMyInfo");
 
         if (member != null && member.getGrade() == 3) {
             return true;
@@ -145,6 +148,9 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
             if (guestAllowed && upload && ipTrusted) {
                 guestAllowed = rateLimiter.allow("guest-upload-ip:" + ip, GUEST_UPLOADS_PER_IP_PER_10_MINUTES, TEN_MINUTES);
             }
+            if (guestAllowed && feedback && ipTrusted) {
+                guestAllowed = rateLimiter.allow("guest-feedback-ip:" + ip, GUEST_FEEDBACK_PER_IP_PER_10_MINUTES, TEN_MINUTES);
+            }
             if (!guestAllowed) {
                 offenderTracker.strike(ip, ipTrusted, null, null, "비회원 속도 제한");
                 response.setHeader("Retry-After", "60");
@@ -170,6 +176,9 @@ public class PublicWriteSecurityInterceptor implements HandlerInterceptor {
         }
         if (allowed && chat) {
             allowed = rateLimiter.allow("member-chat:" + memberId, MEMBER_CHAT_PER_MINUTE, MINUTE);
+        }
+        if (allowed && feedback) {
+            allowed = rateLimiter.allow("member-feedback:" + memberId, MEMBER_FEEDBACK_PER_10_MINUTES, TEN_MINUTES);
         }
         if (!allowed) {
             offenderTracker.strike(ip, ipTrusted, memberId, nickname, "회원 속도 제한");
