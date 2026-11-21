@@ -15,10 +15,6 @@
             <%@include file="./include/latestPosts.jspf" %>
             <div class="col-sm-12">
                 <style>
-                .sc-login-card {
-                    max-width: 420px;
-                    margin: clamp(24px, 6vh, 64px) auto 0;
-                }
                 .sc-login-card .sc-login-field {
                     display: flex;
                     flex-direction: column;
@@ -26,7 +22,6 @@
                     margin: 10px 4px;
                 }
                 .sc-login-card .sc-login-field label {
-                    color: var(--sc-text-dim);
                     font-size: 0.9rem;
                 }
                 .sc-login-card input {
@@ -41,7 +36,6 @@
                     text-align: center;
                     margin-top: 10px;
                     padding-top: 10px;
-                    border-top: 1px dashed var(--sc-line-soft);
                     color: var(--sc-text-dim);
                     font-size: 0.92rem;
                 }

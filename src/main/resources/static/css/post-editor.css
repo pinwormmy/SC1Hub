@@ -1,6 +1,6 @@
 .sc-post-editor {
-    --editor-accent: var(--sc-accent, #0969da);
-    --editor-surface: var(--sc-bg-deep);
+    --editor-accent: var(--sc-accent-emphasis, #0284c7);
+    --editor-surface: var(--sc-bg-card, var(--sc-bg-deep));
     display: grid;
     box-sizing: border-box;
     width: 100%;
@@ -129,6 +129,7 @@
 .sc-post-editor__modebar {
     gap: 4px;
     padding: 7px 10px;
+    background: var(--sc-bg-panel);
     border-bottom: 1px solid var(--sc-line-soft);
 }
 
@@ -139,12 +140,16 @@
     border-color: transparent;
     color: var(--sc-text-dim);
     background: transparent;
+    box-shadow: none;
     font-size: 0.86rem;
 }
 
 .sc-post-editor__modebar button[aria-selected="true"] {
-    color: var(--sc-pc-invert-text);
-    background: var(--editor-accent);
+    color: var(--sc-text);
+    background: var(--sc-bg-card, var(--sc-bg-deep));
+    border-color: var(--sc-line);
+    box-shadow: inset 0 2px 0 var(--editor-accent);
+    font-weight: 600;
 }
 
 .sc-post-editor__toolbar {
@@ -163,16 +168,17 @@
     margin: 0;
     padding: 0.25rem 0.58rem;
     border-color: transparent;
-    border-radius: 4px;
+    border-radius: var(--sc-radius-sm, 3px);
     background: transparent;
+    box-shadow: none;
     font-size: 0.84rem;
 }
 
 .sc-post-editor__toolbar button[aria-pressed="true"],
 .sc-post-editor__toolbar button:hover,
 .sc-post-editor__toolbar button:focus-visible {
-    color: var(--sc-pc-invert-text);
-    background: var(--editor-accent);
+    color: var(--sc-accent);
+    background: var(--sc-accent-subtle);
 }
 
 .sc-post-editor__tool-separator {
